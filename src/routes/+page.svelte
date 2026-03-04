@@ -9,12 +9,26 @@
   import TitleBar from '$lib/components/shell/TitleBar.svelte';
   import Toast from '$lib/components/shell/Toast.svelte';
   import CommandPalette from '$lib/components/shell/CommandPalette.svelte';
+  import UpdateBanner from '$lib/components/shell/UpdateBanner.svelte';
+  import UpdateDialog from '$lib/components/shell/UpdateDialog.svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
 
   const app = getAppState();
   const isMacOS = navigator.userAgent.includes('Macintosh');
 
   let commandPaletteOpen = $state(false);
+  let updateDialogOpen = $state(false);
+
+  async function handleCheckForUpdates() {
+    const found = await app.checkForUpdate();
+    if (found) {
+      updateDialogOpen = true;
+    }
+  }
+
+  function openUpdateDialog() {
+    updateDialogOpen = true;
+  }
 
   const commands = $derived.by(() => {
     const cmds: { id: string; label: string; shortcut?: string; action: () => void }[] = [];
@@ -59,7 +73,8 @@
   <!-- Connected workspace -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} onCheckForUpdates={handleCheckForUpdates} />{/if}
+      <UpdateBanner onUpdate={openUpdateDialog} />
       <div class="flex flex-1 overflow-hidden">
         <div class="w-60 shrink-0">
           <Sidebar />
@@ -77,7 +92,8 @@
   <!-- No saved connections: onboarding -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} onCheckForUpdates={handleCheckForUpdates} />{/if}
+      <UpdateBanner onUpdate={openUpdateDialog} />
       <div class="flex-1 overflow-hidden">
         <ConnectionOnboarding />
       </div>
@@ -87,7 +103,8 @@
   <!-- Has saved connections but not connected -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} onCheckForUpdates={handleCheckForUpdates} />{/if}
+      <UpdateBanner onUpdate={openUpdateDialog} />
       <div class="flex-1 overflow-hidden">
         <ConnectionManager />
       </div>
@@ -100,3 +117,4 @@
 {/if}
 
 <CommandPalette {commands} bind:open={commandPaletteOpen} />
+<UpdateDialog bind:open={updateDialogOpen} />

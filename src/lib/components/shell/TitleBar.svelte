@@ -4,7 +4,7 @@
   import { Menu, Minus, Square, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
-  let { onCommandPalette, isMacOS = false }: { onCommandPalette?: () => void; isMacOS?: boolean } = $props();
+  let { onCommandPalette, onCheckForUpdates, isMacOS = false }: { onCommandPalette?: () => void; onCheckForUpdates?: () => void; isMacOS?: boolean } = $props();
 
   const app = getAppState();
   const appWindow = getCurrentWindow();
@@ -60,6 +60,8 @@
         Settings
         <DropdownMenu.Shortcut>Ctrl+,</DropdownMenu.Shortcut>
       </DropdownMenu.Item>
+      <DropdownMenu.Item onclick={() => onCheckForUpdates?.()}>Check for Updates</DropdownMenu.Item>
+      <DropdownMenu.Separator />
       <DropdownMenu.Item>About SakiDB</DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>

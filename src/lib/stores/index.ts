@@ -109,6 +109,19 @@ import {
   exportTableSql,
 } from './exports.svelte';
 import {
+  getUpdate,
+  isDownloading,
+  getDownloaded,
+  getContentLength,
+  isReadyToInstall,
+  isDismissed,
+  isChecking,
+  dismissBanner,
+  checkForUpdate,
+  downloadAndInstall,
+  restartApp,
+} from './updater.svelte';
+import {
   getLayoutRoot,
   getActiveGroupId,
   getActiveGroup,
@@ -256,6 +269,19 @@ export function getAppState() {
     closeEditDialog,
     clearError,
 
+    // ── Updater ──
+    get update() { return getUpdate(); },
+    get updateDownloading() { return isDownloading(); },
+    get updateDownloaded() { return getDownloaded(); },
+    get updateContentLength() { return getContentLength(); },
+    get updateReadyToInstall() { return isReadyToInstall(); },
+    get updateDismissed() { return isDismissed(); },
+    get updateChecking() { return isChecking(); },
+    dismissUpdateBanner: dismissBanner,
+    checkForUpdate,
+    downloadAndInstall,
+    restartApp,
+
     // ── Init ──
     async init() {
       registerTabFocusHandler((tab) => {
@@ -270,6 +296,9 @@ export function getAppState() {
       // Restore persisted layout
       const allTabIds = new Set(getTabs().map(t => t.id));
       restoreLayout(allTabIds);
+
+      // Silent update check on startup
+      checkForUpdate();
     },
   };
 }

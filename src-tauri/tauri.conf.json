@@ -14,6 +14,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/nevindra/sakidb/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFEMDhCODlBQUM0MkFDREQKUldUZHJFS3NtcmdJSFN5RzNsWDFZMG9HQmxvU1YvZW1HeXlDZ2ZxOURhQ3JIQi9RcFVyT0FVRnYK"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
