@@ -344,34 +344,6 @@ pub async fn execute_query_columnar(
 
     let execution_time_ms = start.elapsed().as_millis() as u64;
 
-    // Shrink column storage Vecs to exact size — reclaim excess capacity from Vec doubling
-    for cs in &mut col_storages {
-        match cs {
-            ColumnStorage::Number { nulls, values } => {
-                nulls.shrink_to_fit();
-                values.shrink_to_fit();
-            }
-            ColumnStorage::Bool { nulls, values } => {
-                nulls.shrink_to_fit();
-                values.shrink_to_fit();
-            }
-            ColumnStorage::Text { nulls, offsets, data } => {
-                nulls.shrink_to_fit();
-                offsets.shrink_to_fit();
-                data.shrink_to_fit();
-            }
-            ColumnStorage::Bytes { nulls, offsets, data } => {
-                nulls.shrink_to_fit();
-                offsets.shrink_to_fit();
-                data.shrink_to_fit();
-            }
-        }
-    }
-
-    // Force glibc to return freed pages to OS (Vec doubling leaves fragmentation)
-    #[cfg(target_os = "linux")]
-    unsafe { libc::malloc_trim(0); }
-
     debug!(
         rows = row_count,
         cols = columns.len(),

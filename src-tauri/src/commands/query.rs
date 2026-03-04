@@ -117,10 +117,6 @@ pub async fn execute_query_multi_columnar(
         );
     }
 
-    // Reclaim freed column storage pages
-    #[cfg(target_os = "linux")]
-    unsafe { libc::malloc_trim(0); }
-
     let total_ms = start.elapsed().as_millis() as u64;
     debug!(
         elapsed_ms = total_ms,

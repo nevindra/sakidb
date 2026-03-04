@@ -108,12 +108,10 @@ function decodeSingleColumnar(buffer: ArrayBuffer, baseOffset: number): Columnar
         // COPY text blob — allows the IPC ArrayBuffer to be GC'd once decode completes.
         // A subarray view would pin the entire buffer (including already-copied number/bool data).
         const rawData = bytes.slice(offset, offset + dataLen); offset += dataLen;
-        // Read offsets individually to avoid buffer.slice()
-        const rawOffsets = new Uint32Array(rowCount + 1);
-        for (let r = 0; r <= rowCount; r++) {
-          rawOffsets[r] = view.getUint32(offset, true); offset += 4;
-        }
-        totalExtracted += (rowCount + 1) * 4; // only offsets are copied; raw data is a view
+        // Bulk copy offsets — faster than rowCount individual getUint32 calls
+        const rawOffsets = new Uint32Array(buffer.slice(offset, offset + (rowCount + 1) * 4));
+        offset += (rowCount + 1) * 4;
+        totalExtracted += (rowCount + 1) * 4;
         // Sparse values array — populated lazily by ColumnarResultData._getText()
         // Empty array avoids V8 pre-allocating pointer slots for rowCount entries.
         const values: (string | undefined)[] = [];

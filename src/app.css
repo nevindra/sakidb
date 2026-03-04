@@ -124,6 +124,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  input, textarea {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   /* Tighter focus rings for Linear feel */
   :focus-visible {
     outline: none;
