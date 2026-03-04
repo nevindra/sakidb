@@ -1,0 +1,27 @@
+[package]
+name = "sakidb-postgres"
+version = "1.0.0"
+description = "PostgreSQL driver for SakiDB using tokio-postgres and deadpool"
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+sakidb-core = { path = "../sakidb-core" }
+tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = "0.14"
+postgres-types = { version = "0.2", features = ["with-chrono-0_4", "with-serde_json-1"] }
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+serde_json = "1"
+chrono = "0.4"
+dashmap = "6"
+tracing = "0.1"
+futures-util = "0.3"
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+tokio-postgres-rustls = "0.12"
+rustls = { version = "0.23", features = ["ring"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"

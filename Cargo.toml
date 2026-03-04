@@ -1,0 +1,24 @@
+[workspace]
+members = ["src-tauri", "crates/*"]
+resolver = "2"
+
+# Optimize ALL dependencies in dev builds. The query hot path streams
+# through bytes, tokio, futures-util, postgres-types, chrono — all of
+# which are 5-10x slower unoptimized. This is a standard Rust pattern:
+# dependencies get opt-level=2, workspace crates stay fast to compile.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Extra optimization for the innermost hot-path crates
+[profile.dev.package.sakidb-core]
+opt-level = 3
+
+[profile.dev.package.sakidb-postgres]
+opt-level = 3
+
+# Release: squeeze every last bit of performance and minimize binary size.
+[profile.release]
+lto = true            # Full link-time optimization across all crates
+codegen-units = 1     # Single codegen unit — max optimization, slower compile
+strip = true          # Strip debug symbols from the final binary
+panic = "abort"       # No unwinding overhead — smaller binary, faster panics

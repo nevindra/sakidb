@@ -1,0 +1,35 @@
+[package]
+name = "SakiDB"
+version = "1.0.0"
+description = "A lightning-fast, native desktop PostgreSQL client built with Tauri and Svelte"
+authors = ["nevindra"]
+license = "MIT"
+repository = "https://github.com/nevindra/sakidb"
+edition = "2021"
+
+[lib]
+name = "sakidb_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+sakidb-core = { path = "../crates/sakidb-core" }
+sakidb-postgres = { path = "../crates/sakidb-postgres" }
+sakidb-store = { path = "../crates/sakidb-store" }
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dashmap = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "6"
+tauri-plugin-dialog = "2.6.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
