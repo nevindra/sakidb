@@ -12,6 +12,7 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
 
   const app = getAppState();
+  const isMacOS = navigator.userAgent.includes('Macintosh');
 
   let commandPaletteOpen = $state(false);
 
@@ -58,7 +59,7 @@
   <!-- Connected workspace -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      <TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
       <div class="flex flex-1 overflow-hidden">
         <div class="w-60 shrink-0">
           <Sidebar />
@@ -76,7 +77,7 @@
   <!-- No saved connections: onboarding -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      <TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
       <div class="flex-1 overflow-hidden">
         <ConnectionOnboarding />
       </div>
@@ -86,7 +87,7 @@
   <!-- Has saved connections but not connected -->
   <Tooltip.Provider delayDuration={300}>
     <div class="flex flex-col h-screen bg-background text-foreground">
-      <TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />
+      {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} />{/if}
       <div class="flex-1 overflow-hidden">
         <ConnectionManager />
       </div>

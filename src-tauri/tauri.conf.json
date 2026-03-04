@@ -10,16 +10,6 @@
     "frontendDist": "../build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "SakiDB",
-        "width": 1200,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "decorations": false
-      }
-    ],
     "security": {
       "csp": null
     }
@@ -36,6 +26,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 165, "y": 185 },
+        "applicationFolderPosition": { "x": 495, "y": 185 }
+      }
+    }
   }
 }

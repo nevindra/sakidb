@@ -44,6 +44,46 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(app_state)
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+                use cocoa::appkit::{NSColor, NSWindow};
+                use cocoa::base::{id, nil};
+
+                let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                    .title("SakiDB")
+                    .inner_size(1200.0, 800.0)
+                    .min_inner_size(800.0, 600.0)
+                    .hidden_title(true)
+                    .title_bar_style(TitleBarStyle::Transparent)
+                    .build()?;
+
+                // Match title bar color to app background #141215
+                unsafe {
+                    let ns_window = window.ns_window()? as id;
+                    let color = NSColor::colorWithRed_green_blue_alpha_(
+                        nil,
+                        20.0 / 255.0,
+                        18.0 / 255.0,
+                        21.0 / 255.0,
+                        1.0,
+                    );
+                    ns_window.setBackgroundColor_(color);
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                use tauri::{WebviewUrl, WebviewWindowBuilder};
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                    .title("SakiDB")
+                    .inner_size(1200.0, 800.0)
+                    .min_inner_size(800.0, 600.0)
+                    .decorations(false)
+                    .build()?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::connection::save_connection,
             commands::connection::list_connections,

@@ -31,5 +31,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "6"
 tauri-plugin-dialog = "2.6.0"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

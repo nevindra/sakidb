@@ -4,7 +4,7 @@
   import { Menu, Minus, Square, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
-  let { onCommandPalette }: { onCommandPalette?: () => void } = $props();
+  let { onCommandPalette, isMacOS = false }: { onCommandPalette?: () => void; isMacOS?: boolean } = $props();
 
   const app = getAppState();
   const appWindow = getCurrentWindow();
@@ -35,7 +35,7 @@
   });
 </script>
 
-<div class="flex items-center h-8 bg-background shrink-0 select-none">
+<div class="flex items-center h-8 bg-background shrink-0 select-none" class:pl-[72px]={isMacOS}>
   <!-- Hamburger menu -->
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
