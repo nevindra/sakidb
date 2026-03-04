@@ -132,6 +132,17 @@ Four tab types, each with its own view component and store logic:
 
 Stored in `~/.local/share/sakidb/config.db` (SQLite). Only the password field is AES-256-GCM encrypted per-row. Master password → PBKDF2 (100K iterations) → 256-bit key, held in memory for session duration. Same SQLite DB also stores saved queries and query history.
 
+## CI/CD
+
+### Release Flow (`git tag v* → push`)
+1. **`changelog.yml`** — git-cliff regenerates `CHANGELOG.md`, commits to `main`. Unreleased commits move under the new version heading.
+2. **`release.yml`** — Builds 4 targets (Linux x86_64, macOS aarch64, macOS x86_64, Windows x86_64) via `tauri-action`. Creates a **draft** GitHub Release with artifacts attached. Release notes are written manually.
+
+### Changelog Flow (`cliff.toml`)
+- Uses conventional commits (`feat:`, `fix:`, `perf:`, etc.) to auto-generate changelog via git-cliff
+- PR merged to `main` → changelog updated with new commits under `## Unreleased`
+- Tag pushed → unreleased commits promoted to `## vX.Y.Z (date)`
+
 ## Conventions
 
 ### Rust
