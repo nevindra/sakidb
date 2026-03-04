@@ -161,10 +161,12 @@ impl ColumnarResult {
                     // nulls dropped here
                     // Pad to 8-byte alignment for Float64Array zero-copy on JS side
                     let padding = (8 - (buf.len() % 8)) % 8;
-                    buf.extend_from_slice(&vec![0u8; padding]);
-                    for v in values {
-                        buf.extend_from_slice(&v.to_le_bytes());
-                    }
+                    buf.extend_from_slice(&[0u8; 7][..padding]);
+                    // Bulk write: cast Vec<f64> directly to bytes (all targets are little-endian)
+                    let byte_slice = unsafe {
+                        std::slice::from_raw_parts(values.as_ptr() as *const u8, values.len() * 8)
+                    };
+                    buf.extend_from_slice(byte_slice);
                     // values dropped here
                 }
                 ColumnStorage::Bool { nulls, values } => {
