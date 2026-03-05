@@ -19,6 +19,7 @@ export {
   formatKeybinding,
   normalizeKeybinding,
   markComingSoon,
+  setRecordingMode,
   attachGlobalKeyListener,
   detachGlobalKeyListener,
 } from './registry.svelte';

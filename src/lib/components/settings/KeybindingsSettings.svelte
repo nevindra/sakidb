@@ -9,6 +9,7 @@
     findConflict,
     formatKeybinding,
     normalizeKeybinding,
+    setRecordingMode,
   } from '$lib/commands';
 
   let recordingCommandId = $state<string | null>(null);
@@ -35,6 +36,7 @@
   function startRecording(commandId: string) {
     conflictWarning = null;
     recordingCommandId = commandId;
+    setRecordingMode(true);
   }
 
   function handleRecordKeydown(e: KeyboardEvent) {
@@ -48,6 +50,7 @@
     if (e.key === 'Escape') {
       recordingCommandId = null;
       conflictWarning = null;
+      setRecordingMode(false);
       return;
     }
 
@@ -80,6 +83,7 @@
     await setKeybinding(commandId, kb);
     recordingCommandId = null;
     conflictWarning = null;
+    setRecordingMode(false);
   }
 
   async function confirmConflictOverride() {
@@ -136,7 +140,7 @@
         </button>
         <button
           class="px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          onclick={() => { conflictWarning = null; recordingCommandId = null; }}
+          onclick={() => { conflictWarning = null; recordingCommandId = null; setRecordingMode(false); }}
         >
           Cancel
         </button>

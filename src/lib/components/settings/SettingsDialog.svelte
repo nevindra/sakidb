@@ -1,11 +1,17 @@
 <script lang="ts">
   import * as Dialog from '$lib/components/ui/dialog';
+  import { setRecordingMode } from '$lib/commands';
   import KeybindingsSettings from './KeybindingsSettings.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
+
+  function handleOpenChange(isOpen: boolean) {
+    open = isOpen;
+    if (!isOpen) setRecordingMode(false);
+  }
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root open={open} onOpenChange={handleOpenChange}>
   <Dialog.Content class="sm:max-w-[720px] max-h-[80vh] flex flex-col">
     <Dialog.Header>
       <Dialog.Title>Settings</Dialog.Title>

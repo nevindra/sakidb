@@ -2,6 +2,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { commandDefinitions } from './definitions';
 import type { Command, CommandContext, CommandDefinition } from './types';
 
+// ── Recording mode (keybinding settings) ──
+
+let recording = $state(false);
+
+export function setRecordingMode(on: boolean) {
+  recording = on;
+}
+
 // ── Context state ──
 
 let activeContexts = $state<Set<CommandContext>>(new Set(['global']));
@@ -39,13 +47,15 @@ export async function loadKeybindingOverrides() {
 
 export async function setKeybinding(commandId: string, keybinding: string | null) {
   await invoke('set_keybinding', { commandId, keybinding });
-  overrides.set(commandId, keybinding);
+  overrides = new Map([...overrides, [commandId, keybinding]]);
   rebuildKeybindingMap();
 }
 
 export async function resetKeybinding(commandId: string) {
   await invoke('reset_keybinding', { commandId });
-  overrides.delete(commandId);
+  const next = new Map(overrides);
+  next.delete(commandId);
+  overrides = next;
   rebuildKeybindingMap();
 }
 
@@ -247,6 +257,9 @@ export function detachGlobalKeyListener() {
 }
 
 function handleGlobalKeydown(e: KeyboardEvent) {
+  // Skip all shortcuts while recording a new keybinding in settings
+  if (recording) return;
+
   const target = e.target as HTMLElement;
   const kb = eventToKeybinding(e);
   if (!kb) return;
