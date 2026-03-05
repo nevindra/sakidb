@@ -1,13 +1,44 @@
 import type { CellValue, ColumnDef, ColumnInfo } from '$lib/types';
 
-export function cellValueToSqlLiteral(cell: CellValue): string {
+// Types that need explicit SQL casts when used as literals
+const SQL_CAST_MAP: Record<string, string> = {
+  uuid: 'uuid', inet: 'inet', cidr: 'cidr',
+  macaddr: 'macaddr', macaddr8: 'macaddr8',
+  date: 'date', time: 'time', timetz: 'timetz',
+  interval: 'interval', xml: 'xml',
+  point: 'point', line: 'line', lseg: 'lseg',
+  box: 'box', circle: 'circle', polygon: 'polygon', path: 'path',
+  tsvector: 'tsvector', tsquery: 'tsquery',
+  bit: 'bit', varbit: 'varbit',
+  pg_lsn: 'pg_lsn',
+};
+
+export function cellValueToSqlLiteral(cell: CellValue, dataType?: string): string {
   if (cell === 'Null') return 'NULL';
   if ('Bool' in cell) return cell.Bool ? 'TRUE' : 'FALSE';
   if ('Int' in cell) return String(cell.Int);
   if ('Float' in cell) return String(cell.Float);
-  if ('Text' in cell) return `'${cell.Text.replace(/'/g, "''")}'`;
+  if ('Text' in cell) {
+    const escaped = `'${cell.Text.replace(/'/g, "''")}'`;
+    if (dataType) {
+      const t = dataType.toLowerCase().replace(/\s*\(.*\)$/, '');
+      const cast = SQL_CAST_MAP[t];
+      if (cast) return `${escaped}::${cast}`;
+    }
+    return escaped;
+  }
   if ('Json' in cell) return `'${cell.Json.replace(/'/g, "''")}'::jsonb`;
-  if ('Timestamp' in cell) return `'${cell.Timestamp.replace(/'/g, "''")}'::timestamp`;
+  if ('Timestamp' in cell) {
+    const escaped = `'${cell.Timestamp.replace(/'/g, "''")}'`;
+    if (dataType) {
+      const t = dataType.toLowerCase();
+      if (t === 'date') return `${escaped}::date`;
+      if (t === 'timetz' || t === 'time with time zone') return `${escaped}::timetz`;
+      if (t === 'time' || t === 'time without time zone') return `${escaped}::time`;
+      if (t.startsWith('timestamptz') || t.startsWith('timestamp with')) return `${escaped}::timestamptz`;
+    }
+    return `${escaped}::timestamp`;
+  }
   if ('Bytes' in cell) {
     const hex = cell.Bytes.map(b => b.toString(16).padStart(2, '0')).join('');
     return `'\\x${hex}'::bytea`;
@@ -18,9 +49,10 @@ export function cellValueToSqlLiteral(cell: CellValue): string {
 function buildWhereClause(
   pkColumns: string[],
   pkValues: CellValue[],
+  pkDataTypes?: string[],
 ): string {
   return pkColumns
-    .map((col, i) => `"${col}" = ${cellValueToSqlLiteral(pkValues[i])}`)
+    .map((col, i) => `"${col}" = ${cellValueToSqlLiteral(pkValues[i], pkDataTypes?.[i])}`)
     .join(' AND ');
 }
 
@@ -29,12 +61,13 @@ export function generateUpdateSql(
   table: string,
   pkColumns: string[],
   pkValues: CellValue[],
-  changes: [string, CellValue][],
+  changes: [string, CellValue, string?][],
+  pkDataTypes?: string[],
 ): string {
   const setClauses = changes.map(
-    ([col, val]) => `"${col}" = ${cellValueToSqlLiteral(val)}`
+    ([col, val, dt]) => `"${col}" = ${cellValueToSqlLiteral(val, dt)}`
   );
-  return `UPDATE "${schema}"."${table}" SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues)}`;
+  return `UPDATE "${schema}"."${table}" SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
 }
 
 export function generateInsertSql(
@@ -42,15 +75,16 @@ export function generateInsertSql(
   table: string,
   columns: string[],
   values: CellValue[],
+  dataTypes?: string[],
 ): string {
   const nonNullPairs = columns
-    .map((col, i) => ({ col, val: values[i] }))
+    .map((col, i) => ({ col, val: values[i], dt: dataTypes?.[i] }))
     .filter(p => p.val !== 'Null');
   if (nonNullPairs.length === 0) {
     return `INSERT INTO "${schema}"."${table}" DEFAULT VALUES`;
   }
   const colList = nonNullPairs.map(p => `"${p.col}"`).join(', ');
-  const valList = nonNullPairs.map(p => cellValueToSqlLiteral(p.val)).join(', ');
+  const valList = nonNullPairs.map(p => cellValueToSqlLiteral(p.val, p.dt)).join(', ');
   return `INSERT INTO "${schema}"."${table}" (${colList}) VALUES (${valList})`;
 }
 
@@ -59,8 +93,9 @@ export function generateDeleteSql(
   table: string,
   pkColumns: string[],
   pkValues: CellValue[],
+  pkDataTypes?: string[],
 ): string {
-  return `DELETE FROM "${schema}"."${table}" WHERE ${buildWhereClause(pkColumns, pkValues)}`;
+  return `DELETE FROM "${schema}"."${table}" WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
 }
 
 export function wrapInTransaction(statements: string[]): string {
@@ -72,25 +107,40 @@ export function parseInputToCellValue(input: string, dataType: string): CellValu
   if (trimmed === '' || trimmed.toLowerCase() === 'null') return 'Null';
 
   const t = dataType.toLowerCase();
+  const tBase = t.replace(/\s*\(.*\)$/, '');
 
-  if (t === 'bool') {
+  if (tBase === 'bool' || tBase === 'boolean') {
     const lower = trimmed.toLowerCase();
     return { Bool: lower === 'true' || lower === 't' || lower === '1' || lower === 'yes' };
   }
-  if (['int2', 'int4', 'int8', 'oid'].includes(t)) {
+  if (['int2', 'int4', 'int8', 'smallint', 'integer', 'bigint', 'oid',
+       'smallserial', 'serial', 'bigserial', 'serial2', 'serial4', 'serial8'].includes(tBase)) {
     const n = parseInt(trimmed, 10);
     return isNaN(n) ? 'Null' : { Int: n };
   }
-  if (['float4', 'float8', 'numeric'].includes(t)) {
-    const n = parseFloat(trimmed);
+  if (['float4', 'float8', 'real', 'double precision', 'numeric', 'decimal', 'money'].includes(tBase)) {
+    // Strip currency symbols for money type
+    const cleaned = tBase === 'money' ? trimmed.replace(/[$€£¥,]/g, '') : trimmed;
+    const n = parseFloat(cleaned);
     return isNaN(n) ? 'Null' : { Float: n };
   }
-  if (['json', 'jsonb'].includes(t)) {
+  if (['json', 'jsonb'].includes(tBase)) {
     return { Json: trimmed };
   }
-  if (['timestamp', 'timestamptz'].includes(t)) {
+  if (['timestamp', 'timestamptz',
+       'timestamp without time zone', 'timestamp with time zone'].includes(t)) {
     return { Timestamp: trimmed };
   }
+  if (['date'].includes(tBase)) {
+    return { Timestamp: trimmed };
+  }
+  if (['time', 'timetz', 'time without time zone', 'time with time zone'].includes(t)) {
+    return { Timestamp: trimmed };
+  }
+  if (tBase === 'interval') {
+    return { Text: trimmed };
+  }
+  // All other types stored as Text — PG validates on write
   return { Text: trimmed };
 }
 

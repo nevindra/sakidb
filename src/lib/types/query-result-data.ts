@@ -1,4 +1,5 @@
 import type { ColumnDef, CellValue, ColumnArray, TextColumn } from '$lib/types';
+import { getCategoryCss } from '$lib/type-utils';
 
 /**
  * Class wrapper for query results that prevents Svelte 5 from
@@ -139,16 +140,10 @@ export class ColumnarResultData {
         return { text: String(cd.values[row] !== 0), cls: 'text-warning', isNull: false };
       case 'text': {
         const s = this._getText(cd, row);
-        const dt = this.columns[col].data_type.toLowerCase();
-        if (dt === 'json' || dt === 'jsonb') {
-          const display = s.length > 200 ? s.slice(0, 200) + '\u2026' : s;
-          return { text: display, cls: 'font-mono text-primary', isNull: false };
-        }
-        if (dt.startsWith('timestamp') || dt === 'date' || dt.startsWith('time')) {
-          return { text: s, cls: 'text-success', isNull: false };
-        }
+        const dt = this.columns[col].data_type;
+        const css = getCategoryCss(dt);
         const display = s.length > 200 ? s.slice(0, 200) + '\u2026' : s;
-        return { text: display, cls: '', isNull: false };
+        return { text: display, cls: css, isNull: false };
       }
       case 'bytes': {
         const bytes = cd.values[row];

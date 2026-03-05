@@ -3,6 +3,7 @@
   import type { CellValue, ColumnDef } from '$lib/types';
   import { cellToPlainText, cellToJsonValue, copyToClipboard } from '$lib/copy-utils';
   import { cellToImageSrc } from '$lib/image-utils';
+  import { getTypeCategory } from '$lib/type-utils';
 
   let {
     cell,
@@ -46,6 +47,8 @@
   const isNull = $derived(cell === 'Null');
   const isBytes = $derived(cell !== 'Null' && typeof cell === 'object' && 'Bytes' in cell);
   const imageSrc = $derived(cellToImageSrc(cell));
+  const category = $derived(getTypeCategory(column.data_type));
+  const isXml = $derived(category === 'xml');
 
   onDestroy(() => {
     if (imageSrc) URL.revokeObjectURL(imageSrc);
@@ -138,8 +141,16 @@
       <span class="text-text-dim italic">NULL</span>
     {:else if isJson}
       <pre class="font-mono text-primary whitespace-pre-wrap break-words">{formattedValue}</pre>
+    {:else if isXml}
+      <pre class="font-mono text-primary whitespace-pre-wrap break-words">{formattedValue}</pre>
     {:else if isBytes}
       <pre class="font-mono text-text-dim whitespace-pre">{formattedValue}</pre>
+    {:else if category === 'identifier' || category === 'network'}
+      <pre class="font-mono whitespace-pre-wrap break-all {category === 'identifier' ? 'text-sky-400/80' : 'text-teal-400/80'}">{formattedValue}</pre>
+    {:else if category === 'geometric'}
+      <pre class="font-mono text-violet-400/80 whitespace-pre-wrap break-words">{formattedValue}</pre>
+    {:else if category === 'search'}
+      <pre class="text-amber-400/80 whitespace-pre-wrap break-words">{formattedValue}</pre>
     {:else}
       <div class="whitespace-pre-wrap break-words">{formattedValue}</div>
     {/if}

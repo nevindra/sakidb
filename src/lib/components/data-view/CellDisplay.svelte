@@ -2,17 +2,18 @@
   import { onDestroy } from 'svelte';
   import type { CellValue } from '$lib/types';
   import { cellToImageSrc } from '$lib/image-utils';
+  import { getCategoryCss } from '$lib/type-utils';
 
   const MAX_CELL_LEN = 200;
 
-  let { value }: { value: CellValue } = $props();
+  let { value, dataType = '' }: { value: CellValue; dataType?: string } = $props();
 
   function getDisplay(v: CellValue): { text: string; cls: string } {
     if (v === 'Null') return { text: 'NULL', cls: 'text-text-dim italic' };
     if ('Bool' in v) return { text: String(v.Bool), cls: 'text-warning' };
     if ('Int' in v) return { text: String(v.Int), cls: 'text-right tabular-nums' };
     if ('Float' in v) return { text: String(v.Float), cls: 'text-right tabular-nums' };
-    if ('Text' in v) return { text: truncate(v.Text), cls: '' };
+    if ('Text' in v) return { text: truncate(v.Text), cls: dataType ? getCategoryCss(dataType) : '' };
     if ('Json' in v) return { text: truncate(v.Json), cls: 'font-mono text-primary' };
     if ('Timestamp' in v) return { text: v.Timestamp, cls: 'text-success' };
     if ('Bytes' in v) {

@@ -244,6 +244,9 @@ fn pg_value_to_text(
         Type::TIME | Type::TIMETZ => {
             row.get::<_, Option<chrono::NaiveTime>>(col_idx).map(|t| t.to_string())
         }
+        Type::UUID => {
+            row.get::<_, Option<uuid::Uuid>>(col_idx).map(|u| u.to_string())
+        }
         _ => {
             // Fallback: try String, then FallbackText for extension types
             row.try_get::<_, Option<String>>(col_idx)
@@ -677,6 +680,24 @@ fn pg_value_to_cell(row: &tokio_postgres::Row, index: usize, pg_type: &Type) -> 
             .ok()
             .flatten()
             .map(|v| CellValue::Timestamp(v.to_rfc3339().into_boxed_str()))
+            .unwrap_or(CellValue::Null),
+        Type::DATE => row
+            .try_get::<_, Option<chrono::NaiveDate>>(index)
+            .ok()
+            .flatten()
+            .map(|v| CellValue::Timestamp(v.to_string().into_boxed_str()))
+            .unwrap_or(CellValue::Null),
+        Type::TIME | Type::TIMETZ => row
+            .try_get::<_, Option<chrono::NaiveTime>>(index)
+            .ok()
+            .flatten()
+            .map(|v| CellValue::Timestamp(v.to_string().into_boxed_str()))
+            .unwrap_or(CellValue::Null),
+        Type::UUID => row
+            .try_get::<_, Option<uuid::Uuid>>(index)
+            .ok()
+            .flatten()
+            .map(|v| CellValue::Text(v.to_string().into_boxed_str()))
             .unwrap_or(CellValue::Null),
         _ => row
             .try_get::<_, Option<String>>(index)

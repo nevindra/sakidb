@@ -635,26 +635,29 @@
     try {
       const statements: string[] = [];
 
+      const pkDataTypes = pkColIndices.map(i => result.columns[i].data_type);
+
       for (const dataRow of pendingDeletes) {
         const pkValues = pkColIndices.map(i => getOriginalCell(dataRow, i));
-        statements.push(generateDeleteSql(schema, table, pkColumnNames, pkValues));
+        statements.push(generateDeleteSql(schema, table, pkColumnNames, pkValues, pkDataTypes));
       }
 
-      const updatesByRow = new Map<number, [string, CellValue][]>();
+      const updatesByRow = new Map<number, [string, CellValue, string?][]>();
       for (const [key, val] of pendingUpdates) {
         const dataRow = Math.floor(key / KEY_STRIDE);
         const colIdx = key % KEY_STRIDE;
         if (!updatesByRow.has(dataRow)) updatesByRow.set(dataRow, []);
-        updatesByRow.get(dataRow)!.push([result.columns[colIdx].name, val]);
+        updatesByRow.get(dataRow)!.push([result.columns[colIdx].name, val, result.columns[colIdx].data_type]);
       }
       for (const [dataRow, changes] of updatesByRow) {
         const pkValues = pkColIndices.map(i => getOriginalCell(dataRow, i));
-        statements.push(generateUpdateSql(schema, table, pkColumnNames, pkValues, changes));
+        statements.push(generateUpdateSql(schema, table, pkColumnNames, pkValues, changes, pkDataTypes));
       }
 
       for (const insertRow of pendingInserts) {
         const colNames = result.columns.map(c => c.name);
-        statements.push(generateInsertSql(schema, table, colNames, insertRow));
+        const colDataTypes = result.columns.map(c => c.data_type);
+        statements.push(generateInsertSql(schema, table, colNames, insertRow, colDataTypes));
       }
 
       if (statements.length === 0) return;
@@ -939,7 +942,7 @@
                       {@const display = (result as ColumnarResultData).getCellDisplay(dataRow, colIdx)}
                       <span class={display.cls}>{display.text}</span>
                     {:else}
-                      <CellDisplay value={getDisplayCell(displayIdx, colIdx)} />
+                      <CellDisplay value={getDisplayCell(displayIdx, colIdx)} dataType={col.data_type} />
                     {/if}
                   </td>
                 {/each}
