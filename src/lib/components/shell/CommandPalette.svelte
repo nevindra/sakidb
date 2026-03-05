@@ -8,7 +8,22 @@
     fuzzyMatch,
     formatKeybinding,
   } from '$lib/commands';
-  import type { Command } from '$lib/commands';
+  import type { Command, CommandContext } from '$lib/commands';
+
+  const contextLabels: Record<CommandContext, string> = {
+    'global': '',
+    'connected': 'needs connection',
+    'query-tab': 'query tab',
+    'data-tab': 'data tab',
+    'structure-tab': 'structure tab',
+    'erd-tab': 'ERD tab',
+    'sidebar': 'sidebar',
+  };
+
+  function contextLabel(contexts: CommandContext[]): string {
+    const labels = contexts.filter(c => c !== 'global').map(c => contextLabels[c]);
+    return labels.join(' / ') || 'unavailable';
+  }
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -167,7 +182,7 @@
                   {#if cmd.comingSoon}
                     <span class="text-[10px] text-muted-foreground/30 italic">coming soon</span>
                   {:else if !cmd.enabled}
-                    <span class="text-[10px] text-muted-foreground/30 italic">unavailable</span>
+                    <span class="text-[10px] text-muted-foreground/30 italic">{contextLabel(cmd.contexts)}</span>
                   {/if}
                   {#if kb}
                     <kbd class="text-[11px] text-muted-foreground font-mono px-1.5 py-0.5 rounded bg-muted/50">{formatKeybinding(kb)}</kbd>
