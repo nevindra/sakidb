@@ -79,6 +79,7 @@ pub async fn list_tables(pool: &Pool, schema: &str) -> Result<Vec<TableInfo>, Sa
         .query(
             "SELECT c.relname AS table_name,
                     c.reltuples::bigint AS row_estimate,
+                    pg_total_relation_size(c.oid)::bigint AS size_bytes,
                     c.relispartition AS is_partition,
                     p.relname AS parent_table
              FROM pg_catalog.pg_class c
@@ -99,6 +100,7 @@ pub async fn list_tables(pool: &Pool, schema: &str) -> Result<Vec<TableInfo>, Sa
         .map(|r| TableInfo {
             name: r.get("table_name"),
             row_count_estimate: r.get("row_estimate"),
+            size_bytes: r.get("size_bytes"),
             is_partition: r.get("is_partition"),
             parent_table: r.get("parent_table"),
         })

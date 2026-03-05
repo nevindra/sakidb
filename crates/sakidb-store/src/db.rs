@@ -65,6 +65,10 @@ impl Store {
                     executed_at       TEXT NOT NULL,
                     execution_time_ms INTEGER,
                     row_count         INTEGER
+                );
+                CREATE TABLE IF NOT EXISTS keybindings (
+                    command_id  TEXT PRIMARY KEY,
+                    keybinding  TEXT
                 );",
             )
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
@@ -440,6 +444,47 @@ impl Store {
         Ok(())
     }
 
+    // ── Keybindings ──
+
+    pub fn get_keybinding_overrides(&self) -> Result<Vec<(String, Option<String>)>, SakiError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT command_id, keybinding FROM keybindings")
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| SakiError::StorageError(e.to_string()))
+    }
+
+    pub fn set_keybinding(&self, command_id: &str, keybinding: Option<&str>) -> Result<(), SakiError> {
+        self.conn
+            .execute(
+                "INSERT INTO keybindings (command_id, keybinding) VALUES (?1, ?2)
+                 ON CONFLICT(command_id) DO UPDATE SET keybinding = excluded.keybinding",
+                params![command_id, keybinding],
+            )
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn reset_keybinding(&self, command_id: &str) -> Result<(), SakiError> {
+        self.conn
+            .execute("DELETE FROM keybindings WHERE command_id = ?1", params![command_id])
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn reset_all_keybindings(&self) -> Result<(), SakiError> {
+        self.conn
+            .execute("DELETE FROM keybindings", [])
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        Ok(())
+    }
+
     pub fn save_from_history(&self, history_id: &str, name: &str) -> Result<SavedQuery, SakiError> {
         let entry: QueryHistoryEntry = self
             .conn
@@ -559,6 +604,35 @@ mod tests {
 
         let list = store.list_query_history(None).unwrap();
         assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn keybindings_crud() {
+        let store = Store::open_in_memory().unwrap();
+
+        // Initially empty
+        assert_eq!(store.get_keybinding_overrides().unwrap().len(), 0);
+
+        // Set a keybinding
+        store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
+        let overrides = store.get_keybinding_overrides().unwrap();
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides[0], ("nav.new-query".to_string(), Some("Ctrl+N".to_string())));
+
+        // Unbind (set to None)
+        store.set_keybinding("nav.new-query", None).unwrap();
+        let overrides = store.get_keybinding_overrides().unwrap();
+        assert_eq!(overrides[0].1, None);
+
+        // Reset single
+        store.reset_keybinding("nav.new-query").unwrap();
+        assert_eq!(store.get_keybinding_overrides().unwrap().len(), 0);
+
+        // Reset all
+        store.set_keybinding("a", Some("Ctrl+A")).unwrap();
+        store.set_keybinding("b", Some("Ctrl+B")).unwrap();
+        store.reset_all_keybindings().unwrap();
+        assert_eq!(store.get_keybinding_overrides().unwrap().len(), 0);
     }
 
     #[test]

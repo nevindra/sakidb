@@ -248,6 +248,7 @@ pub struct SchemaInfo {
 pub struct TableInfo {
     pub name: String,
     pub row_count_estimate: Option<i64>,
+    pub size_bytes: Option<i64>,
     pub is_partition: bool,
     pub parent_table: Option<String>,
 }

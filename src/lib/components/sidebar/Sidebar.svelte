@@ -44,6 +44,7 @@
       </button>
       <button
         class="flex-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors border-b-2 {activeTab === 'queries' ? 'text-foreground border-primary' : 'text-muted-foreground border-transparent hover:text-foreground/70'}"
+        data-sidebar-queries-tab
         onclick={() => switchTab('queries')}
       >
         Queries
@@ -79,6 +80,7 @@
           bind:value={searchQuery}
           placeholder="Filter..."
           class="w-full px-2 py-1 pr-6 text-xs bg-sidebar-accent border border-sidebar-border rounded text-sidebar-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring"
+          data-sidebar-search
           autofocus
         />
         {#if searchQuery}
