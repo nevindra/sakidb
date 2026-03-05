@@ -71,11 +71,9 @@
     }
   });
 
-  // Reset selection when filter changes
-  $effect(() => {
-    flatCommands; // track
+  function resetSelection() {
     selectedIndex = 0;
-  });
+  }
 
   function scrollSelectedIntoView() {
     requestAnimationFrame(() => {
@@ -113,14 +111,12 @@
   <div
     class="fixed inset-0 z-50 bg-black/50"
     onclick={() => (open = false)}
-    onkeydown={handleKeydown}
   >
     <!-- Panel -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="mx-auto mt-[15vh] w-full max-w-[560px] rounded-lg border border-border/50 bg-popover shadow-2xl overflow-hidden"
       onclick={(e) => e.stopPropagation()}
-      onkeydown={handleKeydown}
     >
       <!-- Search input -->
       <div class="flex items-center gap-2 px-3 border-b border-border">
@@ -130,6 +126,8 @@
           bind:value={query}
           placeholder="Type a command..."
           class="flex-1 h-11 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 focus:shadow-none"
+          oninput={resetSelection}
+          onkeydown={handleKeydown}
         />
       </div>
 
@@ -140,7 +138,6 @@
             No results
           </div>
         {:else}
-          {@const flatIndex = { value: 0 }}
           {#each filteredEntries as group}
             {#if group.category}
               <div class="px-3 pt-2 pb-1 text-[11px] font-medium text-muted-foreground/70 uppercase tracking-wider">
@@ -148,7 +145,7 @@
               </div>
             {/if}
             {#each group.commands as cmd (cmd.id)}
-              {@const idx = flatIndex.value++}
+              {@const idx = flatCommands.indexOf(cmd)}
               {@const isSelected = idx === selectedIndex}
               {@const kb = getKeybinding(cmd.id)}
               {@const isActionable = cmd.enabled && !cmd.comingSoon}

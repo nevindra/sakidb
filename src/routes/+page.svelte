@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { getAppState } from '$lib/stores';
+  import { resetLayout } from '$lib/stores/layout.svelte';
   import { initRegistry, registerActions, setContexts, markComingSoon } from '$lib/commands';
   import type { CommandContext } from '$lib/commands';
   import ConnectionOnboarding from '$lib/components/sidebar/ConnectionOnboarding.svelte';
@@ -14,6 +16,13 @@
   import UpdateBanner from '$lib/components/shell/UpdateBanner.svelte';
   import UpdateDialog from '$lib/components/shell/UpdateDialog.svelte';
   import SettingsDialog from '$lib/components/settings/SettingsDialog.svelte';
+  import AboutDialog from '$lib/components/shell/AboutDialog.svelte';
+  import ListPickerDialog from '$lib/components/shell/ListPickerDialog.svelte';
+  import type { ListPickerItem } from '$lib/components/shell/ListPickerDialog.svelte';
+  import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
+  import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import ExportDialog from '$lib/components/structure/ExportDialog.svelte';
+  import RestoreDialog from '$lib/components/sidebar/tree/RestoreDialog.svelte';
   import * as Tooltip from '$lib/components/ui/tooltip';
 
   const app = getAppState();
@@ -22,6 +31,44 @@
   let commandPaletteOpen = $state(false);
   let updateDialogOpen = $state(false);
   let settingsOpen = $state(false);
+  let aboutOpen = $state(false);
+
+  // Dialog state for command actions
+  let saveQueryOpen = $state(false);
+  let saveQuerySql = $state('');
+  let saveQueryConnectionId = $state<string | null>(null);
+  let saveQueryDatabaseName = $state<string | null>(null);
+
+  let dbCreateOpen = $state(false);
+  let dbCreateConnectionId = $state('');
+
+  let dbDropOpen = $state(false);
+  let dbDropConnectionId = $state('');
+  let dbDropDatabaseName = $state('');
+
+  let dbRenameOpen = $state(false);
+  let dbRenameConnectionId = $state('');
+  let dbRenameOldName = $state('');
+
+  let timeoutOpen = $state(false);
+  let timeoutTabId = $state('');
+  let timeoutInitialValue = $state('');
+
+  let pickerOpen = $state(false);
+  let pickerTitle = $state('');
+  let pickerItems = $state<ListPickerItem[]>([]);
+  let pickerOnSelect = $state<(value: string) => void>(() => {});
+
+  let exportOpen = $state(false);
+  let exportConnectionId = $state('');
+  let exportDatabaseName = $state('');
+  let exportSchema = $state('');
+  let exportTable = $state('');
+  let exportWhereClause = $state<string | undefined>(undefined);
+
+  let restoreOpen = $state(false);
+  let restoreConnectionId = $state('');
+  let restoreDatabaseName = $state('');
 
   // Sidebar state
   const SIDEBAR_MIN = 180;
@@ -177,24 +224,55 @@
         if (tab?.type === 'query') app.cancelQuery(tab.runtimeConnectionId);
       },
       'query.save': () => {
-        // TODO: open save query dialog
+        const tab = app.activeTab;
+        if (tab?.type !== 'query' || !tab.content.trim()) return;
+        saveQuerySql = tab.content;
+        saveQueryConnectionId = tab.savedConnectionId;
+        saveQueryDatabaseName = tab.databaseName;
+        saveQueryOpen = true;
       },
       'query.switch-database': () => {
-        // TODO: open database picker
+        const tab = app.activeTab;
+        if (tab?.type !== 'query') return;
+        const dbs = app.getDatabases(tab.savedConnectionId);
+        pickerTitle = 'Switch Database';
+        pickerItems = dbs.map(db => ({
+          value: db.name,
+          label: db.name,
+          description: db.name === tab.databaseName ? 'current' : undefined,
+        }));
+        pickerOnSelect = (value: string) => app.switchQueryTabDatabase(tab.id, value);
+        pickerOpen = true;
       },
       'query.switch-schema': () => {
-        // TODO: open schema picker
+        const tab = app.activeTab;
+        if (tab?.type !== 'query') return;
+        const schemas = app.getSchemas(tab.savedConnectionId, tab.databaseName);
+        pickerTitle = 'Switch Schema';
+        pickerItems = schemas.map(s => ({
+          value: s.name,
+          label: s.name,
+          description: s.name === tab.schemaName ? 'current' : undefined,
+        }));
+        pickerOnSelect = (value: string) => app.switchQueryTabSchema(tab.id, value);
+        pickerOpen = true;
       },
       'query.set-timeout': () => {
-        // TODO: open timeout dialog
+        const tab = app.activeTab;
+        if (tab?.type !== 'query') return;
+        timeoutTabId = tab.id;
+        timeoutInitialValue = tab.statementTimeoutMs ? String(tab.statementTimeoutMs / 1000) : '';
+        timeoutOpen = true;
       },
 
       // Saved queries
       'saved.list': () => {
-        // TODO: focus saved queries in sidebar
+        if (sidebarCollapsed) toggleSidebar();
+        const btn = document.querySelector('[data-sidebar-queries-tab]') as HTMLButtonElement | null;
+        btn?.click();
       },
       'saved.delete': () => {
-        // TODO: delete selected saved query
+        // Requires selection context from sidebar — not actionable from palette
       },
       'saved.clear-history': () => { app.clearHistory(); },
 
@@ -211,13 +289,36 @@
 
       // Database management
       'db.create': () => {
-        // TODO: open create database dialog
+        const ctx = getFirstConnectionDb();
+        if (!ctx) return;
+        dbCreateConnectionId = ctx.savedConnectionId;
+        dbCreateOpen = true;
       },
       'db.drop': () => {
-        // TODO: open drop database dialog
+        const ctx = getFirstConnectionDb();
+        if (!ctx) return;
+        const dbs = app.getDatabases(ctx.savedConnectionId);
+        pickerTitle = 'Drop Database';
+        pickerItems = dbs.map(db => ({ value: db.name, label: db.name }));
+        pickerOnSelect = (value: string) => {
+          dbDropConnectionId = ctx.savedConnectionId;
+          dbDropDatabaseName = value;
+          dbDropOpen = true;
+        };
+        pickerOpen = true;
       },
       'db.rename': () => {
-        // TODO: open rename database dialog
+        const ctx = getFirstConnectionDb();
+        if (!ctx) return;
+        const dbs = app.getDatabases(ctx.savedConnectionId);
+        pickerTitle = 'Rename Database';
+        pickerItems = dbs.map(db => ({ value: db.name, label: db.name }));
+        pickerOnSelect = (value: string) => {
+          dbRenameConnectionId = ctx.savedConnectionId;
+          dbRenameOldName = value;
+          dbRenameOpen = true;
+        };
+        pickerOpen = true;
       },
 
       // Data
@@ -230,22 +331,51 @@
         if (tab?.type === 'data') app.updateDataTabFilters(tab.id, []);
       },
       'data.page-size': () => {
-        // TODO: open page size picker
+        const tab = app.activeTab;
+        if (tab?.type !== 'data') return;
+        const sizes = [25, 50, 100, 250, 500, 1000];
+        pickerTitle = 'Set Page Size';
+        pickerItems = sizes.map(s => ({
+          value: String(s),
+          label: `${s} rows`,
+          description: s === tab.pageSize ? 'current' : undefined,
+        }));
+        pickerOnSelect = (value: string) => app.updateDataTabPageSize(tab.id, Number(value));
+        pickerOpen = true;
       },
 
-      // Export / Import (dialog-driven — TODO: trigger export dialog for active tab)
+      // Export / Import
       'export.csv': () => {
-        // TODO: open export dialog in CSV mode for active data tab
+        const tab = app.activeTab;
+        if (tab?.type !== 'data') return;
+        exportConnectionId = tab.savedConnectionId;
+        exportDatabaseName = tab.databaseName;
+        exportSchema = tab.schema;
+        exportTable = tab.table;
+        exportWhereClause = undefined;
+        exportOpen = true;
       },
       'export.sql': () => {
-        // TODO: open export dialog in SQL mode for active data tab
+        const tab = app.activeTab;
+        if (tab?.type !== 'data') return;
+        exportConnectionId = tab.savedConnectionId;
+        exportDatabaseName = tab.databaseName;
+        exportSchema = tab.schema;
+        exportTable = tab.table;
+        exportWhereClause = undefined;
+        exportOpen = true;
       },
       'import.restore-sql': () => {
-        // TODO: open restore dialog
+        const ctx = getFirstConnectionDb();
+        if (!ctx) return;
+        restoreConnectionId = ctx.savedConnectionId;
+        restoreDatabaseName = ctx.databaseName;
+        restoreOpen = true;
       },
       'import.cancel': () => {
         app.cancelRestore();
-        // cancelExport requires connection context — TODO: cancel active export
+        const ctx = getFirstConnectionDb();
+        if (ctx) app.cancelExport(ctx.savedConnectionId, ctx.databaseName);
       },
 
       // Structure
@@ -264,8 +394,7 @@
       // Layout
       'layout.reset': () => {
         const tabIds = app.tabs.map(t => t.id);
-        // resetLayout is available from stores but not exposed via getAppState currently
-        // Use the layout reset via the store
+        resetLayout(tabIds);
       },
 
       // App
@@ -277,9 +406,7 @@
           app.clearError();
         }
       },
-      'app.about': () => {
-        // TODO: open about dialog
-      },
+      'app.about': () => { aboutOpen = true; },
     });
   }
 
@@ -287,21 +414,7 @@
     await app.init();
     registerAllActions();
     markComingSoon([
-      'query.save',
-      'query.switch-database',
-      'query.switch-schema',
-      'query.set-timeout',
-      'saved.list',
       'saved.delete',
-      'db.create',
-      'db.drop',
-      'db.rename',
-      'data.page-size',
-      'export.csv',
-      'export.sql',
-      'import.restore-sql',
-      'layout.reset',
-      'app.about',
     ]);
     await initRegistry();
   });
@@ -372,3 +485,103 @@
 <CommandPalette bind:open={commandPaletteOpen} />
 <UpdateDialog bind:open={updateDialogOpen} />
 <SettingsDialog bind:open={settingsOpen} />
+<AboutDialog bind:open={aboutOpen} />
+
+<!-- Save query dialog -->
+<InputDialog
+  bind:open={saveQueryOpen}
+  title="Save Query"
+  description="Give this query a name to save it."
+  label="Name"
+  placeholder="e.g. Monthly report"
+  confirmLabel="Save"
+  onconfirm={async (name) => {
+    await invoke('save_query', {
+      name,
+      sql: saveQuerySql,
+      connectionId: saveQueryConnectionId,
+      databaseName: saveQueryDatabaseName,
+    });
+    await app.loadSavedQueries();
+  }}
+/>
+
+<!-- Database management dialogs -->
+<InputDialog
+  bind:open={dbCreateOpen}
+  title="Create Database"
+  label="Database name"
+  placeholder="new_database"
+  confirmLabel="Create"
+  onconfirm={async (name) => {
+    await app.createDatabase(dbCreateConnectionId, name);
+    await app.refreshDatabases(dbCreateConnectionId);
+  }}
+/>
+
+<ConfirmDialog
+  bind:open={dbDropOpen}
+  title="Drop Database"
+  description={'Are you sure you want to drop "' + dbDropDatabaseName + '"? This cannot be undone.'}
+  confirmLabel="Drop"
+  variant="destructive"
+  onconfirm={async () => {
+    await app.dropDatabase(dbDropConnectionId, dbDropDatabaseName);
+    await app.refreshDatabases(dbDropConnectionId);
+  }}
+/>
+
+<InputDialog
+  bind:open={dbRenameOpen}
+  title={'Rename "' + dbRenameOldName + '"'}
+  label="New name"
+  placeholder="new_name"
+  confirmLabel="Rename"
+  onconfirm={async (newName) => {
+    await app.renameDatabase(dbRenameConnectionId, dbRenameOldName, newName);
+    await app.refreshDatabases(dbRenameConnectionId);
+  }}
+/>
+
+<!-- Query timeout dialog -->
+<InputDialog
+  bind:open={timeoutOpen}
+  title="Set Query Timeout"
+  description="Timeout in seconds. Leave empty for no timeout."
+  label="Seconds"
+  placeholder="30"
+  initialValue={timeoutInitialValue}
+  confirmLabel="Set"
+  onconfirm={(value) => {
+    const seconds = value ? Number(value) : null;
+    const ms = seconds ? seconds * 1000 : null;
+    app.updateQueryTabTimeout(timeoutTabId, ms);
+  }}
+/>
+
+<!-- List picker (database/schema/page-size) -->
+<ListPickerDialog
+  bind:open={pickerOpen}
+  title={pickerTitle}
+  items={pickerItems}
+  onselect={pickerOnSelect}
+/>
+
+<!-- Export dialog (from command palette) -->
+{#if exportOpen}
+  <ExportDialog
+    bind:open={exportOpen}
+    savedConnectionId={exportConnectionId}
+    databaseName={exportDatabaseName}
+    schema={exportSchema}
+    table={exportTable}
+    whereClause={exportWhereClause}
+  />
+{/if}
+
+<!-- Restore dialog (from command palette) -->
+<RestoreDialog
+  bind:open={restoreOpen}
+  savedConnectionId={restoreConnectionId}
+  databaseName={restoreDatabaseName}
+/>

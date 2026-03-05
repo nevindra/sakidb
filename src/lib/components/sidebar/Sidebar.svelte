@@ -44,6 +44,7 @@
       </button>
       <button
         class="flex-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors border-b-2 {activeTab === 'queries' ? 'text-foreground border-primary' : 'text-muted-foreground border-transparent hover:text-foreground/70'}"
+        data-sidebar-queries-tab
         onclick={() => switchTab('queries')}
       >
         Queries
