@@ -100,6 +100,7 @@ export interface SchemaInfo {
 export interface TableInfo {
   name: string;
   row_count_estimate: number | null;
+  size_bytes: number | null;
   is_partition: boolean;
   parent_table: string | null;
 }

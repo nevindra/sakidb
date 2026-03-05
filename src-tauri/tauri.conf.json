@@ -24,6 +24,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "shortDescription": "A lightning-fast PostgreSQL client",
     "longDescription": "SakiDB is a lightweight, native desktop PostgreSQL client built for speed. Features include a full SQL editor with autocomplete, virtual-scrolled data grid with inline editing, schema explorer, ERD viewer, query history, CSV/SQL export, and encrypted credential storage.",

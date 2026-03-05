@@ -129,6 +129,14 @@
     if (count >= 1_000) return `~${(count / 1_000).toFixed(1)}k`;
     return `~${count}`;
   }
+
+  function formatSize(bytes: number | null): string {
+    if (bytes === null || bytes < 0) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} kB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
 </script>
 
 <ContextMenu.Root>
@@ -162,8 +170,12 @@
       <span class="text-muted-foreground text-[10px] ml-auto shrink-0 tabular-nums">
         {#if isPartitionParent}
           {partitions!.length} parts
-        {:else if table.row_count_estimate != null}
-          {formatRowCount(table.row_count_estimate)}
+        {:else}
+          {#if table.row_count_estimate != null}{formatRowCount(table.row_count_estimate)}{/if}
+          {#if table.row_count_estimate != null && table.size_bytes}
+            <span class="text-muted-foreground/50 mx-0.5">·</span>
+          {/if}
+          {#if table.size_bytes}{formatSize(table.size_bytes)}{/if}
         {/if}
       </span>
     </button>

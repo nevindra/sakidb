@@ -19,6 +19,43 @@
   let commandPaletteOpen = $state(false);
   let updateDialogOpen = $state(false);
 
+  // Sidebar resize
+  const SIDEBAR_MIN = 180;
+  const SIDEBAR_MAX = 480;
+  const SIDEBAR_DEFAULT = 240;
+  let sidebarWidth = $state(SIDEBAR_DEFAULT);
+  let sidebarDragging = $state(false);
+
+  function onSidebarPointerDown(e: PointerEvent) {
+    e.preventDefault();
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    sidebarDragging = true;
+    document.body.style.userSelect = 'none';
+
+    let rafId: number | null = null;
+
+    function onPointerMove(e: PointerEvent) {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        sidebarWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX));
+      });
+    }
+
+    function onPointerUp() {
+      sidebarDragging = false;
+      document.body.style.userSelect = '';
+      target.removeEventListener('pointermove', onPointerMove);
+      target.removeEventListener('pointerup', onPointerUp);
+      target.releasePointerCapture(e.pointerId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    }
+
+    target.addEventListener('pointermove', onPointerMove);
+    target.addEventListener('pointerup', onPointerUp);
+  }
+
   async function handleCheckForUpdates() {
     const found = await app.checkForUpdate();
     if (found) {
@@ -76,8 +113,21 @@
       {#if !isMacOS}<TitleBar onCommandPalette={() => (commandPaletteOpen = true)} onCheckForUpdates={handleCheckForUpdates} />{/if}
       <UpdateBanner onUpdate={openUpdateDialog} />
       <div class="flex flex-1 overflow-hidden">
-        <div class="w-60 shrink-0">
+        <div class="shrink-0 overflow-hidden" style:width="{sidebarWidth}px">
           <Sidebar />
+        </div>
+
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="shrink-0 relative z-10 w-1 cursor-col-resize group"
+          class:bg-primary={sidebarDragging}
+          class:bg-border={!sidebarDragging}
+          onpointerdown={onSidebarPointerDown}
+        >
+          <div class="absolute -left-1 -right-1 top-0 bottom-0"></div>
+          {#if !sidebarDragging}
+            <div class="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-primary inset-y-0 -left-px -right-px"></div>
+          {/if}
         </div>
 
         <div class="flex flex-col flex-1 overflow-hidden min-w-0">
