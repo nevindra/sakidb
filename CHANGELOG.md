@@ -4,7 +4,7 @@ All notable changes to SakiDB will be documented in this file.
 
 ## Unreleased
 
-### Features
+### CI/CD
 
 - **Command palette** — Press `Ctrl+K` to open a fuzzy-searchable command palette with categories, recent commands, and keyboard shortcut hints.
 
