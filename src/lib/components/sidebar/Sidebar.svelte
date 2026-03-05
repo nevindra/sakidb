@@ -79,6 +79,7 @@
           bind:value={searchQuery}
           placeholder="Filter..."
           class="w-full px-2 py-1 pr-6 text-xs bg-sidebar-accent border border-sidebar-border rounded text-sidebar-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring"
+          data-sidebar-search
           autofocus
         />
         {#if searchQuery}

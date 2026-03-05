@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { getAppState } from '$lib/stores';
+  import { executeCommand, getKeybinding, formatKeybinding } from '$lib/commands';
   import { Menu, Minus, Square, X } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
@@ -9,16 +10,11 @@
   const app = getAppState();
   const appWindow = getCurrentWindow();
 
-  function newQueryTab() {
-    const firstConn = [...app.activeConnections.values()][0];
-    if (!firstConn) return;
-    const firstDb = [...firstConn.activeDatabases.keys()][0];
-    if (firstDb) {
-      app.openQueryTab(firstConn.savedConnectionId, firstDb);
-    }
-  }
-
   const canNewQuery = $derived(app.activeConnections.size > 0);
+
+  const kbNewQuery = $derived(getKeybinding('nav.new-query'));
+  const kbPalette = $derived(getKeybinding('nav.command-palette'));
+  const kbSettings = $derived(getKeybinding('nav.settings'));
 
   let isMaximized = $state(false);
 
@@ -45,24 +41,24 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align="start" sideOffset={2} class="min-w-[200px]">
       {#if canNewQuery}
-        <DropdownMenu.Item onclick={newQueryTab}>
+        <DropdownMenu.Item onclick={() => executeCommand('nav.new-query')}>
           New Query
-          <DropdownMenu.Shortcut>Ctrl+N</DropdownMenu.Shortcut>
+          {#if kbNewQuery}<DropdownMenu.Shortcut>{formatKeybinding(kbNewQuery)}</DropdownMenu.Shortcut>{/if}
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
       {/if}
       <DropdownMenu.Item onclick={() => onCommandPalette?.()}>
         Command Palette
-        <DropdownMenu.Shortcut>Ctrl+K</DropdownMenu.Shortcut>
+        {#if kbPalette}<DropdownMenu.Shortcut>{formatKeybinding(kbPalette)}</DropdownMenu.Shortcut>{/if}
       </DropdownMenu.Item>
       <DropdownMenu.Separator />
-      <DropdownMenu.Item>
+      <DropdownMenu.Item onclick={() => executeCommand('nav.settings')}>
         Settings
-        <DropdownMenu.Shortcut>Ctrl+,</DropdownMenu.Shortcut>
+        {#if kbSettings}<DropdownMenu.Shortcut>{formatKeybinding(kbSettings)}</DropdownMenu.Shortcut>{/if}
       </DropdownMenu.Item>
       <DropdownMenu.Item onclick={() => onCheckForUpdates?.()}>Check for Updates</DropdownMenu.Item>
       <DropdownMenu.Separator />
-      <DropdownMenu.Item>About SakiDB</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={() => executeCommand('app.about')}>About SakiDB</DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 

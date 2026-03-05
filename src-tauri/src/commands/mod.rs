@@ -4,3 +4,4 @@ pub mod export;
 pub mod import;
 pub mod queries;
 pub mod query;
+pub mod settings;

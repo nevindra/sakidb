@@ -142,6 +142,10 @@ pub fn run() {
             commands::queries::list_query_history,
             commands::queries::clear_query_history,
             commands::queries::save_from_history,
+            commands::settings::get_keybinding_overrides,
+            commands::settings::set_keybinding,
+            commands::settings::reset_keybinding,
+            commands::settings::reset_all_keybindings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SakiDB");
