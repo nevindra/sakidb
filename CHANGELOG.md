@@ -2,7 +2,7 @@
 
 All notable changes to SakiDB will be documented in this file.
 
-## Unreleased
+## v1.1.0 (2026-03-06)
 
 ### Added
 

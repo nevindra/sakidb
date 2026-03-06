@@ -1,6 +1,6 @@
 [package]
 name = "SakiDB"
-version = "1.0.0"
+version = "1.1.0"
 description = "A lightning-fast, native desktop PostgreSQL client built with Tauri and Svelte"
 authors = ["nevindra"]
 license = "MIT"
