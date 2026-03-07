@@ -1,8 +1,39 @@
 import type { ColumnarResultData } from '$lib/types/query-result-data';
 
+// ── Engine types ──
+
+export type EngineType = 'postgres' | 'sqlite' | 'redis' | 'mongodb' | 'duckdb' | 'clickhouse';
+
+export interface EngineCapabilities {
+  sql: boolean;
+  introspection: boolean;
+  export: boolean;
+  restore: boolean;
+  key_value: boolean;
+  document: boolean;
+  schemas: boolean;
+  tables: boolean;
+  views: boolean;
+  materialized_views: boolean;
+  functions: boolean;
+  sequences: boolean;
+  indexes: boolean;
+  triggers: boolean;
+  partitions: boolean;
+  foreign_tables: boolean;
+  explain: boolean;
+  multi_database: boolean;
+}
+
+export interface ConnectResult {
+  runtime_id: string;
+  capabilities: EngineCapabilities;
+}
+
 // ── Connection types ──
 
 export interface ConnectionConfig {
+  engine: EngineType;
   host: string;
   port: number;
   database: string;
@@ -14,6 +45,7 @@ export interface ConnectionConfig {
 export interface SavedConnection {
   id: string;
   name: string;
+  engine: string;
   host: string;
   port: number;
   database: string;
@@ -26,6 +58,7 @@ export interface SavedConnection {
 
 export interface ConnectionInput {
   name: string;
+  engine: string;
   host: string;
   port: number;
   database: string;
@@ -387,6 +420,7 @@ export interface ActiveConnection {
   savedConnectionId: string;
   databases: DatabaseInfo[];
   activeDatabases: Map<string, ActiveDatabase>;
+  capabilities: EngineCapabilities;
 }
 
 // ── Connection colors ──

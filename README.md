@@ -5,7 +5,7 @@
 <h1 align="center">Saki</h1>
 
 <p align="center">
-  A lightning-fast PostgreSQL client that stays out of your way.
+  A lightning-fast database client that stays out of your way.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 <br />
 
 <p align="center">
-  <img src="docs/screenshot/saki-poster.png" width="800" alt="Saki — a lightning-fast PostgreSQL client" />
+  <img src="docs/screenshot/saki-poster.png" width="800" alt="Saki — a lightning-fast database client" />
 </p>
 
 <br />
@@ -36,6 +36,8 @@ Saki is different.
 
 **Data-first interface.** No flashy dashboards. No distracting chrome. The UI steps aside so your query results take center stage — virtual-scrolled, resizable, editable, filterable.
 
+**Multi-engine architecture.** PostgreSQL today, with SQLite, Redis, MongoDB, DuckDB, and ClickHouse on the roadmap. The UI adapts automatically — tree depth, context menus, toolbar controls, and structure tabs all adjust based on what your engine supports.
+
 **Everything you need, nothing you don't.** Query editor with autocomplete, data grid with inline editing, schema explorer, ERD viewer, export/import — all in one app that opens faster than your browser tab.
 
 <br />
@@ -44,7 +46,7 @@ Saki is different.
 
 ### Query Editor
 
-Full SQL editor powered by CodeMirror 6 — PostgreSQL syntax highlighting, schema-aware autocomplete, SQL formatting, and multi-statement execution. Run everything, or just the statement at your cursor. Built-in EXPLAIN ANALYZE visualizer with table, tree, and raw views. Set per-query timeouts so runaway queries don't block your session.
+Full SQL editor powered by CodeMirror 6 — syntax highlighting, schema-aware autocomplete, SQL formatting, and multi-statement execution. Run everything, or just the statement at your cursor. Built-in EXPLAIN ANALYZE visualizer with table, tree, and raw views. Set per-query timeouts so runaway queries don't block your session.
 
 
 ### Data Grid
@@ -106,6 +108,8 @@ Everything Saki can do, at a glance.
 | Feature | Description |
 |---------|-------------|
 | Connection manager | Save, edit, and test connections securely |
+| Multi-engine | PostgreSQL now; SQLite, Redis, MongoDB, DuckDB, ClickHouse planned |
+| Capability-aware UI | Tree, menus, toolbar, and tabs adapt to each engine's features |
 | SSL/TLS support | Connect to databases with SSL encryption |
 | Database management | Create, drop, and rename databases without leaving the app |
 | CSV export | Stream large tables to CSV files |
@@ -170,11 +174,11 @@ pnpm tauri dev
 ### Project structure
 
 ```
-crates/sakidb-core/       — Shared traits, types, errors
-crates/sakidb-postgres/   — PostgreSQL driver
-crates/sakidb-store/      — Credential & query storage
-src-tauri/                — Tauri app, IPC commands
-src/                      — Svelte 5 frontend
+crates/sakidb-core/       — Shared traits, types, errors (driver trait system)
+crates/sakidb-postgres/   — PostgreSQL driver (feature-flagged)
+crates/sakidb-store/      — Credential & query storage (encrypted)
+src-tauri/                — Tauri app, DriverRegistry, IPC commands
+src/                      — Svelte 5 frontend (capability-gated UI)
 ```
 
 ### Running tests

@@ -10,6 +10,7 @@
 
   let form = $state<ConnectionInput>({
     name: '',
+    engine: 'postgres',
     host: 'localhost',
     port: 5432,
     database: 'postgres',
@@ -37,6 +38,7 @@
     if (connection) {
       form = {
         name: connection.name,
+        engine: connection.engine || 'postgres',
         host: connection.host,
         port: connection.port,
         database: connection.database,

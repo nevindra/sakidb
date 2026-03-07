@@ -1,11 +1,21 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { SavedConnection } from '$lib/types';
+  import type { EngineType, SavedConnection } from '$lib/types';
   import type { FuzzyResult } from '$lib/utils/fuzzy';
-  import { ChevronRight, ChevronDown, Loader2, Server } from '@lucide/svelte';
+  import { ChevronRight, ChevronDown, Loader2, Server, FolderClosed, FolderOpen } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import DatabaseNode from './tree/DatabaseNode.svelte';
+  import SchemaNode from './tree/SchemaNode.svelte';
   import HighlightMatch from './HighlightMatch.svelte';
+
+  const ENGINE_SHORT: Record<EngineType, string> = {
+    postgres: 'PG',
+    sqlite: 'SL',
+    redis: 'RD',
+    mongodb: 'MG',
+    duckdb: 'DK',
+    clickhouse: 'CH',
+  };
 
   let {
     connection,
@@ -22,6 +32,8 @@
   const isConnected = $derived(app.isConnected(connection.id));
   const isConnecting = $derived(app.isConnecting(connection.id));
   const databases = $derived(app.getDatabases(connection.id));
+  const capabilities = $derived(app.getCapabilities(connection.id));
+  const schemas = $derived(app.getSchemas(connection.id, connection.database));
 
   let expanded = $state(false);
 
@@ -68,6 +80,24 @@
       : sortedDatabases
   );
 
+  // For non-multi-db engines: schema expand state
+  let expandedSchemas = $state<Set<string>>(new Set());
+
+  $effect(() => {
+    if (isConnected && capabilities && !capabilities.multi_database && capabilities.schemas) {
+      if (schemas.some(s => s.name === 'public') && !expandedSchemas.has('public')) {
+        expandedSchemas.add('public');
+        expandedSchemas = new Set(expandedSchemas);
+      }
+    }
+  });
+
+  function toggleSchema(name: string) {
+    if (expandedSchemas.has(name)) expandedSchemas.delete(name);
+    else expandedSchemas.add(name);
+    expandedSchemas = new Set(expandedSchemas);
+  }
+
   async function toggleConnection() {
     if (!isConnected && !isConnecting) {
       expanded = true;
@@ -108,30 +138,62 @@
           {connection.name}
         </span>
       {/if}
+
+      <span class="ml-auto text-[9px] text-muted-foreground/60 font-mono shrink-0">
+        {ENGINE_SHORT[connection.engine as EngineType] ?? ''}
+      </span>
     </button>
 
-    <!-- Database tree (when connected + expanded) -->
+    <!-- Tree content (when connected + expanded) -->
     {#if isConnected && (expanded || autoExpand)}
-      {#each filteredDatabases as db (db.name)}
-        <DatabaseNode
-          database={db}
-          connectionId={connection.id}
-          isConfiguredDb={db.name === connection.database}
-          {filterQuery}
-          {searchResults}
-        />
-      {/each}
+      {#if capabilities?.multi_database !== false}
+        <!-- Multi-database: Connection > Database > Schema > Objects -->
+        {#each filteredDatabases as db (db.name)}
+          <DatabaseNode
+            database={db}
+            connectionId={connection.id}
+            isConfiguredDb={db.name === connection.database}
+            {filterQuery}
+            {searchResults}
+          />
+        {/each}
+      {:else if capabilities?.schemas}
+        <!-- Single-database with schemas: Connection > Schema > Objects -->
+        {#each schemas as schema (schema.name)}
+          <button
+            class="w-full text-left pl-6 pr-2 py-0.5 text-xs flex items-center gap-1.5 hover:bg-sidebar-accent transition-colors"
+            onclick={() => toggleSchema(schema.name)}
+          >
+            {#if expandedSchemas.has(schema.name)}
+              <ChevronDown class="h-3 w-3 text-muted-foreground shrink-0" />
+              <FolderOpen class="h-3 w-3 text-warning shrink-0" />
+            {:else}
+              <ChevronRight class="h-3 w-3 text-muted-foreground shrink-0" />
+              <FolderClosed class="h-3 w-3 text-warning shrink-0" />
+            {/if}
+            <span class="truncate">{schema.name}</span>
+          </button>
+          {#if expandedSchemas.has(schema.name)}
+            <SchemaNode schemaName={schema.name} connectionId={connection.id} databaseName={connection.database} {filterQuery} {searchResults} />
+          {/if}
+        {/each}
+      {:else}
+        <!-- No database, no schemas: Connection > Objects directly -->
+        <SchemaNode schemaName="" connectionId={connection.id} databaseName={connection.database} {filterQuery} {searchResults} />
+      {/if}
     {/if}
   </ContextMenu.Trigger>
 
   <ContextMenu.Content>
     {#if isConnected}
-      <ContextMenu.Item onclick={() => {
-        app.openQueryTab(connection.id, connection.database);
-      }}>
-        New Query
-      </ContextMenu.Item>
-      <ContextMenu.Separator />
+      {#if capabilities?.sql !== false}
+        <ContextMenu.Item onclick={() => {
+          app.openQueryTab(connection.id, connection.database);
+        }}>
+          New Query
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+      {/if}
       <ContextMenu.Item onclick={() => app.disconnectFromDatabase(connection.id)}>
         Disconnect
       </ContextMenu.Item>

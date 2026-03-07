@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is SakiDB
 
-SakiDB is a lightweight, fast, low-memory desktop PostgreSQL client. Built with Tauri v2 (Rust backend) + Svelte 5 + TypeScript frontend. The architecture is designed for future database engine extensibility via a trait-based driver system.
+SakiDB is a lightweight, fast, low-memory desktop database client. Built with Tauri v2 (Rust backend) + Svelte 5 + TypeScript frontend. Supports multiple database engines via a composable trait-based driver system with feature-flagged compilation. PostgreSQL is the primary driver; others (SQLite, Redis, MongoDB, DuckDB, ClickHouse) are planned.
 
 ## Contributing Guidelines
 
@@ -41,35 +41,43 @@ pnpm tauri build        # Production build (runs pnpm build, then compiles Rust 
 
 ```
 crates/sakidb-core/       — Shared traits, types, errors. Everything depends on this.
-crates/sakidb-postgres/   — PostgreSQL driver (tokio-postgres + deadpool-postgres). Implements DatabaseDriver trait.
+crates/sakidb-postgres/   — PostgreSQL driver (tokio-postgres + deadpool-postgres). Implements Driver + SqlDriver + Introspector + Exporter + Restorer.
 crates/sakidb-store/      — Encrypted credential storage (rusqlite + AES-256-GCM). Also stores saved queries & query history.
-src-tauri/                — Tauri app. Wires drivers + store into IPC commands.
+src-tauri/                — Tauri app. DriverRegistry + store wired into IPC commands. registry.rs routes connections to drivers.
 ```
 
-**Extension point:** See "The Trait Is the Extension Point" in `CONTRIBUTING.md`.
+**Extension point:** Composable trait system — new engines implement `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`). Register via `DriverRegistry` in `src-tauri/src/registry.rs`. See `CONTRIBUTING.md` for details.
 
 ### Key Rust types
 
-- `DatabaseDriver` trait (`crates/sakidb-core/src/driver.rs`) — 22 async methods covering:
-  - Connection: `connect`, `disconnect`, `test_connection`
-  - Query execution: `execute`, `execute_multi`, `execute_paged`, `execute_batch`, `cancel_query`
-  - Introspection: `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `list_views`, `list_materialized_views`, `list_functions`, `list_sequences`, `list_indexes`, `list_foreign_tables`, `list_triggers`, `list_foreign_keys`, `list_check_constraints`, `list_unique_constraints`, `get_partition_info`, `get_create_table_sql`, `get_erd_data`
+- Composable driver traits (`crates/sakidb-core/src/driver.rs`) — split by capability:
+  - `Driver` (base) — `engine_type`, `capabilities`, `connect`, `disconnect`, `test_connection`
+  - `SqlDriver` — `execute`, `execute_multi`, `execute_multi_columnar`, `execute_paged`, `execute_batch`, `cancel_query`
+  - `Introspector` — `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `list_views`, `list_materialized_views`, `list_functions`, `list_sequences`, `list_indexes`, `list_foreign_tables`, `list_triggers`, `list_foreign_keys`, `list_check_constraints`, `list_unique_constraints`, `get_partition_info`, `get_create_table_sql`, `get_erd_data`, `get_schema_completion_data`, `get_completion_bundle`, `get_table_columns_for_completion`
+  - `Exporter` — `export_stream` (streaming batch export with cancellation)
+  - `Restorer` — `restore` (SQL file restore with progress reporting)
+  - `KeyValueDriver` (future: Redis) — `get`, `set`, `del`, `keys`, `scan`
+  - `DocumentDriver` (future: MongoDB) — `find`, `insert_one`, `list_collections`
+- `EngineType` enum (`crates/sakidb-core/src/types.rs`) — Postgres, Sqlite, Redis, MongoDB, DuckDB, ClickHouse
+- `EngineCapabilities` struct — declares which traits and features a driver supports (used by frontend to show/hide UI)
+- `DriverRegistry` (`src-tauri/src/registry.rs`) — maps `EngineType` → `DriverEntry` (trait object bundle), tracks `ConnectionId` → `EngineType` ownership, routes all operations to the correct driver
 - `CellValue` enum (`crates/sakidb-core/src/types.rs`) — Null, Bool, Int, Float, Text, Bytes, Json, Timestamp. Used instead of serde_json::Value for performance.
 - `ColumnarResult` / `ColumnarResultData` (`crates/sakidb-core/src/types.rs`) — memory-efficient columnar storage format with typed columns (Number, Bool, Text, Bytes) and null bitmaps.
 - `MultiQueryResult` (`crates/sakidb-core/src/types.rs`) — wraps multiple `QueryResult` objects for multi-statement execution.
 - `ErdData` (`crates/sakidb-core/src/types.rs`) — entity-relationship diagram data for schema visualization.
-- `SakiError` enum (`crates/sakidb-core/src/error.rs`) — variants: ConnectionFailed, QueryFailed, AuthFailed, Timeout, Cancelled, StorageError, EncryptionError, NotConnected, ConnectionNotFound. Derives both `thiserror::Error` and `Serialize` so errors cross the IPC boundary.
-- `AppState` (`src-tauri/src/state.rs`) — `Arc<PostgresDriver>` + `Arc<Mutex<Store>>` + `Arc<AtomicBool>` (restore cancellation) + `Arc<DashMap<ConnectionId, Arc<AtomicBool>>>` (per-connection export cancellation).
+- `SakiError` enum (`crates/sakidb-core/src/error.rs`) — variants: ConnectionFailed, QueryFailed, AuthFailed, Timeout, Cancelled, StorageError, EncryptionError, NotConnected, ConnectionNotFound, NotSupported. Derives both `thiserror::Error` and `Serialize` so errors cross the IPC boundary.
+- `AppState` (`src-tauri/src/state.rs`) — `Arc<DriverRegistry>` + `Arc<Mutex<Store>>` + `Arc<AtomicBool>` (restore cancellation) + `Arc<DashMap<ConnectionId, Arc<AtomicBool>>>` (per-connection export cancellation).
 
 ### Tauri Commands (`src-tauri/src/commands/`)
 
-~44 IPC commands across six modules:
-- `connection.rs` — CRUD saved connections, connect/disconnect/test, database management (create/drop/rename)
+~50 IPC commands across seven modules:
+- `connection.rs` — CRUD saved connections, connect/disconnect/test, database management (create/drop/rename), available_engines
 - `query.rs` — execute_query, execute_query_multi, execute_query_multi_columnar, execute_query_paged, execute_batch, cancel_query
 - `explorer.rs` — list_databases, list_schemas, list_tables, list_columns, list_views, list_materialized_views, list_functions, list_sequences, list_indexes, list_foreign_tables, list_triggers, list_foreign_keys, list_check_constraints, list_unique_constraints, get_partition_info, get_create_table_sql, get_erd_data
 - `export.rs` — export_table_csv, export_table_sql, cancel_export
 - `import.rs` — restore_from_sql, cancel_restore
 - `queries.rs` — save_query, list_saved_queries, update_saved_query, delete_saved_query, add_query_history, list_query_history, clear_query_history, save_from_history
+- `settings.rs` — get_keybinding_overrides, set_keybinding, reset_keybinding, reset_all_keybindings
 
 ### Svelte Frontend (`src/`)
 
@@ -118,7 +126,7 @@ Four tab types, each with its own view component and store logic:
 ### Two-Level Connection ID System
 
 - `SavedConnection.id` — persisted UUID in SQLite (used for UI state)
-- Runtime `ConnectionId` — UUID from the in-memory deadpool-postgres registry (used for all IPC query routing)
+- Runtime `ConnectionId` — UUID from the in-memory DriverRegistry (used for all IPC query routing)
 - `getRuntimeId()` helper in stores bridges saved → runtime IDs
 
 ### Credential Storage
@@ -148,6 +156,7 @@ Below are reference-level conventions for working in the codebase:
 - `sakidb-store` uses `Store::open_in_memory()` for tests
 - Commands acquire `state.store.lock().await` and operate on the store directly
 - `sakidb-postgres` modules: `connection.rs` (pool management), `executor.rs` (query execution), `introspect.rs` (schema introspection), `restore.rs` (SQL restore)
+- Commands use `state.registry.sql_for()`, `state.registry.introspector_for()`, etc. to get trait objects — engine-agnostic by default
 
 ### TypeScript / Svelte
 - TypeScript interfaces mirror Rust struct field names exactly (snake_case: `rows_affected`, `ssl_mode`, etc.)

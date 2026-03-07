@@ -26,6 +26,7 @@
   } = $props();
 
   const app = getAppState();
+  const capabilities = $derived(app.getCapabilities(savedConnectionId));
 
   interface ExportProgressEvent {
     rows_exported: number;
@@ -184,10 +185,12 @@
               <RadioGroup.Item value="csv" />
               CSV
             </label>
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <RadioGroup.Item value="sql" />
-              SQL
-            </label>
+            {#if capabilities?.sql !== false}
+              <label class="flex items-center gap-2 text-sm cursor-pointer">
+                <RadioGroup.Item value="sql" />
+                SQL
+              </label>
+            {/if}
           </RadioGroup.Root>
         </div>
 

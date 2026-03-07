@@ -14,6 +14,7 @@ import {
   getEditDialogConnectionId,
   hasActiveConnections,
   getRuntimeId,
+  getCapabilities,
   loadConnections,
   saveConnection,
   deleteConnection,
@@ -179,6 +180,7 @@ export function getAppState() {
     // ── Connect / Disconnect ──
     isConnected,
     isConnecting,
+    getCapabilities,
     getDatabases,
     getActiveDatabase,
     getRuntimeConnectionId,

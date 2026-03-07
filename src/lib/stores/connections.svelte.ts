@@ -3,6 +3,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type {
   SavedConnection,
   ConnectionInput,
+  ConnectResult,
   DatabaseInfo,
   SchemaInfo,
   TableInfo,
@@ -15,6 +16,7 @@ import type {
   ForeignTableInfo,
   ActiveConnection,
   ActiveDatabase,
+  EngineCapabilities,
 } from '$lib/types';
 import { setError } from './shared.svelte';
 import { addToIndex, indexConnections, indexDatabaseSchemas, invalidateConnection, removeFromIndexByPrefix } from './search.svelte';
@@ -42,6 +44,10 @@ export function getRuntimeId(savedConnectionId: string, databaseName: string): s
 
 export function getSavedConnection(id: string): SavedConnection | undefined {
   return savedConnections.find(c => c.id === id);
+}
+
+export function getCapabilities(savedConnectionId: string): EngineCapabilities | null {
+  return activeConnections.get(savedConnectionId)?.capabilities ?? null;
 }
 
 // ── Connection CRUD ──
@@ -145,17 +151,19 @@ export async function connectToDatabase(savedConnectionId: string): Promise<stri
   if (activeConnections.has(savedConnectionId)) return null;
   connectingIds.add(savedConnectionId);
   try {
-    const runtimeId: string = await invoke('connect_to_database', {
+    const result: ConnectResult = await invoke('connect_to_database', {
       connectionId: savedConnectionId,
     });
+    const runtimeId = result.runtime_id;
+    const capabilities = result.capabilities;
 
-    const databases: DatabaseInfo[] = await invoke('list_databases', {
-      activeConnectionId: runtimeId,
-    });
+    const databases: DatabaseInfo[] = capabilities.multi_database
+      ? await invoke('list_databases', { activeConnectionId: runtimeId })
+      : [];
 
-    const schemas: SchemaInfo[] = await invoke('list_schemas', {
-      activeConnectionId: runtimeId,
-    });
+    const schemas: SchemaInfo[] = capabilities.schemas
+      ? await invoke('list_schemas', { activeConnectionId: runtimeId })
+      : [];
 
     const savedConn = savedConnections.find(c => c.id === savedConnectionId);
     const configuredDb = savedConn?.database ?? '';
@@ -170,6 +178,7 @@ export async function connectToDatabase(savedConnectionId: string): Promise<stri
       savedConnectionId,
       databases,
       activeDatabases,
+      capabilities,
     });
 
     for (const db of databases) {
@@ -195,13 +204,14 @@ export async function connectToSpecificDatabase(savedConnectionId: string, dbNam
   const connectingKey = `${savedConnectionId}:${dbName}`;
   connectingIds.add(connectingKey);
   try {
-    const runtimeId: string = await invoke('connect_to_database_as', {
+    const result: ConnectResult = await invoke('connect_to_database_as', {
       connectionId: savedConnectionId,
       database: dbName,
     });
-    const schemas: SchemaInfo[] = await invoke('list_schemas', {
-      activeConnectionId: runtimeId,
-    });
+    const runtimeId = result.runtime_id;
+    const schemas: SchemaInfo[] = result.capabilities.schemas
+      ? await invoke('list_schemas', { activeConnectionId: runtimeId })
+      : [];
 
     conn.activeDatabases.set(dbName, {
       runtimeConnectionId: runtimeId,

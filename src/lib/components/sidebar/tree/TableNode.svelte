@@ -38,6 +38,7 @@
   const selfMatch = $derived(schemaPrefix ? searchResults.get(`${schemaPrefix}/${table.name}`) : undefined);
 
   const app = getAppState();
+  const capabilities = $derived(app.getCapabilities(connectionId));
 
   // Tab-to-tree sync: highlight when active tab targets this table
   const isRevealed = $derived(app.selectedObjectPath === `${schemaPrefix}/${table.name}`);
@@ -183,16 +184,26 @@
   <ContextMenu.Content>
     <ContextMenu.Item onclick={handleClick}>Open Data</ContextMenu.Item>
     <ContextMenu.Item onclick={() => app.openStructureTab(connectionId, databaseName, schema, table.name)}>View Structure</ContextMenu.Item>
-    <ContextMenu.Item onclick={() => app.openErdTab(connectionId, databaseName, schema, table.name)}>View ERD</ContextMenu.Item>
-    <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM "${schema}"."${table.name}" LIMIT 100;`)}>New Query</ContextMenu.Item>
+    {#if capabilities?.introspection !== false}
+      <ContextMenu.Item onclick={() => app.openErdTab(connectionId, databaseName, schema, table.name)}>View ERD</ContextMenu.Item>
+    {/if}
+    {#if capabilities?.sql !== false}
+      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM "${schema}"."${table.name}" LIMIT 100;`)}>New Query</ContextMenu.Item>
+    {/if}
     <ContextMenu.Separator />
-    <ContextMenu.Item onclick={() => (exportOpen = true)}>Export Table...</ContextMenu.Item>
-    <ContextMenu.Item onclick={() => (restoreOpen = true)}>Restore from SQL...</ContextMenu.Item>
-    <ContextMenu.Item onclick={handleCreateSql}>SQL: Create</ContextMenu.Item>
-    <ContextMenu.Item onclick={() => (duplicateOpen = true)}>Duplicate Table...</ContextMenu.Item>
-    <ContextMenu.Separator />
-    <ContextMenu.Item variant="destructive" onclick={() => (truncateConfirmOpen = true)}>Truncate Table...</ContextMenu.Item>
-    <ContextMenu.Item variant="destructive" onclick={() => (dropConfirmOpen = true)}>Drop Table...</ContextMenu.Item>
+    {#if capabilities?.export !== false}
+      <ContextMenu.Item onclick={() => (exportOpen = true)}>Export Table...</ContextMenu.Item>
+    {/if}
+    {#if capabilities?.restore}
+      <ContextMenu.Item onclick={() => (restoreOpen = true)}>Restore from SQL...</ContextMenu.Item>
+    {/if}
+    {#if capabilities?.sql !== false}
+      <ContextMenu.Item onclick={handleCreateSql}>SQL: Create</ContextMenu.Item>
+      <ContextMenu.Item onclick={() => (duplicateOpen = true)}>Duplicate Table...</ContextMenu.Item>
+      <ContextMenu.Separator />
+      <ContextMenu.Item variant="destructive" onclick={() => (truncateConfirmOpen = true)}>Truncate Table...</ContextMenu.Item>
+      <ContextMenu.Item variant="destructive" onclick={() => (dropConfirmOpen = true)}>Drop Table...</ContextMenu.Item>
+    {/if}
   </ContextMenu.Content>
 </ContextMenu.Root>
 

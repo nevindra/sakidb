@@ -3,10 +3,32 @@
   import * as Select from '$lib/components/ui/select';
   import { Input } from '$lib/components/ui/input';
   import { getAppState } from '$lib/stores';
-  import type { ConnectionInput, SavedConnection } from '$lib/types';
+  import type { ConnectionInput, EngineType, SavedConnection } from '$lib/types';
+  import { invoke } from '@tauri-apps/api/core';
   import { CheckCircle, Database, Eye, EyeOff, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
 
   const app = getAppState();
+
+  const ENGINE_LABELS: Record<EngineType, string> = {
+    postgres: 'PostgreSQL',
+    sqlite: 'SQLite',
+    redis: 'Redis',
+    mongodb: 'MongoDB',
+    duckdb: 'DuckDB',
+    clickhouse: 'ClickHouse',
+  };
+
+  const ENGINE_DEFAULTS: Record<EngineType, { port: number; database: string; username: string }> = {
+    postgres: { port: 5432, database: 'postgres', username: 'postgres' },
+    sqlite: { port: 0, database: '', username: '' },
+    redis: { port: 6379, database: '', username: '' },
+    mongodb: { port: 27017, database: '', username: '' },
+    duckdb: { port: 0, database: '', username: '' },
+    clickhouse: { port: 9000, database: 'default', username: 'default' },
+  };
+
+  let availableEngines = $state<EngineType[]>([]);
+  invoke<EngineType[]>('available_engines').then(e => availableEngines = e);
 
   // ── Left panel state ──
   let searchQuery = $state('');
@@ -16,6 +38,7 @@
   // ── Right panel form state ──
   let form = $state<ConnectionInput>({
     name: '',
+    engine: 'postgres',
     host: 'localhost',
     port: 5432,
     database: 'postgres',
@@ -136,6 +159,7 @@
   function resetForm() {
     form = {
       name: '',
+      engine: 'postgres',
       host: 'localhost',
       port: 5432,
       database: 'postgres',
@@ -154,6 +178,7 @@
     selectedConnectionId = conn.id;
     form = {
       name: conn.name,
+      engine: conn.engine || 'postgres',
       host: conn.host,
       port: conn.port,
       database: conn.database,
@@ -235,6 +260,7 @@
     selectedConnectionId = null;
     form = {
       name: `${conn.name} (copy)`,
+      engine: conn.engine || 'postgres',
       host: conn.host,
       port: conn.port,
       database: conn.database,
@@ -395,69 +421,107 @@
           <Input id="cm-name" bind:value={form.name} placeholder="My Database" class="flex-1" />
         </div>
 
-        <!-- Host -->
-        <div class="flex items-center gap-3">
-          <label for="cm-host" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Host</label>
-          <Input id="cm-host" bind:value={form.host} placeholder="localhost" class="flex-1" />
-        </div>
-
-        <!-- Port -->
-        <div class="flex items-center gap-3">
-          <label for="cm-port" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Port</label>
-          <Input id="cm-port" type="number" bind:value={form.port} class="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-        </div>
-
-        <!-- Database -->
-        <div class="flex items-center gap-3">
-          <label for="cm-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
-          <Input id="cm-db" bind:value={form.database} placeholder="postgres" class="flex-1" />
-        </div>
-
-        <!-- User -->
-        <div class="flex items-center gap-3">
-          <label for="cm-user" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">User</label>
-          <Input id="cm-user" bind:value={form.username} placeholder="postgres" class="flex-1" />
-        </div>
-
-        <!-- Password -->
-        <div class="flex items-center gap-3">
-          <label for="cm-pass" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Password</label>
-          <div class="relative flex-1">
-            <Input
-              id="cm-pass"
-              type={showPassword ? 'text' : 'password'}
-              bind:value={form.password}
-              placeholder={isEditing ? 'Unchanged' : ''}
-              class="pr-8"
-            />
-            <button
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors duration-100"
-              aria-label="Toggle password visibility"
-              onclick={() => showPassword = !showPassword}
-            >
-              {#if showPassword}
-                <EyeOff class="h-3.5 w-3.5" />
-              {:else}
-                <Eye class="h-3.5 w-3.5" />
-              {/if}
-            </button>
+        <!-- Engine -->
+        {#if availableEngines.length > 1}
+          <div class="flex items-center gap-3">
+            <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Engine</span>
+            <Select.Root type="single" value={form.engine} onValueChange={(v) => {
+              if (v && v !== form.engine) {
+                form.engine = v;
+                const defaults = ENGINE_DEFAULTS[v as EngineType];
+                if (defaults) {
+                  form.port = defaults.port;
+                  form.database = defaults.database;
+                  form.username = defaults.username;
+                }
+                testResult = null;
+              }
+            }}>
+              <Select.Trigger class="flex-1 h-9 bg-transparent">
+                <span class="text-foreground text-sm">{ENGINE_LABELS[form.engine as EngineType] ?? form.engine}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each availableEngines as engine (engine)}
+                  <Select.Item value={engine} label={ENGINE_LABELS[engine]} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
           </div>
-        </div>
+        {/if}
 
-        <!-- SSL -->
-        <div class="flex items-center gap-3">
-          <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
-          <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-            <Select.Trigger class="flex-1 h-9 bg-transparent">
-              <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="prefer" label="Prefer" />
-              <Select.Item value="require" label="Require" />
-              <Select.Item value="disable" label="Disable" />
-            </Select.Content>
-          </Select.Root>
-        </div>
+        <!-- Host (hidden for file-based engines) -->
+        {#if form.engine !== 'sqlite' && form.engine !== 'duckdb'}
+          <div class="flex items-center gap-3">
+            <label for="cm-host" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Host</label>
+            <Input id="cm-host" bind:value={form.host} placeholder="localhost" class="flex-1" />
+          </div>
+
+          <!-- Port -->
+          <div class="flex items-center gap-3">
+            <label for="cm-port" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Port</label>
+            <Input id="cm-port" type="number" bind:value={form.port} class="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+          </div>
+        {/if}
+
+        <!-- Database (hidden for Redis) -->
+        {#if form.engine !== 'redis'}
+          <div class="flex items-center gap-3">
+            <label for="cm-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
+            <Input id="cm-db" bind:value={form.database} placeholder={form.engine === 'sqlite' || form.engine === 'duckdb' ? '/path/to/db' : 'postgres'} class="flex-1" />
+          </div>
+        {/if}
+
+        <!-- User (hidden for file-based engines and Redis) -->
+        {#if form.engine !== 'sqlite' && form.engine !== 'duckdb' && form.engine !== 'redis'}
+          <div class="flex items-center gap-3">
+            <label for="cm-user" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">User</label>
+            <Input id="cm-user" bind:value={form.username} placeholder="postgres" class="flex-1" />
+          </div>
+        {/if}
+
+        <!-- Password (hidden for file-based engines) -->
+        {#if form.engine !== 'sqlite' && form.engine !== 'duckdb'}
+          <div class="flex items-center gap-3">
+            <label for="cm-pass" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Password</label>
+            <div class="relative flex-1">
+              <Input
+                id="cm-pass"
+                type={showPassword ? 'text' : 'password'}
+                bind:value={form.password}
+                placeholder={isEditing ? 'Unchanged' : ''}
+                class="pr-8"
+              />
+              <button
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors duration-100"
+                aria-label="Toggle password visibility"
+                onclick={() => showPassword = !showPassword}
+              >
+                {#if showPassword}
+                  <EyeOff class="h-3.5 w-3.5" />
+                {:else}
+                  <Eye class="h-3.5 w-3.5" />
+                {/if}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- SSL (only for engines that support it) -->
+        {#if form.engine === 'postgres' || form.engine === 'clickhouse' || form.engine === 'mongodb'}
+          <div class="flex items-center gap-3">
+            <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
+            <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
+              <Select.Trigger class="flex-1 h-9 bg-transparent">
+                <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="prefer" label="Prefer" />
+                <Select.Item value="require" label="Require" />
+                <Select.Item value="disable" label="Disable" />
+              </Select.Content>
+            </Select.Root>
+          </div>
+        {/if}
       </div>
 
       <!-- Test result -->

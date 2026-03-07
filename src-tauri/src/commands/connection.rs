@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use tauri::State;
 use tracing::{error, info, warn};
 
-use sakidb_core::types::{ConnectionConfig, ConnectionId, EngineType, SslMode};
+use sakidb_core::types::{ConnectResult, ConnectionConfig, ConnectionId, EngineType, SslMode};
 use sakidb_store::models::ConnectionInput;
 
 use crate::state::AppState;
@@ -84,7 +84,7 @@ pub async fn test_connection(
 pub async fn connect_to_database(
     state: State<'_, AppState>,
     connection_id: String,
-) -> Result<String, String> {
+) -> Result<ConnectResult, String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
     let config = saved_to_config(&saved, None);
@@ -94,8 +94,9 @@ pub async fn connect_to_database(
         error!(connection_id = %connection_id, error = %e, "connect failed");
         e.to_string()
     })?;
+    let capabilities = state.registry.capabilities_for(&conn_id).map_err(|e| e.to_string())?;
     info!(connection_id = %connection_id, runtime_id = %conn_id.0, "connected");
-    Ok(conn_id.0.to_string())
+    Ok(ConnectResult { runtime_id: conn_id.0.to_string(), capabilities })
 }
 
 #[tauri::command]
@@ -103,7 +104,7 @@ pub async fn connect_to_database_as(
     state: State<'_, AppState>,
     connection_id: String,
     database: String,
-) -> Result<String, String> {
+) -> Result<ConnectResult, String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
     let config = saved_to_config(&saved, Some(database));
@@ -113,8 +114,9 @@ pub async fn connect_to_database_as(
         error!(connection_id = %connection_id, database = %config.database, error = %e, "connect_as failed");
         e.to_string()
     })?;
+    let capabilities = state.registry.capabilities_for(&conn_id).map_err(|e| e.to_string())?;
     info!(connection_id = %connection_id, database = %config.database, runtime_id = %conn_id.0, "connected as");
-    Ok(conn_id.0.to_string())
+    Ok(ConnectResult { runtime_id: conn_id.0.to_string(), capabilities })
 }
 
 #[tauri::command]

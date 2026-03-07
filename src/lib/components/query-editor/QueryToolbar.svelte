@@ -55,6 +55,7 @@
   }
 
   // Get the connection info for this tab
+  const capabilities = $derived(app.getCapabilities(tab.savedConnectionId));
   let connection = $derived(app.activeConnections.get(tab.savedConnectionId));
   let databases = $derived(connection?.databases ?? []);
   let schemas = $derived(
@@ -80,57 +81,62 @@
 <svelte:window onclick={handleWindowClick} />
 
 <div class="flex items-center gap-1.5 px-2 h-8 bg-card/50 border-b border-border shrink-0">
-  <!-- Database selector -->
-  <Select.Root
-    type="single"
-    value={tab.databaseName}
-    onValueChange={handleDatabaseChange}
-  >
-    <Select.Trigger
-      size="sm"
-      class="h-6 px-2 text-xs border-none shadow-none bg-transparent hover:bg-accent gap-1 min-w-0"
+  <!-- Database selector (multi-database engines only) -->
+  {#if capabilities?.multi_database !== false}
+    <Select.Root
+      type="single"
+      value={tab.databaseName}
+      onValueChange={handleDatabaseChange}
     >
-      {#if switchingDb}
-        <Loader2 class="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
-      {:else}
-        <Database class="h-3 w-3 text-muted-foreground shrink-0" />
-      {/if}
-      <span class="truncate max-w-[140px]">{tab.databaseName}</span>
-    </Select.Trigger>
-    <Select.Content>
-      {#each databases as db (db.name)}
-        {@const isConnected = connection?.activeDatabases.has(db.name)}
-        <Select.Item
-          value={db.name}
-          class={isConnected ? '' : 'text-muted-foreground'}
-        >
-          {db.name}
-        </Select.Item>
-      {/each}
-    </Select.Content>
-  </Select.Root>
+      <Select.Trigger
+        size="sm"
+        class="h-6 px-2 text-xs border-none shadow-none bg-transparent hover:bg-accent gap-1 min-w-0"
+      >
+        {#if switchingDb}
+          <Loader2 class="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+        {:else}
+          <Database class="h-3 w-3 text-muted-foreground shrink-0" />
+        {/if}
+        <span class="truncate max-w-[140px]">{tab.databaseName}</span>
+      </Select.Trigger>
+      <Select.Content>
+        {#each databases as db (db.name)}
+          {@const isConnected = connection?.activeDatabases.has(db.name)}
+          <Select.Item
+            value={db.name}
+            class={isConnected ? '' : 'text-muted-foreground'}
+          >
+            {db.name}
+          </Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Root>
+  {/if}
 
-  <!-- Separator dot -->
-  <span class="text-muted-foreground/40 text-xs select-none">/</span>
+  {#if capabilities?.multi_database !== false && capabilities?.schemas !== false}
+    <span class="text-muted-foreground/40 text-xs select-none">/</span>
+  {/if}
 
-  <!-- Schema selector -->
-  <Select.Root
-    type="single"
-    value={tab.schemaName}
-    onValueChange={handleSchemaChange}
-  >
-    <Select.Trigger
-      size="sm"
-      class="h-6 px-2 text-xs border-none shadow-none bg-transparent hover:bg-accent gap-1 min-w-0"
+  <!-- Schema selector (engines with schemas only) -->
+  {#if capabilities?.schemas !== false}
+    <Select.Root
+      type="single"
+      value={tab.schemaName}
+      onValueChange={handleSchemaChange}
     >
-      <span class="truncate max-w-[100px]">{tab.schemaName}</span>
-    </Select.Trigger>
-    <Select.Content>
-      {#each schemas as schema (schema.name)}
-        <Select.Item value={schema.name}>{schema.name}</Select.Item>
-      {/each}
-    </Select.Content>
-  </Select.Root>
+      <Select.Trigger
+        size="sm"
+        class="h-6 px-2 text-xs border-none shadow-none bg-transparent hover:bg-accent gap-1 min-w-0"
+      >
+        <span class="truncate max-w-[100px]">{tab.schemaName}</span>
+      </Select.Trigger>
+      <Select.Content>
+        {#each schemas as schema (schema.name)}
+          <Select.Item value={schema.name}>{schema.name}</Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Root>
+  {/if}
 
   <!-- Format -->
   <button
@@ -191,19 +197,21 @@
             <span>Run Current Statement</span>
             <span class="text-muted-foreground">⌘⇧↵</span>
           </button>
-          <div class="border-t border-border my-1"></div>
-          <button
-            class="w-full px-3 py-1.5 text-xs hover:bg-accent/50 cursor-pointer flex items-center justify-between"
-            onclick={() => { onExplainAnalyze(); runMenuOpen = false; }}
-          >
-            <span>Explain Analyze</span>
-          </button>
-          <button
-            class="w-full px-3 py-1.5 text-xs hover:bg-accent/50 cursor-pointer flex items-center justify-between"
-            onclick={() => { onExplainAnalyzeJson(); runMenuOpen = false; }}
-          >
-            <span>Explain Analyze (JSON)</span>
-          </button>
+          {#if capabilities?.explain !== false}
+            <div class="border-t border-border my-1"></div>
+            <button
+              class="w-full px-3 py-1.5 text-xs hover:bg-accent/50 cursor-pointer flex items-center justify-between"
+              onclick={() => { onExplainAnalyze(); runMenuOpen = false; }}
+            >
+              <span>Explain Analyze</span>
+            </button>
+            <button
+              class="w-full px-3 py-1.5 text-xs hover:bg-accent/50 cursor-pointer flex items-center justify-between"
+              onclick={() => { onExplainAnalyzeJson(); runMenuOpen = false; }}
+            >
+              <span>Explain Analyze (JSON)</span>
+            </button>
+          {/if}
         </div>
       {/if}
     </div>

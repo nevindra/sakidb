@@ -26,6 +26,7 @@
   } = $props();
 
   const app = getAppState();
+  const capabilities = $derived(app.getCapabilities(connectionId));
 
   const SYSTEM_SCHEMAS = new Set(['pg_catalog', 'information_schema', 'pg_toast']);
 
@@ -197,10 +198,16 @@
                 </button>
               </ContextMenu.Trigger>
               <ContextMenu.Content>
-                <ContextMenu.Item onclick={() => app.openErdTab(connectionId, database.name, schema.name)}>View ERD</ContextMenu.Item>
-                <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>New Query</ContextMenu.Item>
-                <ContextMenu.Separator />
-                <ContextMenu.Item onclick={() => { restoreSchemaName = schema.name; showSchemaRestore = true; }}>Restore from SQL...</ContextMenu.Item>
+                {#if capabilities?.introspection !== false}
+                  <ContextMenu.Item onclick={() => app.openErdTab(connectionId, database.name, schema.name)}>View ERD</ContextMenu.Item>
+                {/if}
+                {#if capabilities?.sql !== false}
+                  <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>New Query</ContextMenu.Item>
+                {/if}
+                {#if capabilities?.restore}
+                  <ContextMenu.Separator />
+                  <ContextMenu.Item onclick={() => { restoreSchemaName = schema.name; showSchemaRestore = true; }}>Restore from SQL...</ContextMenu.Item>
+                {/if}
               </ContextMenu.Content>
             </ContextMenu.Root>
           </div>
@@ -214,14 +221,18 @@
 
     <ContextMenu.Content>
       {#if isDbConnected}
-        <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>
-          New Query
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item onclick={() => (showDbRestore = true)}>
-          Restore from SQL...
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
+        {#if capabilities?.sql !== false}
+          <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>
+            New Query
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+        {/if}
+        {#if capabilities?.restore}
+          <ContextMenu.Item onclick={() => (showDbRestore = true)}>
+            Restore from SQL...
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+        {/if}
         <ContextMenu.Item onclick={handleRefresh}>
           Refresh
         </ContextMenu.Item>
@@ -233,20 +244,22 @@
           Connect
         </ContextMenu.Item>
       {/if}
-      <ContextMenu.Separator />
-      <ContextMenu.Item onclick={() => (showCreateDialog = true)}>
-        New Database
-      </ContextMenu.Item>
-      <ContextMenu.Item onclick={() => (showRenameDialog = true)}>
-        Rename Database
-      </ContextMenu.Item>
-      <ContextMenu.Separator />
-      <ContextMenu.Item
-        class="text-destructive focus:text-destructive"
-        onclick={() => (showDropConfirm = true)}
-      >
-        Drop Database
-      </ContextMenu.Item>
+      {#if capabilities?.multi_database}
+        <ContextMenu.Separator />
+        <ContextMenu.Item onclick={() => (showCreateDialog = true)}>
+          New Database
+        </ContextMenu.Item>
+        <ContextMenu.Item onclick={() => (showRenameDialog = true)}>
+          Rename Database
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+        <ContextMenu.Item
+          class="text-destructive focus:text-destructive"
+          onclick={() => (showDropConfirm = true)}
+        >
+          Drop Database
+        </ContextMenu.Item>
+      {/if}
     </ContextMenu.Content>
   </ContextMenu.Root>
 </div>

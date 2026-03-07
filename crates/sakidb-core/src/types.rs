@@ -70,6 +70,13 @@ pub struct EngineCapabilities {
     pub multi_database: bool,
 }
 
+/// Returned by connect commands — bundles the runtime ID with engine capabilities.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectResult {
+    pub runtime_id: String,
+    pub capabilities: EngineCapabilities,
+}
+
 // ── Connection types ──
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -15,8 +15,9 @@
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const capabilities = $derived(app.getCapabilities(tab.savedConnectionId));
 
-  const sections: { key: StructureSection; label: string }[] = [
+  const allSections: { key: StructureSection; label: string }[] = [
     { key: 'columns', label: 'Columns' },
     { key: 'indexes', label: 'Indexes' },
     { key: 'relations', label: 'Relations' },
@@ -24,6 +25,17 @@
     { key: 'partitions', label: 'Partitions' },
     { key: 'profiling', label: 'Profiling' },
   ];
+
+  const sections = $derived.by(() => {
+    if (!capabilities) return allSections;
+    return allSections.filter(s => {
+      if (s.key === 'indexes' && !capabilities.indexes) return false;
+      if (s.key === 'triggers' && !capabilities.triggers) return false;
+      if (s.key === 'partitions' && !capabilities.partitions) return false;
+      if (s.key === 'profiling' && !capabilities.sql) return false;
+      return true;
+    });
+  });
 
   function setSection(section: StructureSection) {
     tab.activeSection = section;
