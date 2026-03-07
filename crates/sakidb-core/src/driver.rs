@@ -1,12 +1,26 @@
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+
 use async_trait::async_trait;
 
 use crate::error::Result;
 use crate::types::*;
 
+// ── Base trait — every engine implements this ──
+
 #[async_trait]
-pub trait DatabaseDriver: Send + Sync {
+pub trait Driver: Send + Sync {
+    fn engine_type(&self) -> EngineType;
+    fn capabilities(&self) -> EngineCapabilities;
     async fn connect(&self, config: &ConnectionConfig) -> Result<ConnectionId>;
     async fn disconnect(&self, conn_id: &ConnectionId) -> Result<()>;
+    async fn test_connection(&self, config: &ConnectionConfig) -> Result<()>;
+}
+
+// ── SQL execution — Postgres, SQLite, DuckDB, ClickHouse ──
+
+#[async_trait]
+pub trait SqlDriver: Send + Sync {
     async fn execute(&self, conn_id: &ConnectionId, sql: &str) -> Result<QueryResult>;
     async fn execute_multi(&self, conn_id: &ConnectionId, sql: &str) -> Result<MultiQueryResult>;
     async fn execute_paged(
@@ -16,6 +30,26 @@ pub trait DatabaseDriver: Send + Sync {
         page: usize,
         page_size: usize,
     ) -> Result<PagedResult>;
+    async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()>;
+    async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()>;
+
+    /// Columnar results for large datasets.
+    /// Default: converts execute_multi() output via rows_to_columnar().
+    /// Drivers can override with native columnar path for better performance.
+    async fn execute_multi_columnar(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+    ) -> Result<MultiColumnarResult> {
+        let result = self.execute_multi(conn_id, sql).await?;
+        Ok(rows_to_columnar(result))
+    }
+}
+
+// ── Schema introspection — relational databases ──
+
+#[async_trait]
+pub trait Introspector: Send + Sync {
     async fn list_databases(&self, conn_id: &ConnectionId) -> Result<Vec<DatabaseInfo>>;
     async fn list_schemas(&self, conn_id: &ConnectionId) -> Result<Vec<SchemaInfo>>;
     async fn list_tables(
@@ -95,8 +129,241 @@ pub trait DatabaseDriver: Send + Sync {
         schema: &str,
         table: &str,
     ) -> Result<String>;
-    async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()>;
     async fn get_erd_data(&self, conn_id: &ConnectionId, schema: &str) -> Result<ErdData>;
-    async fn test_connection(&self, config: &ConnectionConfig) -> Result<()>;
-    async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()>;
+
+    // Completion support
+    async fn get_schema_completion_data(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+    ) -> Result<HashMap<String, Vec<String>>>;
+    async fn get_completion_bundle(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+    ) -> Result<CompletionBundle>;
+    async fn get_table_columns_for_completion(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+        table: &str,
+    ) -> Result<Vec<CompletionColumn>>;
+}
+
+// ── Streaming data export ──
+
+#[async_trait]
+pub trait Exporter: Send + Sync {
+    /// Stream query results in batches for memory-efficient export.
+    async fn export_stream(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+        batch_size: usize,
+        cancelled: &AtomicBool,
+        on_batch: &ExportBatchFn,
+    ) -> Result<u64>;
+}
+
+// ── Data restore/import ──
+
+#[async_trait]
+pub trait Restorer: Send + Sync {
+    async fn restore(
+        &self,
+        conn_id: &ConnectionId,
+        file_path: &str,
+        options: &RestoreOptions,
+        cancelled: &AtomicBool,
+        on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+    ) -> Result<RestoreProgress>;
+}
+
+// ── Key-value operations — Redis (future) ──
+
+#[async_trait]
+pub trait KeyValueDriver: Send + Sync {
+    async fn get(&self, conn_id: &ConnectionId, key: &str) -> Result<Option<CellValue>>;
+    async fn set(&self, conn_id: &ConnectionId, key: &str, value: &CellValue) -> Result<()>;
+    async fn del(&self, conn_id: &ConnectionId, keys: &[&str]) -> Result<u64>;
+    async fn keys(&self, conn_id: &ConnectionId, pattern: &str) -> Result<Vec<String>>;
+    async fn scan(
+        &self,
+        conn_id: &ConnectionId,
+        pattern: &str,
+        cursor: u64,
+        count: usize,
+    ) -> Result<(u64, Vec<String>)>;
+}
+
+// ── Document operations — MongoDB (future) ──
+
+#[async_trait]
+pub trait DocumentDriver: Send + Sync {
+    async fn find(
+        &self,
+        conn_id: &ConnectionId,
+        collection: &str,
+        filter: &str,
+        limit: Option<usize>,
+    ) -> Result<QueryResult>;
+    async fn insert_one(
+        &self,
+        conn_id: &ConnectionId,
+        collection: &str,
+        document: &str,
+    ) -> Result<String>;
+    async fn list_collections(&self, conn_id: &ConnectionId) -> Result<Vec<String>>;
+}
+
+// ── Utility: convert row-based results to columnar format ──
+
+pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
+    let total_execution_time_ms = multi.total_execution_time_ms;
+    let results = multi
+        .results
+        .into_iter()
+        .map(|qr| {
+            let num_cols = qr.columns.len();
+            let row_count = qr.row_count as usize;
+
+            if num_cols == 0 {
+                return ColumnarResult {
+                    columns: qr.columns,
+                    column_data: vec![],
+                    row_count: qr.row_count,
+                    execution_time_ms: qr.execution_time_ms,
+                    truncated: qr.truncated,
+                };
+            }
+
+            // Classify each column by type from first non-null cell
+            let mut column_data: Vec<ColumnStorage> = Vec::with_capacity(num_cols);
+
+            for col_idx in 0..num_cols {
+                // Find first non-null cell to determine column type
+                let mut col_type = None;
+                for row_idx in 0..row_count {
+                    match &qr.cells[row_idx * num_cols + col_idx] {
+                        CellValue::Null => continue,
+                        CellValue::Bool(_) => {
+                            col_type = Some(1u8);
+                            break;
+                        }
+                        CellValue::Int(_) | CellValue::Float(_) => {
+                            col_type = Some(0u8);
+                            break;
+                        }
+                        CellValue::Text(_)
+                        | CellValue::Json(_)
+                        | CellValue::Timestamp(_) => {
+                            col_type = Some(2u8);
+                            break;
+                        }
+                        CellValue::Bytes(_) => {
+                            col_type = Some(3u8);
+                            break;
+                        }
+                    }
+                }
+
+                match col_type.unwrap_or(2) {
+                    0 => {
+                        // Number column
+                        let mut nulls = vec![0u8; row_count];
+                        let mut values = vec![0.0f64; row_count];
+                        for row_idx in 0..row_count {
+                            match &qr.cells[row_idx * num_cols + col_idx] {
+                                CellValue::Null => nulls[row_idx] = 1,
+                                CellValue::Int(i) => values[row_idx] = *i as f64,
+                                CellValue::Float(f) => values[row_idx] = *f,
+                                _ => nulls[row_idx] = 1,
+                            }
+                        }
+                        column_data.push(ColumnStorage::Number { nulls, values });
+                    }
+                    1 => {
+                        // Bool column
+                        let mut nulls = vec![0u8; row_count];
+                        let mut values = vec![0u8; row_count];
+                        for row_idx in 0..row_count {
+                            match &qr.cells[row_idx * num_cols + col_idx] {
+                                CellValue::Null => nulls[row_idx] = 1,
+                                CellValue::Bool(b) => values[row_idx] = *b as u8,
+                                _ => nulls[row_idx] = 1,
+                            }
+                        }
+                        column_data.push(ColumnStorage::Bool { nulls, values });
+                    }
+                    2 => {
+                        // Text column
+                        let mut nulls = vec![0u8; row_count];
+                        let mut offsets = Vec::with_capacity(row_count + 1);
+                        let mut data = Vec::new();
+                        offsets.push(0u32);
+                        for row_idx in 0..row_count {
+                            match &qr.cells[row_idx * num_cols + col_idx] {
+                                CellValue::Null => {
+                                    nulls[row_idx] = 1;
+                                    offsets.push(data.len() as u32);
+                                }
+                                CellValue::Text(s)
+                                | CellValue::Json(s)
+                                | CellValue::Timestamp(s) => {
+                                    data.extend_from_slice(s.as_bytes());
+                                    offsets.push(data.len() as u32);
+                                }
+                                other => {
+                                    let s = format!("{other:?}");
+                                    data.extend_from_slice(s.as_bytes());
+                                    offsets.push(data.len() as u32);
+                                }
+                            }
+                        }
+                        column_data
+                            .push(ColumnStorage::Text { nulls, offsets, data });
+                    }
+                    3 => {
+                        // Bytes column
+                        let mut nulls = vec![0u8; row_count];
+                        let mut offsets = Vec::with_capacity(row_count + 1);
+                        let mut data = Vec::new();
+                        offsets.push(0u32);
+                        for row_idx in 0..row_count {
+                            match &qr.cells[row_idx * num_cols + col_idx] {
+                                CellValue::Null => {
+                                    nulls[row_idx] = 1;
+                                    offsets.push(data.len() as u32);
+                                }
+                                CellValue::Bytes(b) => {
+                                    data.extend_from_slice(b);
+                                    offsets.push(data.len() as u32);
+                                }
+                                _ => {
+                                    nulls[row_idx] = 1;
+                                    offsets.push(data.len() as u32);
+                                }
+                            }
+                        }
+                        column_data
+                            .push(ColumnStorage::Bytes { nulls, offsets, data });
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            ColumnarResult {
+                columns: qr.columns,
+                column_data,
+                row_count: qr.row_count,
+                execution_time_ms: qr.execution_time_ms,
+                truncated: qr.truncated,
+            }
+        })
+        .collect();
+
+    MultiColumnarResult {
+        results,
+        total_execution_time_ms,
+    }
 }
