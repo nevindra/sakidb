@@ -1,6 +1,42 @@
 use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+// ── Engine types ──
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EngineType {
+    Postgres,
+    Sqlite,
+    Redis,
+    MongoDB,
+    DuckDB,
+    ClickHouse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineCapabilities {
+    // Trait-level capabilities
+    pub sql: bool,
+    pub introspection: bool,
+    pub export: bool,
+    pub restore: bool,
+    pub key_value: bool,
+    pub document: bool,
+
+    // Feature-level granularity within introspection
+    pub schemas: bool,
+    pub materialized_views: bool,
+    pub functions: bool,
+    pub sequences: bool,
+    pub triggers: bool,
+    pub partitions: bool,
+    pub explain: bool,
+    pub multi_database: bool,
+}
+
+// ── Connection types ──
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConnectionId(pub Uuid);
@@ -13,23 +49,29 @@ impl ConnectionId {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConnectionConfig {
+    pub engine: EngineType,
     pub host: String,
     pub port: u16,
     pub database: String,
     pub username: String,
     pub password: String,
     pub ssl_mode: SslMode,
+    /// Engine-specific parameters (e.g. file_path for SQLite, db number for Redis)
+    #[serde(default)]
+    pub options: HashMap<String, String>,
 }
 
 impl std::fmt::Debug for ConnectionConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionConfig")
+            .field("engine", &self.engine)
             .field("host", &self.host)
             .field("port", &self.port)
             .field("database", &self.database)
             .field("username", &self.username)
             .field("password", &"[REDACTED]")
             .field("ssl_mode", &self.ssl_mode)
+            .field("options", &self.options)
             .finish()
     }
 }
@@ -387,6 +429,32 @@ pub struct ErdData {
     /// Foreign keys grouped by source table name
     pub foreign_keys: HashMap<String, Vec<ForeignKeyInfo>>,
 }
+
+// ── Restore types ──
+
+pub struct RestoreOptions {
+    pub schema: Option<String>,
+    pub continue_on_error: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RestoreProgress {
+    pub bytes_read: u64,
+    pub total_bytes: u64,
+    pub statements_executed: u64,
+    pub errors_skipped: u64,
+    pub phase: String,
+    pub elapsed_ms: u64,
+    pub error: Option<String>,
+    pub error_messages: Vec<String>,
+}
+
+// ── Export types ──
+
+/// Callback type for streaming export batches.
+/// Parameters: (columns, cells as flat array, total_rows_so_far)
+pub type ExportBatchFn =
+    dyn Fn(&[ColumnDef], &[CellValue], u64) -> crate::error::Result<()> + Send + Sync;
 
 #[cfg(test)]
 mod tests {

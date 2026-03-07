@@ -3,6 +3,7 @@ pub mod executor;
 pub mod introspect;
 pub mod restore;
 
+use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -12,7 +13,7 @@ use tokio_postgres::{CancelToken, NoTls};
 use tracing::{info, warn};
 
 use sakidb_core::types::*;
-use sakidb_core::{DatabaseDriver, Result};
+use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver};
 
 use crate::connection::ConnectionManager;
 
@@ -28,34 +29,33 @@ impl PostgresDriver {
             cancel_tokens: Arc::new(DashMap::new()),
         }
     }
-
-    pub async fn get_pool(&self, conn_id: &ConnectionId) -> Result<deadpool_postgres::Pool> {
-        self.manager.get_pool(conn_id).await
-    }
-
-    pub fn cancel_tokens(&self) -> Arc<DashMap<ConnectionId, CancelToken>> {
-        Arc::clone(&self.cancel_tokens)
-    }
-
-    pub async fn restore_from_sql<F>(
-        &self,
-        conn_id: &ConnectionId,
-        file_path: &str,
-        schema: Option<&str>,
-        continue_on_error: bool,
-        cancelled: Arc<AtomicBool>,
-        on_progress: F,
-    ) -> Result<restore::RestoreProgress>
-    where
-        F: Fn(&restore::RestoreProgress) + Send + Sync,
-    {
-        let pool = self.manager.get_pool(conn_id).await?;
-        restore::restore_from_sql(&pool, file_path, schema, continue_on_error, cancelled, on_progress).await
-    }
 }
 
 #[async_trait]
-impl DatabaseDriver for PostgresDriver {
+impl Driver for PostgresDriver {
+    fn engine_type(&self) -> EngineType {
+        EngineType::Postgres
+    }
+
+    fn capabilities(&self) -> EngineCapabilities {
+        EngineCapabilities {
+            sql: true,
+            introspection: true,
+            export: true,
+            restore: true,
+            key_value: false,
+            document: false,
+            schemas: true,
+            materialized_views: true,
+            functions: true,
+            sequences: true,
+            triggers: true,
+            partitions: true,
+            explain: true,
+            multi_database: true,
+        }
+    }
+
     async fn connect(&self, config: &ConnectionConfig) -> Result<ConnectionId> {
         self.manager.connect(config).await
     }
@@ -65,6 +65,13 @@ impl DatabaseDriver for PostgresDriver {
         self.manager.disconnect(conn_id).await
     }
 
+    async fn test_connection(&self, config: &ConnectionConfig) -> Result<()> {
+        ConnectionManager::test_connection(config).await
+    }
+}
+
+#[async_trait]
+impl SqlDriver for PostgresDriver {
     async fn execute(&self, conn_id: &ConnectionId, sql: &str) -> Result<QueryResult> {
         let pool = self.manager.get_pool(conn_id).await?;
         executor::execute_query(&pool, sql, conn_id, &self.cancel_tokens).await
@@ -86,6 +93,43 @@ impl DatabaseDriver for PostgresDriver {
         executor::execute_paged(&pool, sql, page, page_size, conn_id, &self.cancel_tokens).await
     }
 
+    async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        executor::execute_batch(&pool, sql).await
+    }
+
+    async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()> {
+        let cancel_token = {
+            let entry = self.cancel_tokens.get(conn_id);
+            match entry {
+                Some(token) => token.clone(),
+                None => {
+                    warn!(conn_id = %conn_id.0, "cancel_query: no running query");
+                    return Ok(());
+                }
+            }
+        };
+
+        info!(conn_id = %conn_id.0, "cancelling query");
+        cancel_token
+            .cancel_query(NoTls)
+            .await
+            .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn execute_multi_columnar(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+    ) -> Result<MultiColumnarResult> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        executor::execute_multi_columnar(&pool, sql, conn_id, &self.cancel_tokens).await
+    }
+}
+
+#[async_trait]
+impl Introspector for PostgresDriver {
     async fn list_databases(&self, conn_id: &ConnectionId) -> Result<Vec<DatabaseInfo>> {
         let pool = self.manager.get_pool(conn_id).await?;
         introspect::list_databases(&pool).await
@@ -222,32 +266,71 @@ impl DatabaseDriver for PostgresDriver {
         introspect::get_erd_data(&pool, schema).await
     }
 
-    async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()> {
+    async fn get_schema_completion_data(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+    ) -> Result<HashMap<String, Vec<String>>> {
         let pool = self.manager.get_pool(conn_id).await?;
-        executor::execute_batch(&pool, sql).await
+        introspect::get_schema_completion_data(&pool, schema).await
     }
 
-    async fn test_connection(&self, config: &ConnectionConfig) -> Result<()> {
-        ConnectionManager::test_connection(config).await
+    async fn get_completion_bundle(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+    ) -> Result<CompletionBundle> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        introspect::get_completion_bundle(&pool, schema).await
     }
 
-    async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()> {
-        let cancel_token = {
-            let entry = self.cancel_tokens.get(conn_id);
-            match entry {
-                Some(token) => token.clone(),
-                None => {
-                    warn!(conn_id = %conn_id.0, "cancel_query: no running query");
-                    return Ok(());
-                }
-            }
-        };
+    async fn get_table_columns_for_completion(
+        &self,
+        conn_id: &ConnectionId,
+        schema: &str,
+        table: &str,
+    ) -> Result<Vec<CompletionColumn>> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        introspect::get_table_columns_for_completion(&pool, schema, table).await
+    }
+}
 
-        info!(conn_id = %conn_id.0, "cancelling query");
-        cancel_token
-            .cancel_query(NoTls)
-            .await
-            .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
-        Ok(())
+#[async_trait]
+impl Exporter for PostgresDriver {
+    async fn export_stream(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+        batch_size: usize,
+        cancelled: &AtomicBool,
+        on_batch: &ExportBatchFn,
+    ) -> Result<u64> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        let mut callback =
+            |cols: &[ColumnDef], cells: &[CellValue], total: u64| on_batch(cols, cells, total);
+        executor::execute_export_cursor(&pool, sql, batch_size, &mut callback, cancelled).await
+    }
+}
+
+#[async_trait]
+impl Restorer for PostgresDriver {
+    async fn restore(
+        &self,
+        conn_id: &ConnectionId,
+        file_path: &str,
+        options: &RestoreOptions,
+        cancelled: &AtomicBool,
+        on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+    ) -> Result<RestoreProgress> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        restore::restore_from_sql(
+            &pool,
+            file_path,
+            options.schema.as_deref(),
+            options.continue_on_error,
+            cancelled,
+            on_progress,
+        )
+        .await
     }
 }

@@ -21,6 +21,8 @@ pub enum SakiError {
     NotConnected,
     #[error("Connection not found: {0}")]
     ConnectionNotFound(String),
+    #[error("Not supported: {0}")]
+    NotSupported(String),
 }
 
 pub type Result<T> = std::result::Result<T, SakiError>;

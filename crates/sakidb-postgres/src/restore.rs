@@ -1,14 +1,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
 use deadpool_postgres::Pool;
 use futures_util::SinkExt;
-use serde::Serialize;
 use tokio::io::AsyncBufReadExt;
 use tracing::{info, warn};
 
+use sakidb_core::types::RestoreProgress;
 use sakidb_core::SakiError;
 
 use crate::executor::{format_pg_error, format_pool_error};
@@ -17,29 +16,14 @@ use crate::executor::{format_pg_error, format_pool_error};
 /// Beyond this, errors are still counted but messages are dropped.
 const MAX_ERROR_MESSAGES: usize = 1000;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct RestoreProgress {
-    pub bytes_read: u64,
-    pub total_bytes: u64,
-    pub statements_executed: u64,
-    pub errors_skipped: u64,
-    pub phase: String,
-    pub elapsed_ms: u64,
-    pub error: Option<String>,
-    pub error_messages: Vec<String>,
-}
-
-pub async fn restore_from_sql<F>(
+pub async fn restore_from_sql(
     pool: &Pool,
     file_path: &str,
     schema: Option<&str>,
     continue_on_error: bool,
-    cancelled: Arc<AtomicBool>,
-    on_progress: F,
-) -> Result<RestoreProgress, SakiError>
-where
-    F: Fn(&RestoreProgress) + Send + Sync,
-{
+    cancelled: &AtomicBool,
+    on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+) -> Result<RestoreProgress, SakiError> {
     info!(file_path, continue_on_error, "starting SQL restore");
 
     let metadata = tokio::fs::metadata(file_path)
@@ -107,7 +91,7 @@ where
             );
             progress.phase = "Cancelled".to_string();
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(&progress);
+            on_progress(progress.clone());
             return Err(SakiError::Cancelled);
         }
 
@@ -161,7 +145,7 @@ where
                             if cancelled.load(Ordering::Relaxed) {
                                 progress.phase = "Cancelled".to_string();
                                 progress.elapsed_ms = start.elapsed().as_millis() as u64;
-                                on_progress(&progress);
+                                on_progress(progress.clone());
                                 return Err(SakiError::Cancelled);
                             }
 
@@ -181,7 +165,7 @@ where
                             // Progress update during COPY
                             if last_progress.elapsed().as_millis() > 100 {
                                 progress.elapsed_ms = start.elapsed().as_millis() as u64;
-                                on_progress(&progress);
+                                on_progress(progress.clone());
                                 last_progress = Instant::now();
                             }
                         }
@@ -246,7 +230,7 @@ where
         // Periodic progress
         if last_progress.elapsed().as_millis() > 100 {
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(&progress);
+            on_progress(progress.clone());
             last_progress = Instant::now();
         }
     }
@@ -258,7 +242,7 @@ where
 
     progress.phase = "Complete".to_string();
     progress.elapsed_ms = start.elapsed().as_millis() as u64;
-    on_progress(&progress);
+    on_progress(progress.clone());
 
     info!(
         statements = progress.statements_executed,
