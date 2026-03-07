@@ -12,58 +12,58 @@
 :root {
   --radius: 0.375rem;
 
-  /* Backgrounds — soft dark surfaces */
-  --background: #141215;
-  --foreground: #f0eced;
+  /* Backgrounds — neutral dark surfaces (Linear-style) */
+  --background: #1a1a1e;
+  --foreground: #f0f0f2;
 
   /* Card — elevated surface */
-  --card: #1a171b;
-  --card-foreground: #f0eced;
+  --card: #1f1f23;
+  --card-foreground: #f0f0f2;
 
   /* Popover — floating surface */
-  --popover: #1d1a1e;
-  --popover-foreground: #f0eced;
+  --popover: #222226;
+  --popover-foreground: #f0f0f2;
 
   /* Primary — SakiDB red */
   --primary: #d93b3b;
   --primary-foreground: #ffffff;
 
   /* Secondary */
-  --secondary: #231f23;
-  --secondary-foreground: #f0eced;
+  --secondary: #27272b;
+  --secondary-foreground: #f0f0f2;
 
   /* Muted */
-  --muted: #231f23;
-  --muted-foreground: #908a8c;
+  --muted: #27272b;
+  --muted-foreground: #9494a0;
 
   /* Accent */
-  --accent: #231f23;
-  --accent-foreground: #f0eced;
+  --accent: #27272b;
+  --accent-foreground: #f0f0f2;
 
   /* Destructive */
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
 
   /* Border / Input / Ring */
-  --border: #2a2528;
-  --input: #332d30;
+  --border: #2e2e33;
+  --input: #35353b;
   --ring: #d93b3b;
 
   /* Sidebar */
-  --sidebar: #120f12;
-  --sidebar-foreground: #f0eced;
+  --sidebar: #171719;
+  --sidebar-foreground: #f0f0f2;
   --sidebar-primary: #d93b3b;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #211d21;
-  --sidebar-accent-foreground: #f0eced;
-  --sidebar-border: #211d21;
+  --sidebar-accent: #222226;
+  --sidebar-accent-foreground: #f0f0f2;
+  --sidebar-border: #222226;
   --sidebar-ring: #d93b3b;
 
   /* SakiDB custom tokens */
   --success: #46a758;
   --warning: #f5a623;
   --info: #52a8ff;
-  --text-dim: #6b6268;
+  --text-dim: #7a7a82;
 }
 
 @theme inline {

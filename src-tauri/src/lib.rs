@@ -65,14 +65,14 @@ pub fn run() {
                     .title_bar_style(TitleBarStyle::Transparent)
                     .build()?;
 
-                // Match title bar color to app background #141215
+                // Match title bar color to app background #1a1a1e
                 unsafe {
                     let ns_window = window.ns_window()? as id;
                     let color = NSColor::colorWithRed_green_blue_alpha_(
                         nil,
-                        20.0 / 255.0,
-                        18.0 / 255.0,
-                        21.0 / 255.0,
+                        26.0 / 255.0,
+                        26.0 / 255.0,
+                        30.0 / 255.0,
                         1.0,
                     );
                     ns_window.setBackgroundColor_(color);

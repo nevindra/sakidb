@@ -25,8 +25,8 @@
 		bind:this={ref}
 		data-slot={dataSlot}
 		class={cn(
-			"selection:bg-primary/30 selection:text-foreground border-border placeholder:text-muted-foreground/60 flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 pt-1.5 text-sm font-medium transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-40",
-			"focus-visible:border-ring/70 focus-visible:bg-input/10",
+			"selection:bg-primary/30 selection:text-foreground border-transparent placeholder:text-muted-foreground/60 flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 pt-1.5 text-sm font-medium transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-40",
+			"hover:bg-accent/10 focus-visible:border-ring/70 focus-visible:bg-input/10",
 			"aria-invalid:border-destructive",
 			className
 		)}
@@ -40,8 +40,8 @@
 		bind:this={ref}
 		data-slot={dataSlot}
 		class={cn(
-			"border-border bg-transparent selection:bg-primary/30 selection:text-foreground placeholder:text-muted-foreground/60 flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-40 md:text-sm",
-			"focus-visible:border-ring/70 focus-visible:bg-input/10",
+			"border-transparent bg-transparent selection:bg-primary/30 selection:text-foreground placeholder:text-muted-foreground/60 flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base transition-colors outline-none disabled:cursor-not-allowed disabled:opacity-40 md:text-sm",
+			"hover:bg-accent/10 focus-visible:border-ring/70 focus-visible:bg-input/10",
 			"aria-invalid:border-destructive",
 			className
 		)}

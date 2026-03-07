@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
   import type { ConnectionInput } from '$lib/types';
+  import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
   import { Eye, EyeOff, CheckCircle, XCircle, Loader2, Database } from '@lucide/svelte';
 
@@ -82,16 +83,15 @@
   <div class="w-full max-w-[420px] px-6">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-8">
-      <Database class="h-4 w-4 text-text-dim/30" />
+      <Database class="h-4 w-4 text-text-dim/50" />
       <h1 class="text-[15px] font-semibold text-foreground">New Connection</h1>
     </div>
 
     <!-- URL input -->
-    <div class="mb-6">
-      <label for="onboarding-url" class="block text-[11px] text-text-dim/50 mb-1.5 select-none">Connection URL</label>
-      <input
+    <div class="mb-5">
+      <label for="onboarding-url" class="block text-[12px] text-muted-foreground mb-1.5 select-none">Connection URL</label>
+      <Input
         id="onboarding-url"
-        type="text"
         bind:value={connectionUrl}
         oninput={() => parseConnectionUrl(connectionUrl)}
         onpaste={(e) => {
@@ -103,87 +103,57 @@
           }
         }}
         placeholder="postgresql://user:pass@host:5432/db"
-        class="w-full h-9 px-0 text-[13px] text-foreground bg-transparent border-none rounded-none placeholder:text-text-dim/30 focus:outline-none font-mono transition-colors duration-100 {urlError ? 'text-destructive' : ''}"
+        class="font-mono {urlError ? 'border-destructive' : ''}"
       />
       {#if urlError}
         <p class="text-[11px] text-destructive/70 mt-1">{urlError}</p>
       {/if}
-      <div class="h-px bg-border/[0.12] mt-1"></div>
     </div>
 
     <!-- Form fields -->
-    <div class="space-y-0.5">
+    <div class="space-y-4">
       <!-- Name -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-name" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Name</label>
-        <input
-          id="onb-name"
-          type="text"
-          bind:value={form.name}
-          placeholder="My Database"
-          class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-        />
+      <div class="flex items-center gap-3">
+        <label for="onb-name" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Name</label>
+        <Input id="onb-name" bind:value={form.name} placeholder="My Database" class="flex-1" />
       </div>
 
       <!-- Host -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-host" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Host</label>
-        <input
-          id="onb-host"
-          type="text"
-          bind:value={form.host}
-          placeholder="localhost"
-          class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-        />
+      <div class="flex items-center gap-3">
+        <label for="onb-host" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Host</label>
+        <Input id="onb-host" bind:value={form.host} placeholder="localhost" class="flex-1" />
       </div>
 
       <!-- Port -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-port" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Port</label>
-        <input
-          id="onb-port"
-          type="number"
-          bind:value={form.port}
-          class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
+      <div class="flex items-center gap-3">
+        <label for="onb-port" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Port</label>
+        <Input id="onb-port" type="number" bind:value={form.port} class="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
       </div>
 
       <!-- Database -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-db" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Database</label>
-        <input
-          id="onb-db"
-          type="text"
-          bind:value={form.database}
-          placeholder="postgres"
-          class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-        />
+      <div class="flex items-center gap-3">
+        <label for="onb-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
+        <Input id="onb-db" bind:value={form.database} placeholder="postgres" class="flex-1" />
       </div>
 
       <!-- User -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-user" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">User</label>
-        <input
-          id="onb-user"
-          type="text"
-          bind:value={form.username}
-          placeholder="postgres"
-          class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-        />
+      <div class="flex items-center gap-3">
+        <label for="onb-user" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">User</label>
+        <Input id="onb-user" bind:value={form.username} placeholder="postgres" class="flex-1" />
       </div>
 
       <!-- Password -->
-      <div class="flex items-center gap-3 py-2.5">
-        <label for="onb-pass" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Password</label>
+      <div class="flex items-center gap-3">
+        <label for="onb-pass" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Password</label>
         <div class="relative flex-1">
-          <input
+          <Input
             id="onb-pass"
             type={showPassword ? 'text' : 'password'}
             bind:value={form.password}
-            class="w-full h-8 px-2 pr-8 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
+            class="pr-8"
           />
           <button
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim/30 hover:text-text-dim/60 transition-colors duration-100"
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors duration-100"
             aria-label="Toggle password visibility"
             onclick={() => showPassword = !showPassword}
           >
@@ -197,11 +167,11 @@
       </div>
 
       <!-- SSL -->
-      <div class="flex items-center gap-3 py-2.5">
-        <span class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">SSL</span>
+      <div class="flex items-center gap-3">
+        <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
         <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-          <Select.Trigger class="flex-1 h-8 px-2 text-[13px] bg-transparent border border-transparent shadow-none hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 transition-all duration-100">
-            <span class="text-foreground">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+          <Select.Trigger class="flex-1 h-9 bg-transparent">
+            <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="prefer" label="Prefer" />
@@ -236,7 +206,7 @@
     <!-- Actions -->
     <div class="flex items-center gap-2 mt-8">
       <button
-        class="h-[30px] px-3 text-[12px] font-medium rounded-md text-text-dim/60 hover:text-foreground hover:bg-accent/10 transition-all duration-100 disabled:opacity-30 disabled:pointer-events-none"
+        class="h-[30px] px-3 text-[12px] font-medium rounded-md text-text-dim/80 hover:text-foreground hover:bg-accent/10 transition-all duration-100 disabled:opacity-30 disabled:pointer-events-none"
         onclick={handleTest}
         disabled={testing || !form.host}
       >
