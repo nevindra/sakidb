@@ -2,6 +2,14 @@
 
 All notable changes to SakiDB will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- ERD view rendering as blank canvas with 0% zoom — root cause was `flex-1` instead of `h-full` on ErdTabView, causing container height to collapse to 0.
+- ERD minimap producing Infinity/NaN SVG attributes when zoom is 0.
+- ERD fitToScreen not guarding against zero viewport dimensions.
+
 ## v1.1.0 (2026-03-06)
 
 ### Added

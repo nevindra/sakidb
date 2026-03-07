@@ -66,7 +66,7 @@
   }
 </script>
 
-<div class="flex flex-col flex-1 overflow-hidden">
+<div class="flex flex-col h-full overflow-hidden">
   {#if tab.isLoading}
     <div class="flex-1 flex items-center justify-center">
       <Loader2 class="h-5 w-5 animate-spin text-muted-foreground" />

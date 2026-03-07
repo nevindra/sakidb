@@ -214,7 +214,7 @@
     const ch = maxY - minY;
     const vw = containerEl.clientWidth;
     const vh = containerEl.clientHeight;
-    if (cw === 0 || ch === 0) return;
+    if (cw === 0 || ch === 0 || vw === 0 || vh === 0) return;
     zoom = Math.min(vw / cw, vh / ch, 1.5) * 0.9;
     panX = (vw - cw * zoom) / 2 - minX * zoom;
     panY = (vh - ch * zoom) / 2 - minY * zoom;
@@ -476,10 +476,10 @@
   <!-- Minimap -->
   <ErdMinimap
     nodes={Object.values(nodePositions)}
-    viewportX={-panX / zoom}
-    viewportY={-panY / zoom}
-    viewportWidth={(containerEl?.clientWidth ?? 800) / zoom}
-    viewportHeight={(containerEl?.clientHeight ?? 600) / zoom}
+    viewportX={-panX / (zoom || 1)}
+    viewportY={-panY / (zoom || 1)}
+    viewportWidth={(containerEl?.clientWidth ?? 800) / (zoom || 1)}
+    viewportHeight={(containerEl?.clientHeight ?? 600) / (zoom || 1)}
     canvasWidth={canvasBounds.maxX - canvasBounds.minX}
     canvasHeight={canvasBounds.maxY - canvasBounds.minY}
     onnavigate={(x, y) => { panX = -x * zoom; panY = -y * zoom; }}
