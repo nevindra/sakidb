@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use tauri::{Emitter, State};
 use tracing::info;
 
-use sakidb_core::types::ConnectionId;
+use sakidb_core::types::{ConnectionId, RestoreOptions, RestoreProgress};
 
 use crate::state::AppState;
 
@@ -27,21 +27,26 @@ pub async fn restore_from_sql(
 
     // Reset cancel flag
     state.restore_cancelled.store(false, Ordering::Relaxed);
-    let cancelled = state.restore_cancelled.clone();
 
-    let app_handle = app.clone();
-    let on_progress = move |progress: &sakidb_postgres::restore::RestoreProgress| {
-        let _ = app_handle.emit("restore-progress", progress);
+    let options = RestoreOptions {
+        schema,
+        continue_on_error,
     };
 
+    let app_handle = app.clone();
+    let on_progress = Box::new(move |progress: RestoreProgress| {
+        let _ = app_handle.emit("restore-progress", &progress);
+    });
+
     state
-        .driver
-        .restore_from_sql(
+        .registry
+        .restorer_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .restore(
             &conn_id,
             &file_path,
-            schema.as_deref(),
-            continue_on_error,
-            cancelled,
+            &options,
+            &state.restore_cancelled,
             on_progress,
         )
         .await
