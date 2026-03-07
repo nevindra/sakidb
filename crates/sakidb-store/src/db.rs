@@ -35,6 +35,7 @@ impl Store {
                 "CREATE TABLE IF NOT EXISTS connections (
                     id          TEXT PRIMARY KEY,
                     name        TEXT NOT NULL,
+                    engine      TEXT NOT NULL DEFAULT 'postgres',
                     host        TEXT NOT NULL,
                     port        INTEGER NOT NULL DEFAULT 5432,
                     database    TEXT NOT NULL,
@@ -83,6 +84,16 @@ impl Store {
                 .map_err(|e| SakiError::StorageError(e.to_string()))?;
         }
 
+        // Migration: add engine column if missing (defaults existing rows to 'postgres')
+        let has_engine: bool = self.conn
+            .prepare("SELECT engine FROM connections LIMIT 0")
+            .is_ok();
+        if !has_engine {
+            self.conn
+                .execute_batch("ALTER TABLE connections ADD COLUMN engine TEXT NOT NULL DEFAULT 'postgres';")
+                .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        }
+
         // Migration: if password column was BLOB (old encrypted format), clear them out.
         // SQLite doesn't support ALTER COLUMN, so we detect old rows by checking type affinity.
         // Old encrypted passwords were stored as BLOB; new ones are TEXT.
@@ -101,15 +112,16 @@ impl Store {
 
         self.conn
             .execute(
-                "INSERT INTO connections (id, name, host, port, database, username, password, ssl_mode, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![id, input.name, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, now],
+                "INSERT INTO connections (id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![id, input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, now],
             )
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         Ok(SavedConnection {
             id,
             name: input.name.clone(),
+            engine: input.engine.clone(),
             host: input.host.clone(),
             port: input.port,
             database: input.database.clone(),
@@ -125,7 +137,7 @@ impl Store {
     pub fn list_connections(&self) -> Result<Vec<SavedConnection>, SakiError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections ORDER BY name")
+            .prepare("SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections ORDER BY name")
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         let rows = stmt
@@ -133,15 +145,16 @@ impl Store {
                 Ok(SavedConnection {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    host: row.get(2)?,
-                    port: row.get::<_, i32>(3)? as u16,
-                    database: row.get(4)?,
-                    username: row.get(5)?,
-                    password: row.get(6)?,
-                    ssl_mode: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
-                    last_connected_at: row.get(10)?,
+                    engine: row.get(2)?,
+                    host: row.get(3)?,
+                    port: row.get::<_, i32>(4)? as u16,
+                    database: row.get(5)?,
+                    username: row.get(6)?,
+                    password: row.get(7)?,
+                    ssl_mode: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                    last_connected_at: row.get(11)?,
                 })
             })
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
@@ -153,21 +166,22 @@ impl Store {
     pub fn get_connection(&self, id: &str) -> Result<SavedConnection, SakiError> {
         self.conn
             .query_row(
-                "SELECT id, name, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections WHERE id = ?1",
+                "SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections WHERE id = ?1",
                 params![id],
                 |row| {
                     Ok(SavedConnection {
                         id: row.get(0)?,
                         name: row.get(1)?,
-                        host: row.get(2)?,
-                        port: row.get::<_, i32>(3)? as u16,
-                        database: row.get(4)?,
-                        username: row.get(5)?,
-                        password: row.get(6)?,
-                        ssl_mode: row.get(7)?,
-                        created_at: row.get(8)?,
-                        updated_at: row.get(9)?,
-                        last_connected_at: row.get(10)?,
+                        engine: row.get(2)?,
+                        host: row.get(3)?,
+                        port: row.get::<_, i32>(4)? as u16,
+                        database: row.get(5)?,
+                        username: row.get(6)?,
+                        password: row.get(7)?,
+                        ssl_mode: row.get(8)?,
+                        created_at: row.get(9)?,
+                        updated_at: row.get(10)?,
+                        last_connected_at: row.get(11)?,
                     })
                 },
             )
@@ -180,13 +194,13 @@ impl Store {
         let affected = if input.password.is_empty() {
             // Don't overwrite stored password when none provided
             self.conn.execute(
-                "UPDATE connections SET name=?1, host=?2, port=?3, database=?4, username=?5, ssl_mode=?6, updated_at=?7 WHERE id=?8",
-                params![input.name, input.host, input.port, input.database, input.username, input.ssl_mode, now, id],
+                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, ssl_mode=?7, updated_at=?8 WHERE id=?9",
+                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.ssl_mode, now, id],
             )
         } else {
             self.conn.execute(
-                "UPDATE connections SET name=?1, host=?2, port=?3, database=?4, username=?5, password=?6, ssl_mode=?7, updated_at=?8 WHERE id=?9",
-                params![input.name, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, id],
+                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, password=?7, ssl_mode=?8, updated_at=?9 WHERE id=?10",
+                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, id],
             )
         }
         .map_err(|e| SakiError::StorageError(e.to_string()))?;
@@ -522,6 +536,7 @@ mod tests {
     fn test_input() -> ConnectionInput {
         ConnectionInput {
             name: "Test DB".into(),
+            engine: "postgres".into(),
             host: "localhost".into(),
             port: 5432,
             database: "testdb".into(),

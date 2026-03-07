@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct SavedConnection {
     pub id: String,
     pub name: String,
+    pub engine: String,
     pub host: String,
     pub port: u16,
     pub database: String,
@@ -21,6 +22,7 @@ pub struct SavedConnection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionInput {
     pub name: String,
+    pub engine: String,
     pub host: String,
     pub port: u16,
     pub database: String,

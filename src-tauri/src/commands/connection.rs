@@ -87,18 +87,7 @@ pub async fn connect_to_database(
 ) -> Result<String, String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
-
-    let config = ConnectionConfig {
-        engine: EngineType::Postgres,
-        host: saved.host,
-        port: saved.port,
-        database: saved.database,
-        username: saved.username,
-        password: saved.password,
-        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
-    };
-
+    let config = saved_to_config(&saved, None);
     drop(store);
 
     let conn_id = state.registry.connect(&config).await.map_err(|e| {
@@ -117,18 +106,7 @@ pub async fn connect_to_database_as(
 ) -> Result<String, String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
-
-    let config = ConnectionConfig {
-        engine: EngineType::Postgres,
-        host: saved.host,
-        port: saved.port,
-        database,
-        username: saved.username,
-        password: saved.password,
-        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
-    };
-
+    let config = saved_to_config(&saved, Some(database));
     drop(store);
 
     let conn_id = state.registry.connect(&config).await.map_err(|e| {
@@ -162,19 +140,8 @@ pub async fn drop_database(
 ) -> Result<(), String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
-
     // Connect to 'postgres' maintenance database to issue DROP
-    let config = ConnectionConfig {
-        engine: EngineType::Postgres,
-        host: saved.host,
-        port: saved.port,
-        database: "postgres".to_string(),
-        username: saved.username,
-        password: saved.password,
-        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
-    };
-
+    let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
     let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
@@ -205,14 +172,29 @@ pub async fn update_last_connected(
 }
 
 fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig {
+    let engine: EngineType = input.engine.parse().unwrap_or(EngineType::Postgres);
     ConnectionConfig {
-        engine: EngineType::Postgres,
+        engine,
         host: input.host.clone(),
         port: input.port,
         database: input.database.clone(),
         username: input.username.clone(),
         password: if password.is_empty() { input.password.clone() } else { password.to_string() },
         ssl_mode: parse_ssl_mode(&input.ssl_mode),
+        options: HashMap::new(),
+    }
+}
+
+fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Option<String>) -> ConnectionConfig {
+    let engine: EngineType = saved.engine.parse().unwrap_or(EngineType::Postgres);
+    ConnectionConfig {
+        engine,
+        host: saved.host.clone(),
+        port: saved.port,
+        database: database.unwrap_or_else(|| saved.database.clone()),
+        username: saved.username.clone(),
+        password: saved.password.clone(),
+        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
         options: HashMap::new(),
     }
 }
@@ -225,19 +207,8 @@ pub async fn create_database(
 ) -> Result<(), String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
-
     // Connect to 'postgres' maintenance database to issue CREATE
-    let config = ConnectionConfig {
-        engine: EngineType::Postgres,
-        host: saved.host,
-        port: saved.port,
-        database: "postgres".to_string(),
-        username: saved.username,
-        password: saved.password,
-        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
-    };
-
+    let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
     let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
@@ -265,19 +236,8 @@ pub async fn rename_database(
 ) -> Result<(), String> {
     let store = state.store.lock().await;
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
-
     // Connect to 'postgres' maintenance database to issue ALTER
-    let config = ConnectionConfig {
-        engine: EngineType::Postgres,
-        host: saved.host,
-        port: saved.port,
-        database: "postgres".to_string(),
-        username: saved.username,
-        password: saved.password,
-        ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
-    };
-
+    let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
     let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;

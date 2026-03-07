@@ -6,6 +6,7 @@ use uuid::Uuid;
 // ── Engine types ──
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum EngineType {
     Postgres,
     Sqlite,
@@ -13,6 +14,35 @@ pub enum EngineType {
     MongoDB,
     DuckDB,
     ClickHouse,
+}
+
+impl std::fmt::Display for EngineType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Postgres => write!(f, "postgres"),
+            Self::Sqlite => write!(f, "sqlite"),
+            Self::Redis => write!(f, "redis"),
+            Self::MongoDB => write!(f, "mongodb"),
+            Self::DuckDB => write!(f, "duckdb"),
+            Self::ClickHouse => write!(f, "clickhouse"),
+        }
+    }
+}
+
+impl std::str::FromStr for EngineType {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "postgres" | "postgresql" => Ok(Self::Postgres),
+            "sqlite" => Ok(Self::Sqlite),
+            "redis" => Ok(Self::Redis),
+            "mongodb" => Ok(Self::MongoDB),
+            "duckdb" => Ok(Self::DuckDB),
+            "clickhouse" => Ok(Self::ClickHouse),
+            _ => Err(format!("unknown engine: {}", s)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,11 +57,15 @@ pub struct EngineCapabilities {
 
     // Feature-level granularity within introspection
     pub schemas: bool,
+    pub tables: bool,
+    pub views: bool,
     pub materialized_views: bool,
     pub functions: bool,
     pub sequences: bool,
+    pub indexes: bool,
     pub triggers: bool,
     pub partitions: bool,
+    pub foreign_tables: bool,
     pub explain: bool,
     pub multi_database: bool,
 }
