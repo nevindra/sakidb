@@ -1,4 +1,5 @@
 mod commands;
+mod registry;
 mod state;
 
 #[cfg(not(target_env = "msvc"))]
@@ -10,11 +11,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use dashmap::DashMap;
-use sakidb_postgres::PostgresDriver;
 use sakidb_store::Store;
 use state::AppState;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+
+use registry::{DriverEntry, DriverRegistry};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,8 +39,29 @@ pub fn run() {
 
     info!("config store opened");
 
+    let mut registry = DriverRegistry::new();
+
+    // Register Postgres driver
+    #[cfg(feature = "postgres")]
+    {
+        use sakidb_postgres::PostgresDriver;
+        let pg = Arc::new(PostgresDriver::new());
+        registry.register(
+            sakidb_core::types::EngineType::Postgres,
+            DriverEntry {
+                driver: pg.clone(),
+                sql: Some(pg.clone()),
+                introspector: Some(pg.clone()),
+                exporter: Some(pg.clone()),
+                restorer: Some(pg.clone()),
+                key_value: None,
+                document: None,
+            },
+        );
+    }
+
     let app_state = AppState {
-        driver: Arc::new(PostgresDriver::new()),
+        registry: Arc::new(registry),
         store: Arc::new(Mutex::new(store)),
         restore_cancelled: Arc::new(AtomicBool::new(false)),
         export_cancel_flags: Arc::new(DashMap::new()),
@@ -91,6 +114,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::connection::available_engines,
             commands::connection::save_connection,
             commands::connection::list_connections,
             commands::connection::delete_connection,

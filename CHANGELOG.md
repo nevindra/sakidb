@@ -4,6 +4,14 @@ All notable changes to SakiDB will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- **Multi-driver architecture** — Split monolithic `DatabaseDriver` trait into composable traits (`Driver`, `SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `KeyValueDriver`, `DocumentDriver`) for future database engine extensibility.
+- Added `DriverRegistry` with connection routing — commands no longer import driver crates directly.
+- All Tauri commands refactored to be engine-agnostic, routing through the registry.
+- `sakidb-postgres` is now an optional dependency behind the `postgres` feature flag (enabled by default).
+- Added `EngineType` enum, `EngineCapabilities` struct, and `available_engines` IPC command.
+
 ### Fixed
 
 - ERD view rendering as blank canvas with 0% zoom — root cause was `flex-1` instead of `h-full` on ErdTabView, causing container height to collapse to 0.

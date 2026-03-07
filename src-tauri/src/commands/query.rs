@@ -5,7 +5,6 @@ use tauri::State;
 use tracing::{debug, info};
 
 use sakidb_core::types::*;
-use sakidb_core::DatabaseDriver;
 
 use crate::state::AppState;
 
@@ -32,7 +31,13 @@ pub async fn execute_query(
     let conn_id = ConnectionId(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
-    let result = state.driver.execute(&conn_id, &sql).await.map_err(|e| e.to_string())?;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute(&conn_id, &sql)
+        .await
+        .map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     let bytes = rmp_serde::to_vec_named(&result).map_err(|e| e.to_string())?;
     debug!(
@@ -54,7 +59,13 @@ pub async fn execute_query_multi(
     let conn_id = ConnectionId(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
-    let result = state.driver.execute_multi(&conn_id, &sql).await.map_err(|e| e.to_string())?;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute_multi(&conn_id, &sql)
+        .await
+        .map_err(|e| e.to_string())?;
     let t0 = Instant::now();
     let bytes = rmp_serde::to_vec_named(&result).map_err(|e| e.to_string())?;
     debug!(
@@ -76,18 +87,15 @@ pub async fn execute_query_multi_columnar(
     let conn_id = ConnectionId(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
-    let pool = state.driver.get_pool(&conn_id).await.map_err(|e| e.to_string())?;
-    let cancel_tokens = state.driver.cancel_tokens();
 
     let start = Instant::now();
-    let result = sakidb_postgres::executor::execute_multi_columnar(
-        &pool,
-        &sql,
-        &conn_id,
-        &cancel_tokens,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute_multi_columnar(&conn_id, &sql)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Encode each result directly into the output buffer.
     // encode_into() consumes each ColumnarResult, freeing column storage
@@ -140,7 +148,9 @@ pub async fn execute_query_paged(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
     let result = state
-        .driver
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
         .execute_paged(&conn_id, &sql, page, page_size)
         .await
         .map_err(|e| e.to_string())?;
@@ -169,7 +179,13 @@ pub async fn execute_batch(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
     let t0 = Instant::now();
-    state.driver.execute_batch(&conn_id, &sql).await.map_err(|e| e.to_string())?;
+    state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute_batch(&conn_id, &sql)
+        .await
+        .map_err(|e| e.to_string())?;
     debug!(elapsed_ms = t0.elapsed().as_millis() as u64, "batch IPC");
     Ok(())
 }
@@ -183,5 +199,11 @@ pub async fn cancel_query(
     let conn_id = ConnectionId(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
-    state.driver.cancel_query(&conn_id).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .cancel_query(&conn_id)
+        .await
+        .map_err(|e| e.to_string())
 }

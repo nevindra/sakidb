@@ -1,11 +1,19 @@
+use std::collections::HashMap;
+
 use tauri::State;
 use tracing::{error, info, warn};
 
-use sakidb_core::types::{ConnectionConfig, ConnectionId, SslMode};
-use sakidb_core::DatabaseDriver;
+use sakidb_core::types::{ConnectionConfig, ConnectionId, EngineType, SslMode};
 use sakidb_store::models::ConnectionInput;
 
 use crate::state::AppState;
+
+#[tauri::command]
+pub async fn available_engines(
+    state: State<'_, AppState>,
+) -> Result<Vec<EngineType>, String> {
+    Ok(state.registry.available_engines())
+}
 
 #[tauri::command]
 pub async fn save_connection(
@@ -63,7 +71,13 @@ pub async fn test_connection(
     };
 
     let config = input_to_config(&input, &stored_password);
-    state.driver.test_connection(&config).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .driver_by_engine(&config.engine)
+        .map_err(|e| e.to_string())?
+        .test_connection(&config)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -75,17 +89,19 @@ pub async fn connect_to_database(
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
 
     let config = ConnectionConfig {
+        engine: EngineType::Postgres,
         host: saved.host,
         port: saved.port,
         database: saved.database,
         username: saved.username,
         password: saved.password,
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
+        options: HashMap::new(),
     };
 
     drop(store);
 
-    let conn_id = state.driver.connect(&config).await.map_err(|e| {
+    let conn_id = state.registry.connect(&config).await.map_err(|e| {
         error!(connection_id = %connection_id, error = %e, "connect failed");
         e.to_string()
     })?;
@@ -103,17 +119,19 @@ pub async fn connect_to_database_as(
     let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
 
     let config = ConnectionConfig {
+        engine: EngineType::Postgres,
         host: saved.host,
         port: saved.port,
         database,
         username: saved.username,
         password: saved.password,
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
+        options: HashMap::new(),
     };
 
     drop(store);
 
-    let conn_id = state.driver.connect(&config).await.map_err(|e| {
+    let conn_id = state.registry.connect(&config).await.map_err(|e| {
         error!(connection_id = %connection_id, database = %config.database, error = %e, "connect_as failed");
         e.to_string()
     })?;
@@ -130,7 +148,7 @@ pub async fn disconnect_from_database(
         uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
     );
 
-    state.driver.disconnect(&conn_id).await.map_err(|e| {
+    state.registry.disconnect(&conn_id).await.map_err(|e| {
         warn!(conn_id = %active_connection_id, error = %e, "disconnect failed");
         e.to_string()
     })
@@ -147,25 +165,32 @@ pub async fn drop_database(
 
     // Connect to 'postgres' maintenance database to issue DROP
     let config = ConnectionConfig {
+        engine: EngineType::Postgres,
         host: saved.host,
         port: saved.port,
         database: "postgres".to_string(),
         username: saved.username,
         password: saved.password,
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
+        options: HashMap::new(),
     };
 
     drop(store);
 
-    let conn_id = state.driver.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
 
     // DROP DATABASE WITH (FORCE) terminates active sessions (PG 13+)
     info!(database = %database, "dropping database");
     let sql = format!("DROP DATABASE \"{}\" WITH (FORCE)", database.replace('"', "\"\""));
-    let result = state.driver.execute(&conn_id, &sql).await;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute(&conn_id, &sql)
+        .await;
 
     // Always disconnect the temp connection
-    let _ = state.driver.disconnect(&conn_id).await;
+    let _ = state.registry.disconnect(&conn_id).await;
 
     result.map(|_| ()).map_err(|e| e.to_string())
 }
@@ -181,12 +206,14 @@ pub async fn update_last_connected(
 
 fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig {
     ConnectionConfig {
+        engine: EngineType::Postgres,
         host: input.host.clone(),
         port: input.port,
         database: input.database.clone(),
         username: input.username.clone(),
         password: if password.is_empty() { input.password.clone() } else { password.to_string() },
         ssl_mode: parse_ssl_mode(&input.ssl_mode),
+        options: HashMap::new(),
     }
 }
 
@@ -201,23 +228,30 @@ pub async fn create_database(
 
     // Connect to 'postgres' maintenance database to issue CREATE
     let config = ConnectionConfig {
+        engine: EngineType::Postgres,
         host: saved.host,
         port: saved.port,
         database: "postgres".to_string(),
         username: saved.username,
         password: saved.password,
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
+        options: HashMap::new(),
     };
 
     drop(store);
 
-    let conn_id = state.driver.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
 
     info!(database = %database, "creating database");
     let sql = format!("CREATE DATABASE \"{}\"", database.replace('"', "\"\""));
-    let result = state.driver.execute(&conn_id, &sql).await;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute(&conn_id, &sql)
+        .await;
 
-    let _ = state.driver.disconnect(&conn_id).await;
+    let _ = state.registry.disconnect(&conn_id).await;
 
     result.map(|_| ()).map_err(|e| e.to_string())
 }
@@ -234,17 +268,19 @@ pub async fn rename_database(
 
     // Connect to 'postgres' maintenance database to issue ALTER
     let config = ConnectionConfig {
+        engine: EngineType::Postgres,
         host: saved.host,
         port: saved.port,
         database: "postgres".to_string(),
         username: saved.username,
         password: saved.password,
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
+        options: HashMap::new(),
     };
 
     drop(store);
 
-    let conn_id = state.driver.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
 
     info!(old_name = %old_name, new_name = %new_name, "renaming database");
     let sql = format!(
@@ -252,9 +288,14 @@ pub async fn rename_database(
         old_name.replace('"', "\"\""),
         new_name.replace('"', "\"\"")
     );
-    let result = state.driver.execute(&conn_id, &sql).await;
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute(&conn_id, &sql)
+        .await;
 
-    let _ = state.driver.disconnect(&conn_id).await;
+    let _ = state.registry.disconnect(&conn_id).await;
 
     result.map(|_| ()).map_err(|e| e.to_string())
 }
