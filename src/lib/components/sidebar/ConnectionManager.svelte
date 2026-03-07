@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { getAppState } from '$lib/stores';
-  import type { ConnectionInput, SavedConnection } from '$lib/types';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import * as Select from '$lib/components/ui/select';
-  import { Plus, Search, Eye, EyeOff, CheckCircle, XCircle, Loader2, Database } from '@lucide/svelte';
+  import { Input } from '$lib/components/ui/input';
+  import { getAppState } from '$lib/stores';
+  import type { ConnectionInput, SavedConnection } from '$lib/types';
+  import { CheckCircle, Database, Eye, EyeOff, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
 
   const app = getAppState();
 
@@ -250,9 +251,9 @@
   <div class="w-64 shrink-0 flex flex-col border-r border-border/[0.06] bg-background">
     <!-- Header -->
     <div class="px-4 pt-3.5 pb-2 flex items-center justify-between">
-      <span class="text-[12px] font-medium text-text-dim/70">Connections</span>
+      <span class="text-[12px] font-medium text-text-dim/90">Connections</span>
       <button
-        class="w-6 h-6 flex items-center justify-center rounded-md text-text-dim/40 hover:text-foreground hover:bg-accent/10 transition-all duration-100"
+        class="w-6 h-6 flex items-center justify-center rounded-md text-text-dim/60 hover:text-foreground hover:bg-accent/10 transition-all duration-100"
         onclick={handleNewConnection}
         aria-label="New connection"
       >
@@ -263,12 +264,12 @@
     <!-- Search -->
     <div class="px-3 pb-2">
       <div class="relative">
-        <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-text-dim/30" />
+        <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-text-dim/50" />
         <input
           type="text"
           bind:value={searchQuery}
           placeholder="Filter..."
-          class="w-full pl-7 pr-3 h-7 text-[12px] bg-transparent border border-transparent rounded-md text-foreground placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/15 focus:border-border/15 focus:outline-none transition-all duration-100"
+          class="w-full pl-7 pr-3 h-7 text-[12px] bg-transparent border border-transparent rounded-md text-foreground placeholder:text-text-dim/40 hover:bg-accent/10 focus:bg-accent/15 focus:border-border/15 focus:outline-none transition-all duration-100"
         />
       </div>
     </div>
@@ -278,7 +279,7 @@
       <!-- Saved section -->
       {#if filteredConnections.length > 0}
         <div class="px-2 pt-1 pb-1.5">
-          <span class="text-[10px] font-medium text-text-dim/40">saved</span>
+          <span class="text-[10px] font-medium text-text-dim/60">Saved Connection</span>
         </div>
 
         {#each filteredConnections as conn (conn.id)}
@@ -289,13 +290,13 @@
                 class="w-full text-left px-2.5 py-[6px] rounded-md flex items-center gap-2.5 transition-all duration-100 group mb-px {isSelected ? 'bg-accent/40' : 'hover:bg-accent/15'}"
                 onclick={() => selectConnection(conn)}
               >
-                <Database class="h-3.5 w-3.5 shrink-0 transition-colors duration-100 {isSelected ? 'text-foreground/70' : 'text-text-dim/30 group-hover:text-text-dim/50'}" />
+                <Database class="h-3.5 w-3.5 shrink-0 transition-colors duration-100 {isSelected ? 'text-foreground/70' : 'text-text-dim/50 group-hover:text-text-dim/70'}" />
 
                 <div class="flex-1 min-w-0">
                   <span class="text-[13px] truncate block transition-colors duration-100 {isSelected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}">{conn.name}</span>
                 </div>
 
-                <span class="text-[10px] text-text-dim/30 shrink-0 font-mono opacity-0 group-hover:opacity-100 transition-opacity duration-100 {isSelected ? '!opacity-100' : ''}">{conn.port}</span>
+                <span class="text-[10px] text-text-dim/50 shrink-0 font-mono opacity-0 group-hover:opacity-100 transition-opacity duration-100 {isSelected ? '!opacity-100' : ''}">{conn.port}</span>
               </button>
             </ContextMenu.Trigger>
             <ContextMenu.Content>
@@ -320,7 +321,7 @@
       <!-- Recent section -->
       {#if filteredRecent.length > 0}
         <div class="px-2 pt-4 pb-1.5">
-          <span class="text-[10px] font-medium text-text-dim/40">recent</span>
+          <span class="text-[10px] font-medium text-text-dim/60">Recent Connections</span>
         </div>
 
         {#each filteredRecent as conn (conn.id + '-recent')}
@@ -329,11 +330,11 @@
             class="w-full text-left px-2.5 py-[6px] rounded-md flex items-center gap-2.5 transition-all duration-100 group mb-px {isSelected ? 'bg-accent/40' : 'hover:bg-accent/15'}"
             onclick={() => selectConnection(conn)}
           >
-            <Database class="h-3.5 w-3.5 shrink-0 transition-colors duration-100 {isSelected ? 'text-foreground/70' : 'text-text-dim/30 group-hover:text-text-dim/50'}" />
+            <Database class="h-3.5 w-3.5 shrink-0 transition-colors duration-100 {isSelected ? 'text-foreground/70' : 'text-text-dim/50 group-hover:text-text-dim/70'}" />
             <div class="flex-1 min-w-0">
               <span class="text-[13px] truncate block transition-colors duration-100 {isSelected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}">{conn.name}</span>
             </div>
-            <span class="text-[10px] text-text-dim/30 shrink-0 tabular-nums">
+            <span class="text-[10px] text-text-dim/50 shrink-0 tabular-nums">
               {formatTime(conn.last_connected_at!)}
             </span>
           </button>
@@ -343,8 +344,8 @@
       <!-- Empty state -->
       {#if app.savedConnections.length === 0}
         <div class="px-3 py-16 text-center">
-          <Database class="h-5 w-5 mx-auto text-text-dim/20 mb-2.5" />
-          <p class="text-[12px] text-text-dim/40">No connections yet</p>
+          <Database class="h-5 w-5 mx-auto text-text-dim/40 mb-2.5" />
+          <p class="text-[12px] text-text-dim/60">No connections yet</p>
         </div>
       {/if}
     </div>
@@ -357,17 +358,16 @@
       <div class="mb-7">
         <h2 class="text-[15px] font-semibold text-foreground">{formTitle}</h2>
         {#if isEditing}
-          <p class="text-[11px] text-text-dim/50 mt-1 font-mono">{form.host}:{form.port}/{form.database}</p>
+          <p class="text-[11px] text-text-dim/70 mt-1 font-mono">{form.host}:{form.port}/{form.database}</p>
         {/if}
       </div>
 
       <!-- URL paste field (new mode only) -->
       {#if isNewMode || (!selectedConnectionId && app.savedConnections.length === 0)}
-        <div class="mb-6">
-          <label for="conn-mgr-url" class="block text-[11px] text-text-dim/50 mb-1.5 select-none">Connection URL</label>
-          <input
+        <div class="mb-5">
+          <label for="conn-mgr-url" class="block text-[12px] text-muted-foreground mb-1.5 select-none">Connection URL</label>
+          <Input
             id="conn-mgr-url"
-            type="text"
             bind:value={connectionUrl}
             oninput={() => parseConnectionUrl(connectionUrl)}
             onpaste={(e) => {
@@ -379,89 +379,59 @@
               }
             }}
             placeholder="postgresql://user:pass@host:5432/db"
-            class="w-full h-9 px-0 text-[13px] text-foreground bg-transparent border-none rounded-none placeholder:text-text-dim/30 focus:outline-none font-mono transition-colors duration-100 {urlError ? 'text-destructive' : ''}"
+            class="font-mono {urlError ? 'border-destructive' : ''}"
           />
           {#if urlError}
             <p class="text-[11px] text-destructive/70 mt-1">{urlError}</p>
           {/if}
-          <div class="h-px bg-border/[0.12] mt-1"></div>
         </div>
       {/if}
 
       <!-- Form fields -->
-      <div class="space-y-0.5">
+      <div class="space-y-4">
         <!-- Name -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-name" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Name</label>
-          <input
-            id="cm-name"
-            type="text"
-            bind:value={form.name}
-            placeholder="My Database"
-            class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-          />
+        <div class="flex items-center gap-3">
+          <label for="cm-name" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Name</label>
+          <Input id="cm-name" bind:value={form.name} placeholder="My Database" class="flex-1" />
         </div>
 
         <!-- Host -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-host" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Host</label>
-          <input
-            id="cm-host"
-            type="text"
-            bind:value={form.host}
-            placeholder="localhost"
-            class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-          />
+        <div class="flex items-center gap-3">
+          <label for="cm-host" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Host</label>
+          <Input id="cm-host" bind:value={form.host} placeholder="localhost" class="flex-1" />
         </div>
 
         <!-- Port -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-port" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Port</label>
-          <input
-            id="cm-port"
-            type="number"
-            bind:value={form.port}
-            class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
+        <div class="flex items-center gap-3">
+          <label for="cm-port" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Port</label>
+          <Input id="cm-port" type="number" bind:value={form.port} class="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
         </div>
 
         <!-- Database -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-db" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Database</label>
-          <input
-            id="cm-db"
-            type="text"
-            bind:value={form.database}
-            placeholder="postgres"
-            class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-          />
+        <div class="flex items-center gap-3">
+          <label for="cm-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
+          <Input id="cm-db" bind:value={form.database} placeholder="postgres" class="flex-1" />
         </div>
 
         <!-- User -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-user" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">User</label>
-          <input
-            id="cm-user"
-            type="text"
-            bind:value={form.username}
-            placeholder="postgres"
-            class="flex-1 h-8 px-2 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
-          />
+        <div class="flex items-center gap-3">
+          <label for="cm-user" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">User</label>
+          <Input id="cm-user" bind:value={form.username} placeholder="postgres" class="flex-1" />
         </div>
 
         <!-- Password -->
-        <div class="flex items-center gap-3 py-2.5">
-          <label for="cm-pass" class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">Password</label>
+        <div class="flex items-center gap-3">
+          <label for="cm-pass" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Password</label>
           <div class="relative flex-1">
-            <input
+            <Input
               id="cm-pass"
               type={showPassword ? 'text' : 'password'}
               bind:value={form.password}
               placeholder={isEditing ? 'Unchanged' : ''}
-              class="w-full h-8 px-2 pr-8 text-[13px] text-foreground bg-transparent border border-transparent rounded-md placeholder:text-text-dim/25 hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 focus:outline-none transition-all duration-100"
+              class="pr-8"
             />
             <button
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim/30 hover:text-text-dim/60 transition-colors duration-100"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors duration-100"
               aria-label="Toggle password visibility"
               onclick={() => showPassword = !showPassword}
             >
@@ -475,11 +445,11 @@
         </div>
 
         <!-- SSL -->
-        <div class="flex items-center gap-3 py-2.5">
-          <span class="w-[80px] shrink-0 text-[12px] text-text-dim/50 select-none">SSL</span>
+        <div class="flex items-center gap-3">
+          <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
           <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-            <Select.Trigger class="flex-1 h-8 px-2 text-[13px] bg-transparent border border-transparent shadow-none hover:bg-accent/10 focus:bg-accent/20 focus:border-border/20 transition-all duration-100">
-              <span class="text-foreground">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+            <Select.Trigger class="flex-1 h-9 bg-transparent">
+              <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="prefer" label="Prefer" />

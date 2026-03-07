@@ -18,6 +18,8 @@
     ssl_mode: 'prefer',
   });
 
+  let connectionUrl = $state('');
+  let urlError = $state<string | null>(null);
   let showPassword = $state(false);
   let testing = $state(false);
   let testResult = $state<'success' | 'fail' | null>(null);
@@ -42,6 +44,8 @@
         password: '',
         ssl_mode: connection.ssl_mode,
       };
+      connectionUrl = '';
+      urlError = null;
       showPassword = false;
       testResult = null;
       confirmDelete = false;
@@ -49,6 +53,33 @@
   });
 
   const canSave = $derived(form.name.trim() && form.host.trim() && form.username.trim());
+
+  function parseConnectionUrl(raw: string) {
+    const s = raw.trim();
+    if (!s) { urlError = null; return; }
+    if (!s.startsWith('postgresql://') && !s.startsWith('postgres://')) {
+      urlError = 'URL must start with postgresql:// or postgres://';
+      return;
+    }
+    try {
+      const url = new URL(s);
+      if (!url.hostname) { urlError = 'Missing host in URL'; return; }
+      urlError = null;
+      form.host = url.hostname;
+      form.port = url.port ? Number(url.port) : 5432;
+      form.database = url.pathname.replace(/^\//, '') || form.database;
+      form.username = decodeURIComponent(url.username) || form.username;
+      form.password = decodeURIComponent(url.password);
+      const sslParam = url.searchParams.get('sslmode');
+      if (sslParam && ['prefer', 'require', 'disable'].includes(sslParam)) {
+        form.ssl_mode = sslParam;
+      }
+      if (!form.name) form.name = `${form.host}/${form.database}`;
+      testResult = null;
+    } catch {
+      urlError = 'Invalid URL format';
+    }
+  }
 
   async function handleTest() {
     testing = true;
@@ -84,56 +115,82 @@
   <Dialog.Content class="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
     <!-- Header -->
     <div class="px-6 pt-5 pb-4">
-      <Dialog.Title class="text-base font-semibold">{connection?.name ?? 'Edit Connection'}</Dialog.Title>
-      <Dialog.Description class="text-xs text-text-dim font-mono mt-0.5">
+      <Dialog.Title class="text-[15px] font-semibold text-foreground">{connection?.name ?? 'Edit Connection'}</Dialog.Title>
+      <Dialog.Description class="text-[11px] text-muted-foreground font-mono mt-0.5">
         {form.host}:{form.port}/{form.database}
       </Dialog.Description>
     </div>
 
     <!-- Form -->
-    <div class="px-6 pb-5 space-y-4">
-      <!-- Name -->
-      <div class="space-y-1.5">
-        <label for="ed-name" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">Name</label>
-        <Input id="ed-name" bind:value={form.name} class="bg-background/50 border-border/50 focus:border-primary/50 transition-colors" />
+    <div class="px-6 pb-5">
+      <!-- URL paste field -->
+      <div class="mb-5">
+        <label for="ed-url" class="block text-[12px] text-muted-foreground mb-1.5 select-none">Connection URL</label>
+        <Input
+          id="ed-url"
+          bind:value={connectionUrl}
+          oninput={() => parseConnectionUrl(connectionUrl)}
+          onpaste={(e) => {
+            const text = e.clipboardData?.getData('text') ?? '';
+            if (text.startsWith('postgresql://') || text.startsWith('postgres://')) {
+              e.preventDefault();
+              connectionUrl = text;
+              parseConnectionUrl(text);
+            }
+          }}
+          placeholder="postgresql://user:pass@host:5432/db"
+          class="font-mono {urlError ? 'border-destructive' : ''}"
+        />
+        {#if urlError}
+          <p class="text-[11px] text-destructive/70 mt-1">{urlError}</p>
+        {/if}
       </div>
 
-      <!-- Host + Port -->
-      <div class="grid grid-cols-4 gap-3">
-        <div class="col-span-3 space-y-1.5">
-          <label for="ed-host" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">Host</label>
-          <Input id="ed-host" bind:value={form.host} class="bg-background/50 border-border/50 focus:border-primary/50 transition-colors" />
+      <!-- Form fields -->
+      <div class="space-y-4">
+        <!-- Name -->
+        <div class="flex items-center gap-3">
+          <label for="ed-name" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Name</label>
+          <Input id="ed-name" bind:value={form.name} placeholder="My Database" class="flex-1" />
         </div>
-        <div class="space-y-1.5">
-          <label for="ed-port" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">Port</label>
-          <Input id="ed-port" type="number" bind:value={form.port} class="bg-background/50 border-border/50 focus:border-primary/50 transition-colors" />
-        </div>
-      </div>
 
-      <!-- Database -->
-      <div class="space-y-1.5">
-        <label for="ed-db" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">Database</label>
-        <Input id="ed-db" bind:value={form.database} class="bg-background/50 border-border/50 focus:border-primary/50 transition-colors" />
-      </div>
-
-      <!-- Username + Password -->
-      <div class="grid grid-cols-2 gap-3">
-        <div class="space-y-1.5">
-          <label for="ed-user" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">User</label>
-          <Input id="ed-user" bind:value={form.username} class="bg-background/50 border-border/50 focus:border-primary/50 transition-colors" />
+        <!-- Host -->
+        <div class="flex items-center gap-3">
+          <label for="ed-host" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Host</label>
+          <Input id="ed-host" bind:value={form.host} placeholder="localhost" class="flex-1" />
         </div>
-        <div class="space-y-1.5">
-          <label for="ed-pass" class="text-[11px] font-medium text-text-dim uppercase tracking-wide">Password</label>
-          <div class="relative">
+
+        <!-- Port -->
+        <div class="flex items-center gap-3">
+          <label for="ed-port" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Port</label>
+          <Input id="ed-port" type="number" bind:value={form.port} class="flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+        </div>
+
+        <!-- Database -->
+        <div class="flex items-center gap-3">
+          <label for="ed-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
+          <Input id="ed-db" bind:value={form.database} placeholder="postgres" class="flex-1" />
+        </div>
+
+        <!-- User -->
+        <div class="flex items-center gap-3">
+          <label for="ed-user" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">User</label>
+          <Input id="ed-user" bind:value={form.username} placeholder="postgres" class="flex-1" />
+        </div>
+
+        <!-- Password -->
+        <div class="flex items-center gap-3">
+          <label for="ed-pass" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Password</label>
+          <div class="relative flex-1">
             <Input
               id="ed-pass"
               type={showPassword ? 'text' : 'password'}
               bind:value={form.password}
               placeholder="Unchanged"
-              class="pr-8 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+              class="pr-8"
             />
             <button
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim hover:text-foreground transition-colors"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors duration-100"
               aria-label="Toggle password visibility"
               onclick={() => showPassword = !showPassword}
             >
@@ -145,32 +202,31 @@
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- SSL Mode -->
-      <div class="space-y-1.5">
-        <span class="text-[11px] font-medium text-text-dim uppercase tracking-wide">SSL Mode</span>
-        <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-          <Select.Trigger class="w-full h-9 bg-background/50 border-border/50 focus:border-primary/50 transition-colors">
-            <span class="text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="prefer" label="Prefer" />
-            <Select.Item value="require" label="Require" />
-            <Select.Item value="disable" label="Disable" />
-          </Select.Content>
-        </Select.Root>
+        <!-- SSL -->
+        <div class="flex items-center gap-3">
+          <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
+          <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
+            <Select.Trigger class="flex-1 h-9 bg-transparent">
+              <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="prefer" label="Prefer" />
+              <Select.Item value="require" label="Require" />
+              <Select.Item value="disable" label="Disable" />
+            </Select.Content>
+          </Select.Root>
+        </div>
       </div>
-
 
       <!-- Test result -->
       {#if testResult === 'success'}
-        <div class="flex items-center gap-2 text-success text-xs">
+        <div class="flex items-center gap-2 text-success text-[12px] mt-5">
           <CheckCircle class="h-3.5 w-3.5" />
           Connection successful
         </div>
       {:else if testResult === 'fail'}
-        <div class="flex items-center gap-2 text-destructive text-xs">
+        <div class="flex items-center gap-2 text-destructive text-[12px] mt-5">
           <XCircle class="h-3.5 w-3.5" />
           Connection failed
         </div>
@@ -180,7 +236,7 @@
     <!-- Footer -->
     <div class="px-6 py-3 border-t border-border/40 bg-card/50 flex items-center gap-2">
       <button
-        class="h-8 px-3 text-xs font-medium rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:border-border transition-all duration-150 disabled:opacity-40"
+        class="h-[30px] px-3 text-[12px] font-medium rounded-md text-text-dim/80 hover:text-foreground hover:bg-accent/10 transition-all duration-100 disabled:opacity-30 disabled:pointer-events-none"
         onclick={handleTest}
         disabled={testing || !form.host}
       >
@@ -191,7 +247,7 @@
       </button>
 
       <button
-        class="h-8 px-3 text-xs font-medium rounded-lg text-destructive/80 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
+        class="h-[30px] px-3 text-[12px] font-medium rounded-md text-destructive/80 hover:text-destructive hover:bg-destructive/10 transition-all duration-100"
         onclick={handleDelete}
       >
         {confirmDelete ? 'Confirm Delete' : 'Delete'}
@@ -200,7 +256,7 @@
       <div class="flex-1"></div>
 
       <button
-        class="h-8 px-4 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 disabled:opacity-40"
+        class="h-[30px] px-5 text-[12px] font-medium rounded-md bg-primary text-primary-foreground hover:brightness-110 active:brightness-95 transition-all duration-100 disabled:opacity-30 disabled:pointer-events-none"
         onclick={handleSave}
         disabled={!canSave || saving}
       >
