@@ -6,16 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SakiDB is a lightweight, fast, low-memory desktop PostgreSQL client. Built with Tauri v2 (Rust backend) + Svelte 5 + TypeScript frontend. The architecture is designed for future database engine extensibility via a trait-based driver system.
 
-## Design Principles
+## Contributing Guidelines
 
-Read [docs/DESIGN_PRINCIPLES.md](docs/DESIGN_PRINCIPLES.md) before making any UI or architectural decisions. Key points:
-
-- **Data is the protagonist** — UI recedes, results command attention
-- **Speed is felt, not measured** — 60fps on hot paths (results table, scroll, editor), tasteful motion elsewhere
-- **Progressive density** — show less by default, reveal on demand
-- **shadcn-svelte is the component foundation** — custom only for domain components (query editor, results grid, schema tree)
-- **Performance is architectural** — MessagePack IPC for queries, crate boundaries enforce separation, thin Tauri command layers
-- **Secrets stay in Rust** — passwords never cross IPC
+You must read [CONTRIBUTING.md](CONTRIBUTING.md) before making any UI or architectural decisions. It covers design principles, non-negotiable rules (performance, shadcn), and frontend/backend guidelines.
 
 ## Commands
 
@@ -53,7 +46,7 @@ crates/sakidb-store/      — Encrypted credential storage (rusqlite + AES-256-G
 src-tauri/                — Tauri app. Wires drivers + store into IPC commands.
 ```
 
-**Extension point:** Adding a new database backend means creating a new crate implementing `DatabaseDriver` from `sakidb-core`. No changes needed to core or frontend.
+**Extension point:** See "The Trait Is the Extension Point" in `CONTRIBUTING.md`.
 
 ### Key Rust types
 
@@ -145,6 +138,10 @@ Stored in `~/.local/share/sakidb/config.db` (SQLite). Only the password field is
 
 ## Conventions
 
+For rules and principles (performance, shadcn, component reusability, backend architecture), see `CONTRIBUTING.md`.
+
+Below are reference-level conventions for working in the codebase:
+
 ### Rust
 - `?` operator for error propagation with `SakiError`
 - Unit tests live in the same file as the code they test (not separate test files)
@@ -153,14 +150,8 @@ Stored in `~/.local/share/sakidb/config.db` (SQLite). Only the password field is
 - `sakidb-postgres` modules: `connection.rs` (pool management), `executor.rs` (query execution), `introspect.rs` (schema introspection), `restore.rs` (SQL restore)
 
 ### TypeScript / Svelte
-- Svelte 5 runes only: `$state()`, `$derived()`, `$effect()`, `$props()`. No legacy stores.
-- Global state uses module-level `$state()` in domain `.svelte.ts` files, composed via `getAppState()` in `stores/index.ts`
 - TypeScript interfaces mirror Rust struct field names exactly (snake_case: `rows_affected`, `ssl_mode`, etc.)
 - `$lib` alias resolves to `src/lib/`
-
-### CSS
-- Tailwind v4 with `@theme` design tokens in `app.css` (Catppuccin Mocha dark palette)
-- Utility-first throughout, no component CSS except Toast animation
 
 ### Naming
 - camelCase in TypeScript/Svelte, snake_case in Rust
