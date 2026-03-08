@@ -24,10 +24,33 @@ pnpm check              # TypeScript/Svelte type checking
 ```bash
 cargo build                              # Build all workspace crates
 cargo build -p sakidb-core               # Build a single crate
-cargo test                               # Run all tests
+cargo test                               # Run all unit tests
 cargo test -p sakidb-store               # Test a single crate
 cargo test -p sakidb-core test_name      # Run a specific test
 cargo clippy                             # Lint
+```
+
+### Testing (feature-gated)
+```bash
+# Integration tests (require real database connections)
+TEST_DATABASE_URL="postgres://user:pass@localhost/test" cargo test -p sakidb-postgres --features integration
+cargo test -p sakidb-sqlite --features integration
+
+# Stress tests (large data volumes, concurrency)
+TEST_DATABASE_URL="postgres://user:pass@localhost/test" cargo test -p sakidb-postgres --features stress
+cargo test -p sakidb-sqlite --features stress
+cargo test -p sakidb-core --features stress
+
+# Benchmarks (criterion)
+cargo bench -p sakidb-core
+cargo bench -p sakidb-sqlite
+TEST_DATABASE_URL="postgres://user:pass@localhost/test" cargo bench -p sakidb-postgres
+```
+
+### Frontend Testing
+```bash
+pnpm test               # Run all frontend tests (vitest)
+pnpm test:watch         # Watch mode
 ```
 
 ### Tauri
@@ -152,11 +175,26 @@ Below are reference-level conventions for working in the codebase:
 
 ### Rust
 - `?` operator for error propagation with `SakiError`
-- Unit tests live in the same file as the code they test (not separate test files)
 - `sakidb-store` uses `Store::open_in_memory()` for tests
 - Commands acquire `state.store.lock().await` and operate on the store directly
 - `sakidb-postgres` modules: `connection.rs` (pool management), `executor.rs` (query execution), `introspect.rs` (schema introspection), `restore.rs` (SQL restore)
 - Commands use `state.registry.sql_for()`, `state.registry.introspector_for()`, etc. to get trait objects — engine-agnostic by default
+
+### Testing
+
+**Rust test file layout:**
+- Unit tests live in sibling `_test.rs` files (e.g., `executor.rs` → `executor_test.rs`), declared in `lib.rs` with `#[cfg(test)] mod executor_test;`
+- Test only public and `pub(crate)` APIs — do not test private functions
+- Tauri command tests live in `src-tauri/src/commands/*_test.rs`, using `mock_helpers::create_test_state()` which provides an `AppState` with empty `DriverRegistry` + temp-file `Store`
+- Integration tests live in `crates/*/tests/integration.rs`, gated by `#![cfg(feature = "integration")]`
+- Stress tests live in `crates/*/tests/stress.rs`, gated by `#![cfg(feature = "stress")]`
+- Benchmarks use criterion in `crates/*/benches/`
+
+**Frontend test layout:**
+- Store tests live in `src/lib/stores/__tests__/*.test.ts`
+- Vitest config: `vitest.config.ts` with jsdom environment and `$lib`/`$app` aliases
+- Tauri IPC is mocked via `vi.mock('@tauri-apps/api/core')` in `src/lib/stores/__tests__/setup.ts`
+- Use `vi.resetModules()` + dynamic `import()` per test for fresh Svelte 5 rune state
 
 ### TypeScript / Svelte
 - TypeScript interfaces mirror Rust struct field names exactly (snake_case: `rows_affected`, `ssl_mode`, etc.)

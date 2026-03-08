@@ -38,6 +38,15 @@ These rules are absolute. PRs that violate them will be rejected.
 - Custom-built components are allowed ONLY for domain-specific things: query editor (CodeMirror 6), results grid (virtual-scrolled), schema tree, ERD canvas.
 - **The test:** If a component exists in a generic design system, use shadcn. If it only makes sense inside a database client, build it.
 
+### Testing
+
+- Every new Rust module MUST have a corresponding `_test.rs` file with tests covering its public API. No exceptions.
+- Every new Tauri command MUST have tests in the corresponding `commands/*_test.rs` file.
+- Every new frontend store function MUST have tests in `src/lib/stores/__tests__/`.
+- DO NOT merge code that reduces test coverage. If you add a function, add a test. If you change behavior, update the test.
+- Integration and stress tests are feature-gated — they don't run in CI by default but MUST pass before release.
+- `cargo test` and `pnpm test` MUST pass before any PR is merged. CI enforces this.
+
 ---
 
 ## Frontend Guidelines
@@ -91,6 +100,25 @@ Tauri commands are glue: validate input, call the driver or store, serialize the
 ### Concurrency
 
 The store mutex is a gate — acquire, read/write, drop before any `await`. The driver manages its own concurrency through `Arc<RwLock>` for connection pools. If you can't explain the locking strategy in one sentence, simplify it.
+
+### Backend Testing Conventions
+
+- Unit tests go in `_test.rs` sibling files (e.g., `executor.rs` → `executor_test.rs`), declared with `#[cfg(test)] mod executor_test;` in `lib.rs`. DO NOT put tests inline in source files.
+- Test only `pub` and `pub(crate)` APIs. If something is private, test it through its public interface.
+- Tauri command tests use `mock_helpers::create_test_state()` which provides an `AppState` with an empty `DriverRegistry` and a temp-file `Store`. Test store operations directly — do not attempt to wrap in Tauri's `State<'_>`.
+- Integration tests requiring real databases go in `crates/*/tests/integration.rs` behind `#![cfg(feature = "integration")]`. Use `TEST_DATABASE_URL` env var for Postgres.
+- Stress tests go in `crates/*/tests/stress.rs` behind `#![cfg(feature = "stress")]`.
+- Benchmarks use criterion in `crates/*/benches/`. Postgres benchmarks skip gracefully when `TEST_DATABASE_URL` is not set.
+
+---
+
+## Frontend Testing Guidelines
+
+- Store tests live in `src/lib/stores/__tests__/*.test.ts`.
+- Tauri IPC calls are mocked globally in `src/lib/stores/__tests__/setup.ts` via `vi.mock('@tauri-apps/api/core')`. Add new mock responses there when adding new commands.
+- Use `makeConnectResult()` and `makeCapabilities()` factories from `setup.ts` for connection test data — never hardcode mock shapes inline.
+- Each test must get fresh store state: use `vi.resetModules()` + dynamic `import()` to avoid Svelte 5 rune state leaking between tests.
+- Test behavior, not implementation. Assert on what the user sees (state values, IPC calls made), not on internal store structure.
 
 ---
 

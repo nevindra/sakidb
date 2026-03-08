@@ -15,6 +15,8 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Changed
 
+- **Comprehensive test coverage** — 260+ unit tests across all crates and frontend, feature-gated integration tests (postgres, sqlite), stress tests (1M rows, concurrency, cancellation), criterion benchmarks, and CI workflow with benchmark regression detection.
+- **Testing conventions** — Documented in CLAUDE.md and CONTRIBUTING.md: `_test.rs` file convention, mock helpers, frontend store test patterns, and non-negotiable test requirements for all new code.
 - **Test structure** — Migrated all 62 inline `#[cfg(test)]` blocks to dedicated `_test.rs` files across all crates. Tests now live side-by-side with implementation files but in separate modules, keeping source files clean.
 - **Multi-driver architecture** — Split monolithic `DatabaseDriver` trait into composable traits (`Driver`, `SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `KeyValueDriver`, `DocumentDriver`) for future database engine extensibility.
 - Added `DriverRegistry` with connection routing — commands no longer import driver crates directly.
