@@ -44,3 +44,6 @@ tikv-jemallocator = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
+
+[dev-dependencies]
+tempfile = "3"
