@@ -3,6 +3,9 @@ pub mod executor;
 pub mod introspect;
 pub mod restore;
 
+#[cfg(test)]
+mod executor_test;
+
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 

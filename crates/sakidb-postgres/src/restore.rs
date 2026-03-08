@@ -300,7 +300,7 @@ async fn flush_batch(
 
 /// Check if a SQL statement is a COPY ... FROM STDIN command.
 /// Uses zero-allocation ASCII case-insensitive sliding window.
-fn is_copy_from_stdin(stmt: &str) -> bool {
+pub(crate) fn is_copy_from_stdin(stmt: &str) -> bool {
     let bytes = stmt.as_bytes();
     if bytes.len() < 5 {
         return false;
@@ -317,16 +317,16 @@ fn is_copy_from_stdin(stmt: &str) -> bool {
 
 // ── SQL Statement Parser ──
 
-struct SqlParser {
-    buf: String,
-    in_single_quote: bool,
-    in_double_quote: bool,
-    dollar_quote_tag: Option<String>,
-    block_comment_depth: i32,
+pub(crate) struct SqlParser {
+    pub(crate) buf: String,
+    pub(crate) in_single_quote: bool,
+    pub(crate) in_double_quote: bool,
+    pub(crate) dollar_quote_tag: Option<String>,
+    pub(crate) block_comment_depth: i32,
 }
 
 impl SqlParser {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             buf: String::new(),
             in_single_quote: false,
@@ -341,7 +341,7 @@ impl SqlParser {
     /// Uses byte-level scanning instead of `Vec<char>` to avoid a heap
     /// allocation on every line. All SQL syntax delimiters are ASCII, and
     /// UTF-8 guarantees no continuation byte matches an ASCII byte.
-    fn feed_line(&mut self, line: &str) -> Vec<String> {
+    pub(crate) fn feed_line(&mut self, line: &str) -> Vec<String> {
         let mut stmts = Vec::new();
 
         // Skip psql meta-commands (lines starting with \) when not inside
@@ -544,7 +544,7 @@ impl SqlParser {
 /// Returns (tag, total_marker_byte_length) where marker is `$tag$`.
 /// Works directly on byte slices — zero allocation for the scan;
 /// only allocates a `String` for the tag if one is found.
-fn extract_dollar_tag_from_bytes(bytes: &[u8]) -> Option<(String, usize)> {
+pub(crate) fn extract_dollar_tag_from_bytes(bytes: &[u8]) -> Option<(String, usize)> {
     if bytes.is_empty() || bytes[0] != b'$' {
         return None;
     }
@@ -569,157 +569,3 @@ fn extract_dollar_tag_from_bytes(bytes: &[u8]) -> Option<(String, usize)> {
     }
 }
 
-/// Extract a dollar-quote tag from a string starting with `$`.
-/// Returns (tag, total_marker_length) where marker is `$tag$`.
-#[cfg(test)]
-fn extract_dollar_tag(s: &str) -> Option<(String, usize)> {
-    extract_dollar_tag_from_bytes(s.as_bytes())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_simple_statements() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT 1; SELECT 2;");
-        assert_eq!(stmts, vec!["SELECT 1;", "SELECT 2;"]);
-    }
-
-    #[test]
-    fn test_multiline_statement() {
-        let mut parser = SqlParser::new();
-        assert!(parser.feed_line("SELECT").is_empty());
-        let stmts = parser.feed_line("  1;");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("SELECT"));
-        assert!(stmts[0].contains("1;"));
-    }
-
-    #[test]
-    fn test_single_quote_string() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT 'hello; world';");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("hello; world"));
-    }
-
-    #[test]
-    fn test_escaped_quote() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT 'it''s';");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("it''s"));
-    }
-
-    #[test]
-    fn test_dollar_quote() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT $$ hello; world $$;");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("hello; world"));
-    }
-
-    #[test]
-    fn test_dollar_quote_with_tag() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT $fn$ hello; world $fn$;");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("hello; world"));
-    }
-
-    #[test]
-    fn test_line_comment() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("-- this is a comment");
-        assert!(stmts.is_empty());
-    }
-
-    #[test]
-    fn test_inline_comment() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT 1; -- comment");
-        assert_eq!(stmts.len(), 1);
-        assert_eq!(stmts[0], "SELECT 1;");
-    }
-
-    #[test]
-    fn test_block_comment() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT /* skip ; this */ 1;");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("1;"));
-        assert!(!stmts[0].contains("skip"));
-    }
-
-    #[test]
-    fn test_multiline_block_comment() {
-        let mut parser = SqlParser::new();
-        assert!(parser.feed_line("/* start").is_empty());
-        assert!(parser.feed_line("middle").is_empty());
-        let stmts = parser.feed_line("end */ SELECT 1;");
-        assert_eq!(stmts.len(), 1);
-    }
-
-    #[test]
-    fn test_psql_meta_command_skipped() {
-        let mut parser = SqlParser::new();
-        // psql meta-commands like \restrict should be skipped
-        assert!(parser
-            .feed_line("\\restrict NvLVw192Nr3zeflW9aQYuZ2Y")
-            .is_empty());
-        // Next statement should parse normally
-        let stmts = parser.feed_line("SET statement_timeout = 0;");
-        assert_eq!(stmts.len(), 1);
-        assert_eq!(stmts[0], "SET statement_timeout = 0;");
-    }
-
-    #[test]
-    fn test_backslash_inside_string_not_skipped() {
-        let mut parser = SqlParser::new();
-        // Backslash inside a multi-line string should NOT skip the line
-        parser.in_single_quote = true;
-        let stmts = parser.feed_line("\\some data');");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("\\some data"));
-    }
-
-    #[test]
-    fn test_double_quoted_identifier_with_semicolon() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("CREATE TABLE \"my;table\" (id int);");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("\"my;table\""));
-    }
-
-    #[test]
-    fn test_double_quoted_escaped_quote() {
-        let mut parser = SqlParser::new();
-        let stmts = parser.feed_line("SELECT \"col\"\"name\" FROM t;");
-        assert_eq!(stmts.len(), 1);
-        assert!(stmts[0].contains("\"col\"\"name\""));
-    }
-
-    #[test]
-    fn test_copy_detection() {
-        assert!(is_copy_from_stdin(
-            "COPY public.users (id, name) FROM stdin;"
-        ));
-        assert!(is_copy_from_stdin("COPY users FROM STDIN;"));
-        assert!(!is_copy_from_stdin("COPY users TO stdout;"));
-        assert!(!is_copy_from_stdin("SELECT 1;"));
-    }
-
-    #[test]
-    fn test_dollar_tag_extraction() {
-        assert_eq!(extract_dollar_tag("$$"), Some(("".to_string(), 2)));
-        assert_eq!(extract_dollar_tag("$fn$"), Some(("fn".to_string(), 4)));
-        assert_eq!(
-            extract_dollar_tag("$body$"),
-            Some(("body".to_string(), 6))
-        );
-        assert_eq!(extract_dollar_tag("$123"), None); // tag can't start with digit
-        assert_eq!(extract_dollar_tag("abc"), None);
-    }
-}

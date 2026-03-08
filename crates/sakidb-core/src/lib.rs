@@ -3,6 +3,13 @@ pub mod error;
 pub mod sql;
 pub mod types;
 
+#[cfg(test)]
+mod error_test;
+#[cfg(test)]
+mod sql_test;
+#[cfg(test)]
+mod types_test;
+
 pub use driver::{
     DocumentDriver, Driver, Exporter, Introspector, KeyValueDriver, Restorer, SqlDriver,
     rows_to_columnar,

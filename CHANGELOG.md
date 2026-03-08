@@ -15,6 +15,7 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Changed
 
+- **Test structure** — Migrated all 62 inline `#[cfg(test)]` blocks to dedicated `_test.rs` files across all crates. Tests now live side-by-side with implementation files but in separate modules, keeping source files clean.
 - **Multi-driver architecture** — Split monolithic `DatabaseDriver` trait into composable traits (`Driver`, `SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `KeyValueDriver`, `DocumentDriver`) for future database engine extensibility.
 - Added `DriverRegistry` with connection routing — commands no longer import driver crates directly.
 - All Tauri commands refactored to be engine-agnostic, routing through the registry.

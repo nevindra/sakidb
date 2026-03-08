@@ -36,7 +36,7 @@ Saki is different.
 
 **Data-first interface.** No flashy dashboards. No distracting chrome. The UI steps aside so your query results take center stage — virtual-scrolled, resizable, editable, filterable.
 
-**Multi-engine architecture.** PostgreSQL today, with SQLite, Redis, MongoDB, DuckDB, and ClickHouse on the roadmap. The UI adapts automatically — tree depth, context menus, toolbar controls, and structure tabs all adjust based on what your engine supports.
+**Multi-engine architecture.** PostgreSQL and SQLite today, with Redis, MongoDB, DuckDB, and ClickHouse on the roadmap. The UI adapts automatically — tree depth, context menus, toolbar controls, and structure tabs all adjust based on what your engine supports.
 
 **Everything you need, nothing you don't.** Query editor with autocomplete, data grid with inline editing, schema explorer, ERD viewer, export/import — all in one app that opens faster than your browser tab.
 
@@ -108,7 +108,7 @@ Everything Saki can do, at a glance.
 | Feature | Description |
 |---------|-------------|
 | Connection manager | Save, edit, and test connections securely |
-| Multi-engine | PostgreSQL now; SQLite, Redis, MongoDB, DuckDB, ClickHouse planned |
+| Multi-engine | PostgreSQL and SQLite now; Redis, MongoDB, DuckDB, ClickHouse planned |
 | Capability-aware UI | Tree, menus, toolbar, and tabs adapt to each engine's features |
 | SSL/TLS support | Connect to databases with SSL encryption |
 | Database management | Create, drop, and rename databases without leaving the app |

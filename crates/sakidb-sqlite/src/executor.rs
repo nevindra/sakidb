@@ -26,7 +26,7 @@ fn extract_column_defs(stmt: &Statement<'_>) -> Vec<ColumnDef> {
 }
 
 /// Map a SQLite ValueRef to a CellValue using the actual storage class per cell.
-fn sqlite_value_to_cell(value: ValueRef<'_>) -> CellValue {
+pub(crate) fn sqlite_value_to_cell(value: ValueRef<'_>) -> CellValue {
     match value {
         ValueRef::Null => CellValue::Null,
         ValueRef::Integer(i) => CellValue::Int(i),
@@ -446,44 +446,3 @@ pub fn execute_export(
     Ok(total_rows)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_split_simple() {
-        let stmts = split_sql_statements("SELECT 1; SELECT 2;");
-        assert_eq!(stmts, vec!["SELECT 1", "SELECT 2"]);
-    }
-
-    #[test]
-    fn test_split_string_literal() {
-        let stmts = split_sql_statements("SELECT 'hello;world'; SELECT 2");
-        assert_eq!(stmts, vec!["SELECT 'hello;world'", "SELECT 2"]);
-    }
-
-    #[test]
-    fn test_split_line_comment() {
-        let stmts = split_sql_statements("SELECT 1; -- comment;\nSELECT 2");
-        assert_eq!(stmts, vec!["SELECT 1", "-- comment;\nSELECT 2"]);
-    }
-
-    #[test]
-    fn test_split_block_comment() {
-        let stmts = split_sql_statements("SELECT /* ; */ 1; SELECT 2");
-        assert_eq!(stmts, vec!["SELECT /* ; */ 1", "SELECT 2"]);
-    }
-
-    #[test]
-    fn test_split_empty() {
-        let stmts = split_sql_statements("   ;  ;  ");
-        assert!(stmts.is_empty());
-    }
-
-    #[test]
-    fn test_sqlite_value_to_cell() {
-        assert!(matches!(sqlite_value_to_cell(ValueRef::Null), CellValue::Null));
-        assert!(matches!(sqlite_value_to_cell(ValueRef::Integer(42)), CellValue::Int(42)));
-        assert!(matches!(sqlite_value_to_cell(ValueRef::Real(3.14)), CellValue::Float(f) if (f - 3.14).abs() < f64::EPSILON));
-    }
-}
