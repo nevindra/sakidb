@@ -84,7 +84,7 @@ pub fn list_views(conn: &Connection) -> Result<Vec<ViewInfo>, SakiError> {
 }
 
 pub fn list_indexes(conn: &Connection, table: &str) -> Result<Vec<IndexInfo>, SakiError> {
-    debug!(table, "listing indexes");
+    debug!(table, "listing indexes for table");
 
     let mut stmt = conn
         .prepare(&format!(
@@ -108,20 +108,7 @@ pub fn list_indexes(conn: &Connection, table: &str) -> Result<Vec<IndexInfo>, Sa
     let mut indexes = Vec::with_capacity(index_list.len());
 
     for (name, is_unique, origin) in index_list {
-        // Get columns for this index
-        let mut info_stmt = conn
-            .prepare(&format!(
-                "PRAGMA index_info(\"{}\")",
-                name.replace('"', "\"\"")
-            ))
-            .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
-
-        let cols: Vec<String> = info_stmt
-            .query_map([], |row| row.get::<_, String>(2))
-            .map_err(|e| SakiError::QueryFailed(e.to_string()))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
-
+        let cols = get_index_columns(conn, &name)?;
         indexes.push(IndexInfo {
             name: name.clone(),
             table_name: table.to_string(),
@@ -133,6 +120,56 @@ pub fn list_indexes(conn: &Connection, table: &str) -> Result<Vec<IndexInfo>, Sa
     }
 
     Ok(indexes)
+}
+
+/// Get all indexes across all tables in a single pass.
+/// Uses one sqlite_master query instead of N PRAGMA index_list calls.
+pub fn list_all_indexes(conn: &Connection) -> Result<Vec<IndexInfo>, SakiError> {
+    debug!("listing all indexes");
+
+    // Single query: get all user-created indexes and autoindexes from sqlite_master.
+    // Autoindexes (for UNIQUE/PK constraints) have names like "sqlite_autoindex_*".
+    // We also query PRAGMA index_list per table to get origin (pk vs unique vs manual).
+    // But instead of list_tables + index_list per table, we get all table names from
+    // sqlite_master in one query and iterate.
+    let mut tbl_stmt = conn
+        .prepare(
+            "SELECT DISTINCT tbl_name FROM sqlite_master
+             WHERE type = 'index' AND tbl_name NOT LIKE 'sqlite_%'
+             ORDER BY tbl_name",
+        )
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
+
+    let table_names: Vec<String> = tbl_stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
+
+    let mut all_indexes = Vec::new();
+    for table in &table_names {
+        all_indexes.extend(list_indexes(conn, table)?);
+    }
+
+    debug!(count = all_indexes.len(), "listed all indexes");
+    Ok(all_indexes)
+}
+
+/// Get column names for an index via PRAGMA index_info.
+fn get_index_columns(conn: &Connection, index_name: &str) -> Result<Vec<String>, SakiError> {
+    let mut info_stmt = conn
+        .prepare(&format!(
+            "PRAGMA index_info(\"{}\")",
+            index_name.replace('"', "\"\"")
+        ))
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
+
+    let cols = info_stmt
+        .query_map([], |row| row.get::<_, String>(2))
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
+    Ok(cols)
 }
 
 pub fn list_triggers(conn: &Connection, table: &str) -> Result<Vec<TriggerInfo>, SakiError> {

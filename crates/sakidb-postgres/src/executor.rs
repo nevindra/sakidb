@@ -11,6 +11,7 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::CancelToken;
 use tracing::{debug, info};
 
+use sakidb_core::sql::{SqlSplitOptions, split_sql_statements_with};
 use sakidb_core::types::*;
 use sakidb_core::SakiError;
 
@@ -716,155 +717,11 @@ fn pg_value_to_cell(row: &tokio_postgres::Row, index: usize, pg_type: &Type) -> 
 
 /// Split SQL text into individual statements on `;` boundaries, respecting
 /// string literals (`'...'`), dollar-quoted strings (`$$...$$` / `$tag$...$tag$`),
-/// line comments (`--`), and nested block comments (`/* ... */`).
-///
-/// Zero-allocation scanning: works on raw `&[u8]` byte slices and copies content
-/// via `&sql[start..end]` str slices. All SQL syntax delimiters are ASCII, and
-/// UTF-8 guarantees no multi-byte continuation byte matches an ASCII character,
-/// so byte-level scanning is safe for any valid UTF-8 SQL string.
-pub fn split_sql_statements(sql: &str) -> Vec<String> {
-    let mut statements = Vec::new();
-    let mut current = String::new();
-    let bytes = sql.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
-    // Track start of a run of "plain" characters to batch-copy via &sql[..] slices
-    let mut run_start = 0;
-    let mut in_run = false;
-
-    // Flush any accumulated plain-text run into `current`
-    macro_rules! flush_run {
-        () => {
-            if in_run {
-                current.push_str(&sql[run_start..i]);
-                #[allow(unused_assignments)]
-                { in_run = false; }
-            }
-        };
-    }
-
-    while i < len {
-        let ch = bytes[i];
-
-        // Line comment
-        if ch == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
-            flush_run!();
-            let start = i;
-            i += 2;
-            while i < len && bytes[i] != b'\n' {
-                i += 1;
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Block comment
-        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-            flush_run!();
-            let start = i;
-            i += 2;
-            let mut depth = 1u32;
-            while i < len && depth > 0 {
-                if bytes[i] == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-                    depth += 1;
-                    i += 2;
-                } else if bytes[i] == b'*' && i + 1 < len && bytes[i + 1] == b'/' {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Single-quoted string
-        if ch == b'\'' {
-            flush_run!();
-            let start = i;
-            i += 1;
-            while i < len {
-                if bytes[i] == b'\'' {
-                    i += 1;
-                    if i < len && bytes[i] == b'\'' {
-                        i += 1; // escaped ''
-                    } else {
-                        break;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Dollar-quoted string — zero-allocation tag matching via byte slices
-        if ch == b'$' {
-            flush_run!();
-            let start = i;
-            i += 1;
-            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-                i += 1;
-            }
-            if i < len && bytes[i] == b'$' {
-                // tag_bytes includes both $ delimiters: $tag$
-                let tag_end = i + 1;
-                let tag_len = tag_end - start;
-                i = tag_end;
-                // Find closing tag by comparing byte slices directly — no allocation
-                loop {
-                    if i >= len {
-                        break;
-                    }
-                    if bytes[i] == b'$'
-                        && i + tag_len <= len
-                        && bytes[i..i + tag_len] == bytes[start..tag_end]
-                    {
-                        i += tag_len;
-                        break;
-                    }
-                    i += 1;
-                }
-                current.push_str(&sql[start..i]);
-            } else {
-                // Not a dollar-quote, just a dollar sign (or $identifier without closing $)
-                current.push_str(&sql[start..i]);
-            }
-            continue;
-        }
-
-        // Semicolon — statement boundary
-        if ch == b';' {
-            flush_run!();
-            let trimmed = current.trim();
-            if !trimmed.is_empty() {
-                statements.push(trimmed.to_string());
-            }
-            current.clear();
-            i += 1;
-            continue;
-        }
-
-        // Regular character — accumulate in a run for batch copy
-        if !in_run {
-            run_start = i;
-            in_run = true;
-        }
-        i += 1;
-    }
-
-    // Flush final run
-    flush_run!();
-
-    // Last statement (no trailing semicolon)
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        statements.push(trimmed.to_string());
-    }
-
-    statements
+/// PostgreSQL-aware SQL statement splitter. Delegates to the shared
+/// implementation in `sakidb_core::sql` with dollar-quoting enabled.
+pub fn split_sql_statements(sql: &str) -> Vec<&str> {
+    static PG_OPTS: SqlSplitOptions = SqlSplitOptions { dollar_quoting: true };
+    split_sql_statements_with(sql, &PG_OPTS)
 }
 
 pub async fn execute_multi(

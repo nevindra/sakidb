@@ -6,7 +6,26 @@ use rusqlite::{Connection, InterruptHandle, OpenFlags};
 use tracing::{debug, info, warn};
 
 use sakidb_core::types::ConnectionId;
-use sakidb_core::SakiError;
+use sakidb_core::{Result, SakiError};
+
+/// Detect whether a file path is read-only and return appropriate OpenFlags.
+fn open_flags_for(file_path: &str) -> (OpenFlags, bool) {
+    let path = Path::new(file_path);
+    let read_only = path.exists()
+        && std::fs::metadata(path)
+            .map(|m| m.permissions().readonly())
+            .unwrap_or(false);
+
+    let flags = if read_only {
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX
+    } else {
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+    };
+
+    (flags, read_only)
+}
 
 pub struct ConnectionManager {
     connections: DashMap<ConnectionId, Arc<Mutex<Connection>>>,
@@ -21,32 +40,13 @@ impl ConnectionManager {
         }
     }
 
-    pub fn connect(&self, file_path: &str) -> Result<ConnectionId, SakiError> {
-        let path = Path::new(file_path);
-
-        // Detect read-only: file doesn't exist (will fail), or no write permission
-        let read_only = path.exists() && {
-            std::fs::metadata(path)
-                .map(|m| m.permissions().readonly())
-                .unwrap_or(false)
-        };
+    pub fn connect(&self, file_path: &str) -> Result<ConnectionId> {
+        let (flags, read_only) = open_flags_for(file_path);
 
         info!(path = %file_path, read_only, "connecting to SQLite database");
 
-        let conn = if read_only {
-            Connection::open_with_flags(
-                file_path,
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )
-        } else {
-            Connection::open_with_flags(
-                file_path,
-                OpenFlags::SQLITE_OPEN_READ_WRITE
-                    | OpenFlags::SQLITE_OPEN_CREATE
-                    | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )
-        }
-        .map_err(|e| SakiError::ConnectionFailed(e.to_string()))?;
+        let conn = Connection::open_with_flags(file_path, flags)
+            .map_err(|e| SakiError::ConnectionFailed(e.to_string()))?;
 
         // Apply performance pragmas
         if read_only {
@@ -80,7 +80,7 @@ impl ConnectionManager {
         Ok(id)
     }
 
-    pub fn disconnect(&self, conn_id: &ConnectionId) -> Result<(), SakiError> {
+    pub fn disconnect(&self, conn_id: &ConnectionId) -> Result<()> {
         self.interrupt_handles.remove(conn_id);
         if self.connections.remove(conn_id).is_some() {
             info!(conn_id = %conn_id.0, "disconnected from SQLite");
@@ -91,14 +91,32 @@ impl ConnectionManager {
         }
     }
 
-    pub fn get_conn(&self, conn_id: &ConnectionId) -> Result<Arc<Mutex<Connection>>, SakiError> {
+    /// Run a blocking closure on the connection inside `spawn_blocking`,
+    /// handling the mutex lock and join-error mapping.
+    pub async fn with_conn<F, T>(&self, conn_id: &ConnectionId, f: F) -> Result<T>
+    where
+        F: FnOnce(&Connection) -> Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let conn = self.get_conn(conn_id)?;
+        tokio::task::spawn_blocking(move || {
+            let conn = conn
+                .lock()
+                .map_err(|e| SakiError::QueryFailed(format!("lock poisoned: {e}")))?;
+            f(&conn)
+        })
+        .await
+        .map_err(|e| SakiError::QueryFailed(format!("task failed: {e}")))?
+    }
+
+    pub fn get_conn(&self, conn_id: &ConnectionId) -> Result<Arc<Mutex<Connection>>> {
         self.connections
             .get(conn_id)
             .map(|c| c.value().clone())
             .ok_or_else(|| SakiError::ConnectionNotFound(conn_id.0.to_string()))
     }
 
-    pub fn interrupt(&self, conn_id: &ConnectionId) -> Result<(), SakiError> {
+    pub fn interrupt(&self, conn_id: &ConnectionId) -> Result<()> {
         if let Some(handle) = self.interrupt_handles.get(conn_id) {
             handle.interrupt();
             info!(conn_id = %conn_id.0, "query interrupted");
@@ -109,20 +127,8 @@ impl ConnectionManager {
         }
     }
 
-    pub fn test_connection(file_path: &str) -> Result<(), SakiError> {
-        let path = Path::new(file_path);
-        let read_only = path.exists()
-            && std::fs::metadata(path)
-                .map(|m| m.permissions().readonly())
-                .unwrap_or(false);
-
-        let flags = if read_only {
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX
-        } else {
-            OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_CREATE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX
-        };
+    pub fn test_connection(file_path: &str) -> Result<()> {
+        let (flags, _) = open_flags_for(file_path);
 
         let conn = Connection::open_with_flags(file_path, flags)
             .map_err(|e| SakiError::ConnectionFailed(e.to_string()))?;

@@ -9,7 +9,6 @@ use std::sync::atomic::AtomicBool;
 use async_trait::async_trait;
 use tracing::info;
 
-
 use sakidb_core::types::*;
 use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver};
 
@@ -28,41 +27,33 @@ impl SqliteDriver {
 
     /// Run VACUUM on a connected SQLite database.
     pub async fn vacuum(&self, conn_id: &ConnectionId) -> Result<()> {
-        let conn = self.manager.get_conn(conn_id)?;
         let cid = conn_id.0;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            info!(conn_id = %cid, "running VACUUM");
-            conn.execute_batch("VACUUM")
-                .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                info!(conn_id = %cid, "running VACUUM");
+                conn.execute_batch("VACUUM")
+                    .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))
+            })
+            .await
     }
 
     /// Run PRAGMA integrity_check on a connected SQLite database.
     pub async fn check_integrity(&self, conn_id: &ConnectionId) -> Result<Vec<String>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let cid = conn_id.0;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            info!(conn_id = %cid, "running integrity check");
-            let mut stmt = conn
-                .prepare("PRAGMA integrity_check")
-                .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
-            let results: Vec<String> = stmt
-                .query_map([], |row| row.get::<_, String>(0))
-                .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
-            Ok(results)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                info!(conn_id = %cid, "running integrity check");
+                let mut stmt = conn
+                    .prepare("PRAGMA integrity_check")
+                    .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
+                let results: Vec<String> = stmt
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map_err(|e| sakidb_core::SakiError::QueryFailed(e.to_string()))?;
+                Ok(results)
+            })
+            .await
     }
 }
 
@@ -113,29 +104,17 @@ impl Driver for SqliteDriver {
 #[async_trait]
 impl SqlDriver for SqliteDriver {
     async fn execute(&self, conn_id: &ConnectionId, sql: &str) -> Result<QueryResult> {
-        let conn = self.manager.get_conn(conn_id)?;
         let sql = sql.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            executor::execute_query(&conn, &sql)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| executor::execute_query(conn, &sql))
+            .await
     }
 
     async fn execute_multi(&self, conn_id: &ConnectionId, sql: &str) -> Result<MultiQueryResult> {
-        let conn = self.manager.get_conn(conn_id)?;
         let sql = sql.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            executor::execute_multi(&conn, &sql)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| executor::execute_multi(conn, &sql))
+            .await
     }
 
     async fn execute_multi_columnar(
@@ -143,16 +122,12 @@ impl SqlDriver for SqliteDriver {
         conn_id: &ConnectionId,
         sql: &str,
     ) -> Result<MultiColumnarResult> {
-        let conn = self.manager.get_conn(conn_id)?;
         let sql = sql.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            executor::execute_multi_columnar(&conn, &sql)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                executor::execute_multi_columnar(conn, &sql)
+            })
+            .await
     }
 
     async fn execute_paged(
@@ -162,29 +137,19 @@ impl SqlDriver for SqliteDriver {
         page: usize,
         page_size: usize,
     ) -> Result<PagedResult> {
-        let conn = self.manager.get_conn(conn_id)?;
         let sql = sql.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            executor::execute_paged(&conn, &sql, page, page_size)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                executor::execute_paged(conn, &sql, page, page_size)
+            })
+            .await
     }
 
     async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()> {
-        let conn = self.manager.get_conn(conn_id)?;
         let sql = sql.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            executor::execute_batch(&conn, &sql)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| executor::execute_batch(conn, &sql))
+            .await
     }
 
     async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()> {
@@ -207,15 +172,9 @@ impl Introspector for SqliteDriver {
         conn_id: &ConnectionId,
         _schema: &str,
     ) -> Result<Vec<TableInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_tables(&conn)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::list_tables)
+            .await
     }
 
     async fn list_columns(
@@ -224,16 +183,10 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<ColumnInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_columns(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| introspect::list_columns(conn, &table))
+            .await
     }
 
     async fn list_views(
@@ -241,15 +194,9 @@ impl Introspector for SqliteDriver {
         conn_id: &ConnectionId,
         _schema: &str,
     ) -> Result<Vec<ViewInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_views(&conn)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::list_views)
+            .await
     }
 
     async fn list_materialized_views(
@@ -281,21 +228,9 @@ impl Introspector for SqliteDriver {
         conn_id: &ConnectionId,
         _schema: &str,
     ) -> Result<Vec<IndexInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            // Get all tables and collect their indexes
-            let tables = introspect::list_tables(&conn)?;
-            let mut all_indexes = Vec::new();
-            for table in &tables {
-                all_indexes.extend(introspect::list_indexes(&conn, &table.name)?);
-            }
-            Ok(all_indexes)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::list_all_indexes)
+            .await
     }
 
     async fn list_foreign_tables(
@@ -312,16 +247,12 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<TriggerInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_triggers(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::list_triggers(conn, &table)
+            })
+            .await
     }
 
     async fn list_foreign_keys(
@@ -330,16 +261,12 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<ForeignKeyInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_foreign_keys(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::list_foreign_keys(conn, &table)
+            })
+            .await
     }
 
     async fn list_check_constraints(
@@ -348,16 +275,12 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<CheckConstraintInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_check_constraints(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::list_check_constraints(conn, &table)
+            })
+            .await
     }
 
     async fn list_unique_constraints(
@@ -366,16 +289,12 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<UniqueConstraintInfo>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::list_unique_constraints(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::list_unique_constraints(conn, &table)
+            })
+            .await
     }
 
     async fn get_partition_info(
@@ -393,28 +312,18 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<String> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::get_create_table_sql(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::get_create_table_sql(conn, &table)
+            })
+            .await
     }
 
     async fn get_erd_data(&self, conn_id: &ConnectionId, _schema: &str) -> Result<ErdData> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::get_erd_data(&conn)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::get_erd_data)
+            .await
     }
 
     async fn get_schema_completion_data(
@@ -422,15 +331,9 @@ impl Introspector for SqliteDriver {
         conn_id: &ConnectionId,
         _schema: &str,
     ) -> Result<HashMap<String, Vec<String>>> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::get_schema_completion_data(&conn)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::get_schema_completion_data)
+            .await
     }
 
     async fn get_completion_bundle(
@@ -438,15 +341,9 @@ impl Introspector for SqliteDriver {
         conn_id: &ConnectionId,
         _schema: &str,
     ) -> Result<CompletionBundle> {
-        let conn = self.manager.get_conn(conn_id)?;
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::get_completion_bundle(&conn)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, introspect::get_completion_bundle)
+            .await
     }
 
     async fn get_table_columns_for_completion(
@@ -455,16 +352,12 @@ impl Introspector for SqliteDriver {
         _schema: &str,
         table: &str,
     ) -> Result<Vec<CompletionColumn>> {
-        let conn = self.manager.get_conn(conn_id)?;
         let table = table.to_string();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            introspect::get_table_columns_for_completion(&conn, &table)
-        })
-        .await
-        .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("task failed: {e}")))?
+        self.manager
+            .with_conn(conn_id, move |conn| {
+                introspect::get_table_columns_for_completion(conn, &table)
+            })
+            .await
     }
 }
 
@@ -502,11 +395,12 @@ impl Restorer for SqliteDriver {
     ) -> Result<RestoreProgress> {
         let conn = self.manager.get_conn(conn_id)?;
         let continue_on_error = options.continue_on_error;
+        let file_path = file_path.to_string();
         tokio::task::block_in_place(|| {
             let conn = conn.lock().map_err(|e| {
                 sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
             })?;
-            restore::restore_from_sql(&conn, file_path, continue_on_error, cancelled, &*on_progress)
+            restore::restore_from_sql(&conn, &file_path, continue_on_error, cancelled, &*on_progress)
         })
     }
 }

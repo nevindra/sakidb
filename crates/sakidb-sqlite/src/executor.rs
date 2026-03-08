@@ -1,13 +1,29 @@
 use std::time::Instant;
 
-use rusqlite::{types::ValueRef, Connection};
+use rusqlite::{types::ValueRef, Connection, Statement};
 use tracing::{debug, info};
 
+use sakidb_core::sql::split_sql_statements;
 use sakidb_core::types::*;
 use sakidb_core::SakiError;
 
 /// Maximum rows returned by unbounded execute before truncation.
 const MAX_EXECUTE_ROWS: u64 = 100_000;
+
+/// Extract column definitions from a prepared statement.
+fn extract_column_defs(stmt: &Statement<'_>) -> Vec<ColumnDef> {
+    (0..stmt.column_count())
+        .map(|i| ColumnDef {
+            name: stmt.column_name(i).unwrap_or("?").to_string(),
+            data_type: stmt
+                .columns()
+                .get(i)
+                .and_then(|c| c.decl_type())
+                .unwrap_or("TEXT")
+                .to_string(),
+        })
+        .collect()
+}
 
 /// Map a SQLite ValueRef to a CellValue using the actual storage class per cell.
 fn sqlite_value_to_cell(value: ValueRef<'_>) -> CellValue {
@@ -136,17 +152,7 @@ pub fn execute_query(conn: &Connection, sql: &str) -> Result<QueryResult, SakiEr
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     let col_count = stmt.column_count();
-    let columns: Vec<ColumnDef> = (0..col_count)
-        .map(|i| ColumnDef {
-            name: stmt.column_name(i).unwrap_or("?").to_string(),
-            data_type: stmt
-                .columns()
-                .get(i)
-                .and_then(|c| c.decl_type())
-                .unwrap_or("TEXT")
-                .to_string(),
-        })
-        .collect();
+    let columns = extract_column_defs(&stmt);
 
     let mut cells: Vec<CellValue> = Vec::with_capacity(col_count * 128);
     let mut row_count: u64 = 0;
@@ -194,17 +200,7 @@ pub fn execute_query_columnar(conn: &Connection, sql: &str) -> Result<ColumnarRe
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     let col_count = stmt.column_count();
-    let columns: Vec<ColumnDef> = (0..col_count)
-        .map(|i| ColumnDef {
-            name: stmt.column_name(i).unwrap_or("?").to_string(),
-            data_type: stmt
-                .columns()
-                .get(i)
-                .and_then(|c| c.decl_type())
-                .unwrap_or("TEXT")
-                .to_string(),
-        })
-        .collect();
+    let columns = extract_column_defs(&stmt);
 
     let mut col_types: Vec<u8> = vec![2; col_count]; // default to Text
     let mut col_storages: Vec<ColumnStorage> = Vec::new();
@@ -304,11 +300,10 @@ pub fn execute_multi_columnar(
 
     let mut results = Vec::with_capacity(statements.len());
     for stmt in &statements {
-        let trimmed = stmt.trim();
-        if trimmed.is_empty() {
+        if stmt.is_empty() {
             continue;
         }
-        results.push(execute_query_columnar(conn, trimmed)?);
+        results.push(execute_query_columnar(conn, stmt)?);
     }
 
     let elapsed = start.elapsed().as_millis() as u64;
@@ -346,17 +341,7 @@ pub fn execute_paged(
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     let col_count = stmt.column_count();
-    let columns: Vec<ColumnDef> = (0..col_count)
-        .map(|i| ColumnDef {
-            name: stmt.column_name(i).unwrap_or("?").to_string(),
-            data_type: stmt
-                .columns()
-                .get(i)
-                .and_then(|c| c.decl_type())
-                .unwrap_or("TEXT")
-                .to_string(),
-        })
-        .collect();
+    let columns = extract_column_defs(&stmt);
 
     let mut cells: Vec<CellValue> = Vec::with_capacity(col_count * page_size);
     let mut row_count: u64 = 0;
@@ -417,17 +402,7 @@ pub fn execute_export(
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     let col_count = stmt.column_count();
-    let columns: Vec<ColumnDef> = (0..col_count)
-        .map(|i| ColumnDef {
-            name: stmt.column_name(i).unwrap_or("?").to_string(),
-            data_type: stmt
-                .columns()
-                .get(i)
-                .and_then(|c| c.decl_type())
-                .unwrap_or("TEXT")
-                .to_string(),
-        })
-        .collect();
+    let columns = extract_column_defs(&stmt);
 
     let mut cells: Vec<CellValue> = Vec::with_capacity(col_count * batch_size);
     let mut total_rows: u64 = 0;
@@ -469,113 +444,6 @@ pub fn execute_export(
 
     info!(rows = total_rows, "export complete");
     Ok(total_rows)
-}
-
-/// Split SQL text into individual statements on `;` boundaries, respecting
-/// string literals and comments. SQLite version — no dollar-quoting.
-pub fn split_sql_statements(sql: &str) -> Vec<String> {
-    let mut statements = Vec::new();
-    let mut current = String::new();
-    let bytes = sql.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
-
-    while i < len {
-        let ch = bytes[i];
-
-        // Line comment
-        if ch == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
-            let start = i;
-            i += 2;
-            while i < len && bytes[i] != b'\n' {
-                i += 1;
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Block comment
-        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-            let start = i;
-            i += 2;
-            let mut depth = 1u32;
-            while i < len && depth > 0 {
-                if bytes[i] == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-                    depth += 1;
-                    i += 2;
-                } else if bytes[i] == b'*' && i + 1 < len && bytes[i + 1] == b'/' {
-                    depth -= 1;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Single-quoted string
-        if ch == b'\'' {
-            let start = i;
-            i += 1;
-            while i < len {
-                if bytes[i] == b'\'' {
-                    i += 1;
-                    if i < len && bytes[i] == b'\'' {
-                        i += 1; // escaped ''
-                    } else {
-                        break;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Double-quoted identifier
-        if ch == b'"' {
-            let start = i;
-            i += 1;
-            while i < len {
-                if bytes[i] == b'"' {
-                    i += 1;
-                    if i < len && bytes[i] == b'"' {
-                        i += 1; // escaped ""
-                    } else {
-                        break;
-                    }
-                } else {
-                    i += 1;
-                }
-            }
-            current.push_str(&sql[start..i]);
-            continue;
-        }
-
-        // Semicolon — statement boundary
-        if ch == b';' {
-            let trimmed = current.trim();
-            if !trimmed.is_empty() {
-                statements.push(trimmed.to_string());
-            }
-            current.clear();
-            i += 1;
-            continue;
-        }
-
-        current.push(ch as char);
-        i += 1;
-    }
-
-    // Last statement (no trailing semicolon)
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        statements.push(trimmed.to_string());
-    }
-
-    statements
 }
 
 #[cfg(test)]

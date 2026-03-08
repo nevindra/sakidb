@@ -1,9 +1,11 @@
+use std::io::{BufRead, BufReader};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use rusqlite::Connection;
 use tracing::{info, warn};
 
+use sakidb_core::sql::{SqlSplitOptions, StreamingSqlSplitter};
 use sakidb_core::types::RestoreProgress;
 use sakidb_core::SakiError;
 
@@ -11,6 +13,8 @@ use sakidb_core::SakiError;
 const MAX_ERROR_MESSAGES: usize = 1000;
 /// Number of statements per batch.
 const BATCH_SIZE: usize = 100;
+/// Read buffer size (64 KB).
+const READ_BUF_SIZE: usize = 64 * 1024;
 
 pub fn restore_from_sql(
     conn: &Connection,
@@ -25,8 +29,9 @@ pub fn restore_from_sql(
         .map_err(|e| SakiError::QueryFailed(format!("Cannot read file: {e}")))?;
     let total_bytes = metadata.len();
 
-    let content = std::fs::read_to_string(file_path)
-        .map_err(|e| SakiError::QueryFailed(format!("Cannot read file: {e}")))?;
+    let file = std::fs::File::open(file_path)
+        .map_err(|e| SakiError::QueryFailed(format!("Cannot open file: {e}")))?;
+    let mut reader = BufReader::with_capacity(READ_BUF_SIZE, file);
 
     let start = Instant::now();
     let mut progress = RestoreProgress {
@@ -34,21 +39,18 @@ pub fn restore_from_sql(
         total_bytes,
         statements_executed: 0,
         errors_skipped: 0,
-        phase: "Parsing".to_string(),
+        phase: "Executing".to_string(),
         elapsed_ms: 0,
         error: None,
         error_messages: Vec::new(),
     };
 
-    let statements = crate::executor::split_sql_statements(&content);
-    progress.bytes_read = total_bytes;
-    progress.phase = "Executing".to_string();
-    on_progress(progress.clone());
-
-    let mut batch: Vec<&str> = Vec::with_capacity(BATCH_SIZE);
+    let mut splitter = StreamingSqlSplitter::new(SqlSplitOptions::default());
+    let mut batch: Vec<String> = Vec::with_capacity(BATCH_SIZE);
     let mut last_progress = Instant::now();
 
-    for stmt in &statements {
+    // Stream file line-by-line, feeding each line to the incremental parser.
+    loop {
         if cancelled.load(Ordering::Relaxed) {
             progress.phase = "Cancelled".to_string();
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
@@ -56,10 +58,29 @@ pub fn restore_from_sql(
             return Err(SakiError::Cancelled);
         }
 
-        batch.push(stmt);
+        let mut line = String::new();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .map_err(|e| SakiError::QueryFailed(format!("Read error: {e}")))?;
 
-        if batch.len() >= BATCH_SIZE {
-            flush_batch(conn, &mut batch, continue_on_error, &mut progress)?;
+        if bytes_read == 0 {
+            // EOF — flush the splitter's remaining buffer
+            if let Some(stmt) = splitter.finish() {
+                batch.push(stmt);
+            }
+            break;
+        }
+
+        progress.bytes_read += bytes_read as u64;
+
+        // Feed the line to the streaming parser; collect any complete statements.
+        let stmts = splitter.feed(&line);
+        for stmt in stmts {
+            batch.push(stmt);
+
+            if batch.len() >= BATCH_SIZE {
+                flush_batch(conn, &mut batch, continue_on_error, &mut progress)?;
+            }
         }
 
         if last_progress.elapsed().as_millis() > 100 {
@@ -90,7 +111,7 @@ pub fn restore_from_sql(
 
 fn flush_batch(
     conn: &Connection,
-    batch: &mut Vec<&str>,
+    batch: &mut Vec<String>,
     continue_on_error: bool,
     progress: &mut RestoreProgress,
 ) -> Result<(), SakiError> {
