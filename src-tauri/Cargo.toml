@@ -19,6 +19,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 sakidb-core = { path = "../crates/sakidb-core" }
 sakidb-postgres = { path = "../crates/sakidb-postgres", optional = true }
+sakidb-sqlite = { path = "../crates/sakidb-sqlite", optional = true }
 sakidb-store = { path = "../crates/sakidb-store" }
 rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
@@ -34,8 +35,9 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 [features]
-default = ["postgres"]
+default = ["postgres", "sqlite"]
 postgres = ["dep:sakidb-postgres"]
+sqlite = ["dep:sakidb-sqlite"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"

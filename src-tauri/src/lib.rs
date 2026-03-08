@@ -60,6 +60,25 @@ pub fn run() {
         );
     }
 
+    // Register SQLite driver
+    #[cfg(feature = "sqlite")]
+    {
+        use sakidb_sqlite::SqliteDriver;
+        let sq = Arc::new(SqliteDriver::new());
+        registry.register(
+            sakidb_core::types::EngineType::Sqlite,
+            DriverEntry {
+                driver: sq.clone(),
+                sql: Some(sq.clone()),
+                introspector: Some(sq.clone()),
+                exporter: Some(sq.clone()),
+                restorer: Some(sq.clone()),
+                key_value: None,
+                document: None,
+            },
+        );
+    }
+
     let app_state = AppState {
         registry: Arc::new(registry),
         store: Arc::new(Mutex::new(store)),
@@ -170,6 +189,8 @@ pub fn run() {
             commands::settings::set_keybinding,
             commands::settings::reset_keybinding,
             commands::settings::reset_all_keybindings,
+            commands::sqlite::vacuum_database,
+            commands::sqlite::check_integrity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SakiDB");

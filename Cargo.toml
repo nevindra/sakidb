@@ -16,6 +16,9 @@ opt-level = 3
 [profile.dev.package.sakidb-postgres]
 opt-level = 3
 
+[profile.dev.package.sakidb-sqlite]
+opt-level = 3
+
 # Release: squeeze every last bit of performance and minimize binary size.
 [profile.release]
 lto = true            # Full link-time optimization across all crates

@@ -6,6 +6,9 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
+- **SQLite driver** — Full SQLite support via `sakidb-sqlite` crate (rusqlite with bundled SQLite). Implements `Driver`, `SqlDriver`, `Introspector`, `Exporter`, and `Restorer` traits. Performance-tuned with WAL mode, 256 MB mmap, 64 MB cache, and native columnar query path.
+- SQLite-specific commands — VACUUM and integrity check accessible from connection context menu.
+- File picker for SQLite connections — browse button with `.db`/`.sqlite`/`.sqlite3`/`.db3` filter in both new connection and edit dialogs.
 - **Multi-engine UX** — Engine selector in connection form, conditional form fields per engine (file-based engines hide host/port, Redis hides username, etc.).
 - Engine label badge (`PG`, `SL`, `RD`, etc.) next to each connection name in the sidebar.
 - `ConnectResult` bundles `runtime_id` + `EngineCapabilities` in a single IPC round-trip — no separate capabilities call needed.

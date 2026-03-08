@@ -5,7 +5,8 @@
   import { getAppState } from '$lib/stores';
   import type { ConnectionInput, EngineType, SavedConnection } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
-  import { CheckCircle, Database, Eye, EyeOff, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
+  import { CheckCircle, Database, Eye, EyeOff, FolderOpen, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
+  import { open } from '@tauri-apps/plugin-dialog';
 
   const app = getAppState();
 
@@ -114,7 +115,12 @@
   );
 
   const isEditing = $derived(selectedConnectionId !== null && !isNewMode);
-  const canSave = $derived(form.name.trim() && form.host.trim() && form.username.trim());
+  const isFileBased = $derived(form.engine === 'sqlite' || form.engine === 'duckdb');
+  const canSave = $derived(
+    isFileBased
+      ? !!(form.name.trim() && form.database.trim())
+      : !!(form.name.trim() && form.host.trim() && form.username.trim())
+  );
   const connecting = $derived(selectedConnectionId ? app.isConnecting(selectedConnectionId) : false);
 
   const formTitle = $derived.by(() => {
@@ -384,12 +390,40 @@
       <div class="mb-7">
         <h2 class="text-[15px] font-semibold text-foreground">{formTitle}</h2>
         {#if isEditing}
-          <p class="text-[11px] text-text-dim/70 mt-1 font-mono">{form.host}:{form.port}/{form.database}</p>
+          <p class="text-[11px] text-text-dim/70 mt-1 font-mono">{isFileBased ? form.database || 'No file selected' : `${form.host}:${form.port}/${form.database}`}</p>
         {/if}
       </div>
 
-      <!-- URL paste field (new mode only) -->
-      {#if isNewMode || (!selectedConnectionId && app.savedConnections.length === 0)}
+      <!-- Engine (above URL so it controls which fields show) -->
+      {#if availableEngines.length > 1}
+        <div class="flex items-center gap-3 mb-5">
+          <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Engine</span>
+          <Select.Root type="single" value={form.engine} onValueChange={(v) => {
+            if (v && v !== form.engine) {
+              form.engine = v;
+              const defaults = ENGINE_DEFAULTS[v as EngineType];
+              if (defaults) {
+                form.port = defaults.port;
+                form.database = defaults.database;
+                form.username = defaults.username;
+              }
+              testResult = null;
+            }
+          }}>
+            <Select.Trigger class="flex-1 h-9 bg-transparent">
+              <span class="text-foreground text-sm">{ENGINE_LABELS[form.engine as EngineType] ?? form.engine}</span>
+            </Select.Trigger>
+            <Select.Content>
+              {#each availableEngines as engine (engine)}
+                <Select.Item value={engine} label={ENGINE_LABELS[engine]} />
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      {/if}
+
+      <!-- URL paste field (new mode only, not for file-based engines) -->
+      {#if !isFileBased && (isNewMode || (!selectedConnectionId && app.savedConnections.length === 0))}
         <div class="mb-5">
           <label for="conn-mgr-url" class="block text-[12px] text-muted-foreground mb-1.5 select-none">Connection URL</label>
           <Input
@@ -421,34 +455,6 @@
           <Input id="cm-name" bind:value={form.name} placeholder="My Database" class="flex-1" />
         </div>
 
-        <!-- Engine -->
-        {#if availableEngines.length > 1}
-          <div class="flex items-center gap-3">
-            <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Engine</span>
-            <Select.Root type="single" value={form.engine} onValueChange={(v) => {
-              if (v && v !== form.engine) {
-                form.engine = v;
-                const defaults = ENGINE_DEFAULTS[v as EngineType];
-                if (defaults) {
-                  form.port = defaults.port;
-                  form.database = defaults.database;
-                  form.username = defaults.username;
-                }
-                testResult = null;
-              }
-            }}>
-              <Select.Trigger class="flex-1 h-9 bg-transparent">
-                <span class="text-foreground text-sm">{ENGINE_LABELS[form.engine as EngineType] ?? form.engine}</span>
-              </Select.Trigger>
-              <Select.Content>
-                {#each availableEngines as engine (engine)}
-                  <Select.Item value={engine} label={ENGINE_LABELS[engine]} />
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          </div>
-        {/if}
-
         <!-- Host (hidden for file-based engines) -->
         {#if form.engine !== 'sqlite' && form.engine !== 'duckdb'}
           <div class="flex items-center gap-3">
@@ -463,11 +469,35 @@
           </div>
         {/if}
 
-        <!-- Database (hidden for Redis) -->
+        <!-- Database / File path (hidden for Redis) -->
         {#if form.engine !== 'redis'}
           <div class="flex items-center gap-3">
-            <label for="cm-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Database</label>
-            <Input id="cm-db" bind:value={form.database} placeholder={form.engine === 'sqlite' || form.engine === 'duckdb' ? '/path/to/db' : 'postgres'} class="flex-1" />
+            <label for="cm-db" class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">{isFileBased ? 'File' : 'Database'}</label>
+            <div class="flex-1 flex gap-1.5">
+              <Input id="cm-db" bind:value={form.database} placeholder={isFileBased ? '/path/to/database.db' : 'postgres'} class="flex-1" />
+              {#if isFileBased}
+                <button
+                  class="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-all duration-100"
+                  aria-label="Browse for database file"
+                  onclick={async () => {
+                    const path = await open({
+                      multiple: false,
+                      filters: [{ name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }],
+                    });
+                    if (path) {
+                      form.database = path;
+                      if (!form.name) {
+                        const fileName = path.split('/').pop()?.split('\\').pop() ?? path;
+                        form.name = fileName;
+                      }
+                      testResult = null;
+                    }
+                  }}
+                >
+                  <FolderOpen class="h-3.5 w-3.5" />
+                </button>
+              {/if}
+            </div>
           </div>
         {/if}
 
@@ -550,7 +580,7 @@
         <button
           class="h-[30px] px-3 text-[12px] font-medium rounded-md text-text-dim/60 hover:text-foreground hover:bg-accent/10 transition-all duration-100 disabled:opacity-30 disabled:pointer-events-none"
           onclick={handleTest}
-          disabled={testing || !form.host}
+          disabled={testing || (isFileBased ? !form.database : !form.host)}
         >
           {#if testing}
             <Loader2 class="h-3 w-3 mr-1.5 animate-spin inline" />

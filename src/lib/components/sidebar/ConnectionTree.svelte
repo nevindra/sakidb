@@ -3,6 +3,7 @@
   import type { EngineType, SavedConnection } from '$lib/types';
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { ChevronRight, ChevronDown, Loader2, Server, FolderClosed, FolderOpen } from '@lucide/svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import * as ContextMenu from '$lib/components/ui/context-menu';
   import DatabaseNode from './tree/DatabaseNode.svelte';
   import SchemaNode from './tree/SchemaNode.svelte';
@@ -191,6 +192,36 @@
           app.openQueryTab(connection.id, connection.database);
         }}>
           New Query
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+      {/if}
+      {#if connection.engine === 'sqlite'}
+        <ContextMenu.Item onclick={async () => {
+          const rid = app._getRuntimeId(connection.id, connection.database);
+          if (!rid) return;
+          try {
+            await invoke('vacuum_database', { connId: rid });
+          } catch (e) {
+            console.error('VACUUM failed:', e);
+          }
+        }}>
+          Vacuum
+        </ContextMenu.Item>
+        <ContextMenu.Item onclick={async () => {
+          const rid = app._getRuntimeId(connection.id, connection.database);
+          if (!rid) return;
+          try {
+            const messages: string[] = await invoke('check_integrity', { connId: rid });
+            if (messages.length === 1 && messages[0] === 'ok') {
+              console.log('Integrity check passed');
+            } else {
+              console.warn('Integrity check issues:', messages);
+            }
+          } catch (e) {
+            console.error('Integrity check failed:', e);
+          }
+        }}>
+          Integrity Check
         </ContextMenu.Item>
         <ContextMenu.Separator />
       {/if}

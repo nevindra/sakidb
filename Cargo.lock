@@ -12,6 +12,7 @@ dependencies = [
  "rmp-serde",
  "sakidb-core",
  "sakidb-postgres",
+ "sakidb-sqlite",
  "sakidb-store",
  "serde",
  "serde_json",
@@ -3663,6 +3664,20 @@ dependencies = [
  "tokio",
  "tokio-postgres",
  "tokio-postgres-rustls",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "sakidb-sqlite"
+version = "1.0.0"
+dependencies = [
+ "async-trait",
+ "dashmap",
+ "rusqlite",
+ "sakidb-core",
+ "serde",
+ "tokio",
  "tracing",
  "uuid",
 ]
