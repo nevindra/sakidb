@@ -11,5 +11,13 @@ thiserror = "2"
 async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 
+[features]
+stress = []
+
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 serde_json = "1"
+
+[[bench]]
+name = "core_benchmarks"
+harness = false

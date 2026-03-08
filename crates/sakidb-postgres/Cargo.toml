@@ -23,5 +23,19 @@ serde = { version = "1", features = ["derive"] }
 tokio-postgres-rustls = "0.12"
 rustls = { version = "0.23", features = ["ring"] }
 
+[features]
+integration = []
+stress = []
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
+futures = "0.3"
+
+[[bench]]
+name = "postgres_benchmarks"
+harness = false
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

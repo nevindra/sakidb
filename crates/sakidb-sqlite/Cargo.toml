@@ -14,3 +14,17 @@ uuid = { version = "1", features = ["v4"] }
 dashmap = "6"
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
+
+[features]
+integration = []
+stress = []
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
+futures = "0.3"
+
+[[bench]]
+name = "sqlite_benchmarks"
+harness = false
