@@ -1,5 +1,6 @@
 import type { CellValue, ColumnInfo } from '$lib/types';
 import type { SqlDialect, ColumnDraft, ColumnChanges, IndexDraft, ForeignKeyDraft, TriggerDraft, PartitionDraft } from './types';
+import { SQLite } from '@codemirror/lang-sql';
 
 function q(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
@@ -12,6 +13,12 @@ function qualified(schema: string, table: string): string {
 export const sqliteDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
+
+  // -- Editor integration --
+
+  codemirrorDialect() { return SQLite; },
+  formatterLanguage() { return 'sqlite'; },
+  explainAnalyzeQuery() { return null; },
 
   dropTable(schema, table) {
     return `DROP TABLE ${qualified(schema, table)};`;

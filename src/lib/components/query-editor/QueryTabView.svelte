@@ -11,7 +11,7 @@
   import { EditorView, keymap } from '@codemirror/view';
   import { EditorState, Compartment, Prec } from '@codemirror/state';
   import { basicSetup } from 'codemirror';
-  import { PostgreSQL, sql } from '@codemirror/lang-sql';
+  import { sql } from '@codemirror/lang-sql';
   import { autocompletion } from '@codemirror/autocomplete';
   import { oneDark } from '@codemirror/theme-one-dark';
   import { isExplainResult, isExplainText } from '$lib/utils/explain-parser';
@@ -19,11 +19,18 @@
   import { getStatementAtCursor, splitStatements } from '$lib/utils/split-statements';
   import { formatSql } from '$lib/utils/sql-format';
   import { createSqlCompletionSource } from '$lib/utils/sql-completion';
-  import type { CompletionBundle } from '$lib/types';
+  import type { CompletionBundle, EngineType } from '$lib/types';
+  import { getDialect } from '$lib/dialects';
 
   let { tab }: { tab: QueryTab } = $props();
 
   const app = getAppState();
+
+  // Resolve dialect from connection engine type
+  const dialect = $derived.by(() => {
+    const engine = app.getSavedConnection(tab.savedConnectionId)?.engine as EngineType | undefined;
+    return getDialect(engine ?? 'postgres');
+  });
 
   let editorContainer: HTMLDivElement;
   let editorView: EditorView | null = null;
@@ -116,17 +123,18 @@
 
   function formatQuery() {
     if (!editorView) return;
+    const lang = dialect.formatterLanguage();
     const selected = getSelectedText();
     if (selected) {
       const sel = editorView.state.selection.main;
-      const formatted = formatSql(selected);
+      const formatted = formatSql(selected, lang);
       editorView.dispatch({
         changes: { from: sel.from, to: sel.to, insert: formatted },
       });
     } else {
       const content = getEditorContent();
       if (!content) return;
-      const formatted = formatSql(content);
+      const formatted = formatSql(content, lang);
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
       });
@@ -138,8 +146,8 @@
     const selected = getSelectedText();
     const content = selected || getEditorContent();
     if (!content) return;
-    const format = json ? 'FORMAT JSON' : 'FORMAT TEXT';
-    const wrapped = `EXPLAIN (ANALYZE, BUFFERS, ${format}) ${content}`;
+    const wrapped = dialect.explainAnalyzeQuery(content, json);
+    if (!wrapped) return;
     lastExecutedStatements = [wrapped];
     forceRawView = false;
     app.executeQueryInTab(tab.id, wrapped);
@@ -179,7 +187,7 @@
         extensions: [
           executeKeymap,
           basicSetup,
-          sql({ dialect: PostgreSQL }),
+          sql({ dialect: dialect.codemirrorDialect() }),
           completionCompartment.of(
             autocompletion({ override: [completionSource] })
           ),

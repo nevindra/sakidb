@@ -1,4 +1,6 @@
 import type { CellValue, ColumnInfo } from '$lib/types';
+import type { SQLDialect } from '@codemirror/lang-sql';
+import type { SqlLanguage } from 'sql-formatter';
 
 // -- Param types for DDL operations --
 
@@ -77,6 +79,11 @@ export interface SqlDialect {
   toggleTrigger(schema: string, table: string, triggerName: string, enable: boolean): string | null;
   addPartition(schema: string, parentTable: string, part: PartitionDraft): string | null;
   detachPartition(schema: string, parentTable: string, partitionName: string): string | null;
+
+  // Editor integration
+  codemirrorDialect(): SQLDialect;
+  formatterLanguage(): SqlLanguage;
+  explainAnalyzeQuery(sql: string, json: boolean): string | null;
 
   // Profiling
   statsQuery(schema: string, table: string, col: ColumnInfo): string | null;

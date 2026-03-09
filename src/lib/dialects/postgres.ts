@@ -1,5 +1,6 @@
 import type { CellValue, ColumnInfo } from '$lib/types';
 import type { SqlDialect, ColumnDraft, ColumnChanges, IndexDraft, ForeignKeyDraft, TriggerDraft, PartitionDraft } from './types';
+import { PostgreSQL } from '@codemirror/lang-sql';
 
 // -- Helpers (private) --
 
@@ -42,6 +43,15 @@ function needsTextCast(cat: ColumnCategory): boolean {
 export const postgresDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
+
+  // -- Editor integration --
+
+  codemirrorDialect() { return PostgreSQL; },
+  formatterLanguage() { return 'postgresql'; },
+  explainAnalyzeQuery(sql, json) {
+    const format = json ? 'FORMAT JSON' : 'FORMAT TEXT';
+    return `EXPLAIN (ANALYZE, BUFFERS, ${format}) ${sql}`;
+  },
 
   // -- Table ops --
 

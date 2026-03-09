@@ -1,8 +1,8 @@
-import { format } from 'sql-formatter';
+import { format, type SqlLanguage } from 'sql-formatter';
 
-export function formatSql(sql: string): string {
+export function formatSql(sql: string, language: SqlLanguage = 'postgresql'): string {
   return format(sql, {
-    language: 'postgresql',
+    language,
     tabWidth: 2,
     useTabs: false,
     keywordCase: 'upper',
