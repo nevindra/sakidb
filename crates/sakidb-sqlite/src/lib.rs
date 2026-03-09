@@ -1,10 +1,13 @@
 pub mod connection;
 pub mod executor;
+pub mod formatter;
 pub mod introspect;
 pub mod restore;
 
 #[cfg(test)]
 mod executor_test;
+#[cfg(test)]
+mod formatter_test;
 #[cfg(test)]
 mod introspect_test;
 
@@ -15,7 +18,7 @@ use async_trait::async_trait;
 use tracing::info;
 
 use sakidb_core::types::*;
-use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver};
+use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver, SqlFormatter};
 
 use crate::connection::ConnectionManager;
 

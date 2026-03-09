@@ -15,7 +15,8 @@ import type {
 import { decodeMsgpack, generateId, setError } from './shared.svelte';
 import { addTab, findTab, setActiveTabId } from './tabs.svelte';
 import { getRuntimeId, getSavedConnection, loadColumns, loadIndexes } from './connections.svelte';
-import { generateBulkStatsQuery, generateBulkHistogramQuery, generateBulkUniqueCountQuery } from '$lib/utils/profiling-sql';
+import { getDialect } from '$lib/dialects';
+import type { EngineType } from '$lib/types';
 
 // ── Structure-specific loaders ──
 
@@ -200,9 +201,17 @@ export async function loadProfilingData(tabId: string) {
 
   try {
     const columns = tab.columns;
-    const statsSql = generateBulkStatsQuery(tab.schema, tab.table, columns);
-    const histSql = generateBulkHistogramQuery(tab.schema, tab.table, columns);
-    const uniqueSql = generateBulkUniqueCountQuery(tab.schema, tab.table, columns);
+    const engine = getSavedConnection(tab.savedConnectionId)?.engine;
+    if (!engine) return;
+    const dialect = getDialect(engine as EngineType);
+    const statsSql = dialect.bulkStatsQuery(tab.schema, tab.table, columns);
+    const histSql = dialect.bulkHistogramQuery(tab.schema, tab.table, columns);
+    const uniqueSql = dialect.bulkUniqueCountQuery(tab.schema, tab.table, columns);
+
+    if (!statsSql || !histSql || !uniqueSql) {
+      tab.isProfilingLoading = false;
+      return;
+    }
 
     const [statsResult, histResult, uniqueResult] = await Promise.all([
       runQuery(tab.runtimeConnectionId, statsSql),

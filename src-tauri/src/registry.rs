@@ -15,6 +15,7 @@ pub struct DriverEntry {
     pub introspector: Option<Arc<dyn Introspector>>,
     pub exporter: Option<Arc<dyn Exporter>>,
     pub restorer: Option<Arc<dyn Restorer>>,
+    pub formatter: Option<Arc<dyn SqlFormatter>>,
     pub key_value: Option<Arc<dyn KeyValueDriver>>,
     pub document: Option<Arc<dyn DocumentDriver>>,
 }
@@ -124,6 +125,30 @@ impl DriverRegistry {
             .get(&engine)
             .and_then(|e| e.restorer.as_deref())
             .ok_or(SakiError::NotSupported("restore".into()))
+    }
+
+    pub fn formatter_for(&self, conn_id: &ConnectionId) -> Result<&dyn SqlFormatter> {
+        let engine = *self
+            .connections
+            .get(conn_id)
+            .ok_or(SakiError::ConnectionNotFound(conn_id.0.to_string()))?
+            .value();
+        self.entries
+            .get(&engine)
+            .and_then(|e| e.formatter.as_deref())
+            .ok_or(SakiError::NotSupported("sql formatter".into()))
+    }
+
+    pub fn formatter_arc_for(&self, conn_id: &ConnectionId) -> Result<Arc<dyn SqlFormatter>> {
+        let engine = *self
+            .connections
+            .get(conn_id)
+            .ok_or(SakiError::ConnectionNotFound(conn_id.0.to_string()))?
+            .value();
+        self.entries
+            .get(&engine)
+            .and_then(|e| e.formatter.clone())
+            .ok_or(SakiError::NotSupported("sql formatter".into()))
     }
 
     pub fn capabilities_for(&self, conn_id: &ConnectionId) -> Result<EngineCapabilities> {

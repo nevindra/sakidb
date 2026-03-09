@@ -6,6 +6,11 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
+- **SQL dialect abstraction** — Engine-aware SQL generation on both frontend and backend, replacing all hardcoded PostgreSQL SQL.
+  - Frontend `SqlDialect` interface (`src/lib/dialects/`) with `PostgresDialect` and `SqliteDialect` implementations. Factory function `getDialect()` with exhaustive engine switch. Covers DDL (add/alter/drop columns, indexes, foreign keys, triggers, partitions), DML (drop/truncate table, duplicate table, cell literals), and profiling queries.
+  - Backend `SqlFormatter` trait (`sakidb-core`) with implementations for `PostgresDriver` (COPY format) and `SqliteDriver` (INSERT statements). Integrated into `DriverRegistry` and `export.rs` — SQL export now uses engine-specific DDL and data formatting instead of hardcoded PostgreSQL COPY.
+  - All structure section components (Columns, Indexes, Relations, Triggers, Partitions), DataGrid, and profiling store migrated to use dialect system.
+  - Deleted legacy `ddl.ts` and `profiling-sql.ts` utility files.
 - **SQLite driver** — Full SQLite support via `sakidb-sqlite` crate (rusqlite with bundled SQLite). Implements `Driver`, `SqlDriver`, `Introspector`, `Exporter`, and `Restorer` traits. Performance-tuned with WAL mode, 256 MB mmap, 64 MB cache, and native columnar query path.
 - SQLite-specific commands — VACUUM and integrity check accessible from connection context menu.
 - File picker for SQLite connections — browse button with `.db`/`.sqlite`/`.sqlite3`/`.db3` filter in both new connection and edit dialogs.

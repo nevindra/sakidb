@@ -9,6 +9,7 @@ import {
 } from './search.svelte';
 import {
   getSavedConnections,
+  getSavedConnection,
   getActiveConnections,
   getConnectingIds,
   getEditDialogConnectionId,
@@ -169,6 +170,9 @@ export function getAppState() {
     // ── Search ──
     searchTree,
     hasDescendantMatch,
+
+    // ── Connection lookup ──
+    getSavedConnection,
 
     // ── Connection CRUD ──
     loadConnections,

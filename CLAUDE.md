@@ -69,7 +69,7 @@ crates/sakidb-store/      — Encrypted credential storage (rusqlite + AES-256-G
 src-tauri/                — Tauri app. DriverRegistry + store wired into IPC commands. registry.rs routes connections to drivers.
 ```
 
-**Extension point:** Composable trait system — new engines implement `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`). Register via `DriverRegistry` in `src-tauri/src/registry.rs`. See `CONTRIBUTING.md` for details.
+**Extension point:** Composable trait system — new engines implement `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `SqlFormatter`). Register via `DriverRegistry` in `src-tauri/src/registry.rs`. For SQL engines, also add a frontend `SqlDialect` in `src/lib/dialects/`. See `CONTRIBUTING.md` for details.
 
 ### Key Rust types
 
@@ -79,6 +79,7 @@ src-tauri/                — Tauri app. DriverRegistry + store wired into IPC c
   - `Introspector` — `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `list_views`, `list_materialized_views`, `list_functions`, `list_sequences`, `list_indexes`, `list_foreign_tables`, `list_triggers`, `list_foreign_keys`, `list_check_constraints`, `list_unique_constraints`, `get_partition_info`, `get_create_table_sql`, `get_erd_data`, `get_schema_completion_data`, `get_completion_bundle`, `get_table_columns_for_completion`
   - `Exporter` — `export_stream` (streaming batch export with cancellation)
   - `Restorer` — `restore` (SQL file restore with progress reporting)
+  - `SqlFormatter` — `format_ddl`, `format_data_header`, `format_data_row`, `format_data_footer` (engine-specific SQL export formatting)
   - `KeyValueDriver` (future: Redis) — `get`, `set`, `del`, `keys`, `scan`
   - `DocumentDriver` (future: MongoDB) — `find`, `insert_one`, `list_collections`
 - `EngineType` enum (`crates/sakidb-core/src/types.rs`) — Postgres, Sqlite, Redis, MongoDB, DuckDB, ClickHouse
@@ -115,6 +116,11 @@ src/lib/stores/             — Modular state (Svelte 5 runes), barrel-exported 
   ├── search.svelte.ts      — Schema tree search/filter
   ├── shared.svelte.ts      — Global error state
   └── exports.svelte.ts     — CSV/SQL export, SQL restore
+src/lib/dialects/           — Engine-specific SQL generation (SqlDialect interface + implementations)
+  ├── types.ts              — SqlDialect interface and param types
+  ├── postgres.ts           — PostgresDialect (casts, CASCADE, COPY, TRUNCATE, profiling)
+  ├── sqlite.ts             — SqliteDialect (INSERT, no CASCADE, no profiling)
+  └── index.ts              — getDialect() factory with exhaustive engine switch
 src/lib/types/index.ts      — TypeScript mirrors of all Rust types
 src/lib/components/         — UI components (organized by domain)
 src/routes/+page.svelte     — Root page: main layout

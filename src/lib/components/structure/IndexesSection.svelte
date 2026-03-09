@@ -7,12 +7,14 @@
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import DdlPreview from './DdlPreview.svelte';
-  import { generateCreateIndex, generateDropIndex } from '$lib/utils/ddl';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
   import { Badge } from '$lib/components/ui/badge';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
   // ── Create index dialog ──
   let addOpen = $state(false);
@@ -24,12 +26,12 @@
 
   const addSql = $derived(
     addName && addColumns
-      ? generateCreateIndex(tab.schema, tab.table, {
+      ? (dialect?.createIndex(tab.schema, tab.table, {
           name: addName,
           columns: addColumns.split(',').map(c => c.trim()).filter(Boolean),
           unique: addUnique,
           type: addType,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -61,7 +63,7 @@
   }
 
   async function handleDrop() {
-    const sql = generateDropIndex(tab.schema, dropIndexName);
+    const sql = dialect!.dropIndex(tab.schema, dropIndexName);
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);

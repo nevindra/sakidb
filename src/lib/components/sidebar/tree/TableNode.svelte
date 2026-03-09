@@ -11,7 +11,7 @@
   import DuplicateTableDialog from './DuplicateTableDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { qualifiedTable } from '$lib/sql-utils';
+  import { getDialect } from '$lib/dialects';
   import TableNode from './TableNode.svelte';
 
   let {
@@ -40,6 +40,7 @@
 
   const app = getAppState();
   const capabilities = $derived(app.getCapabilities(connectionId));
+  const dialect = $derived((() => { const e = app.getSavedConnection(connectionId)?.engine; return e ? getDialect(e as import('$lib/types').EngineType) : null; })());
 
   // Tab-to-tree sync: highlight when active tab targets this table
   const isRevealed = $derived(app.selectedObjectPath === `${schemaPrefix}/${table.name}`);
@@ -84,9 +85,10 @@
     try {
       const rid = app.getRuntimeConnectionId(connectionId, databaseName);
       if (!rid) return;
+      const dropSql = dialect!.dropTable(schema, table.name);
       await invoke('execute_batch', {
         activeConnectionId: rid,
-        sql: `DROP TABLE ${qualifiedTable(schema, table.name)} CASCADE;`,
+        sql: dropSql,
       });
       onRefreshTables?.();
     } catch {
@@ -101,9 +103,10 @@
     try {
       const rid = app.getRuntimeConnectionId(connectionId, databaseName);
       if (!rid) return;
+      const truncateSql = dialect!.truncateTable(schema, table.name);
       await invoke('execute_batch', {
         activeConnectionId: rid,
-        sql: `TRUNCATE TABLE ${qualifiedTable(schema, table.name)};`,
+        sql: truncateSql,
       });
     } catch {
       // Error handled by store
@@ -189,7 +192,7 @@
       <ContextMenu.Item onclick={() => app.openErdTab(connectionId, databaseName, schema, table.name)}>View ERD</ContextMenu.Item>
     {/if}
     {#if capabilities?.sql !== false}
-      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM ${qualifiedTable(schema, table.name)} LIMIT 100;`)}>New Query</ContextMenu.Item>
+      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM ${dialect?.qualifiedTable(schema, table.name) ?? '"' + table.name + '"'} LIMIT 100;`)}>New Query</ContextMenu.Item>
     {/if}
     <ContextMenu.Separator />
     {#if capabilities?.export !== false}
@@ -229,7 +232,7 @@
 <ConfirmDialog
   bind:open={dropConfirmOpen}
   title="Drop Table"
-  description={`This will permanently drop "${schema}"."${table.name}". This action cannot be undone.`}
+  description={`This will permanently drop ${schema ? `"${schema}".` : ''}"${table.name}". This action cannot be undone.`}
   confirmLabel="Drop"
   variant="destructive"
   loading={dropLoading}
@@ -239,7 +242,7 @@
 <ConfirmDialog
   bind:open={truncateConfirmOpen}
   title="Truncate Table"
-  description={`This will delete all rows from "${schema}"."${table.name}".`}
+  description={`This will delete all rows from ${schema ? `"${schema}".` : ''}"${table.name}".`}
   confirmLabel="Truncate"
   variant="destructive"
   loading={truncateLoading}

@@ -21,6 +21,8 @@
     getPkColumnIndices,
     cellValueEquals,
   } from '$lib/sql-utils';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let {
     result,
@@ -248,6 +250,7 @@
     return pendingUpdates.size > 0 ? pendingUpdates.get(cellKey(dataRow, colIdx)) : undefined;
   }
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : undefined; })());
   const filterWhereClause = $derived.by(() => {
     if (filters.length === 0) return undefined;
     const clauses = filters.map(f => app.filterToSql(f)).filter(Boolean);
@@ -673,7 +676,7 @@
 
   // ── Apply changes ──
   async function applyChanges() {
-    if (!canEdit) return;
+    if (!canEdit || !dialect) return;
     isApplying = true;
 
     try {
@@ -683,7 +686,7 @@
 
       for (const dataRow of pendingDeletes) {
         const pkValues = pkColIndices.map(i => getOriginalCell(dataRow, i));
-        statements.push(generateDeleteSql(schema, table, pkColumnNames, pkValues, pkDataTypes));
+        statements.push(generateDeleteSql(schema, table, pkColumnNames, pkValues, pkDataTypes, dialect!));
       }
 
       const updatesByRow = new Map<number, [string, CellValue, string?][]>();
@@ -695,13 +698,13 @@
       }
       for (const [dataRow, changes] of updatesByRow) {
         const pkValues = pkColIndices.map(i => getOriginalCell(dataRow, i));
-        statements.push(generateUpdateSql(schema, table, pkColumnNames, pkValues, changes, pkDataTypes));
+        statements.push(generateUpdateSql(schema, table, pkColumnNames, pkValues, changes, pkDataTypes, dialect!));
       }
 
       for (const insertRow of pendingInserts) {
         const colNames = result.columns.map(c => c.name);
         const colDataTypes = result.columns.map(c => c.data_type);
-        statements.push(generateInsertSql(schema, table, colNames, insertRow, colDataTypes));
+        statements.push(generateInsertSql(schema, table, colNames, insertRow, colDataTypes, dialect!));
       }
 
       if (statements.length === 0) return;

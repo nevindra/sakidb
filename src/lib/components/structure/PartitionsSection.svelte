@@ -7,11 +7,13 @@
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import DdlPreview from './DdlPreview.svelte';
   import { Badge } from '$lib/components/ui/badge';
-  import { generateAddPartition, generateDetachPartition } from '$lib/utils/ddl';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
   function formatRowCount(count: number | null): string {
     if (count === null) return '';
@@ -28,10 +30,10 @@
 
   const addSql = $derived(
     addName && addForValues
-      ? generateAddPartition(tab.schema, tab.table, {
+      ? (dialect?.addPartition(tab.schema, tab.table, {
           name: addName,
           forValues: addForValues,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -61,7 +63,8 @@
   }
 
   async function handleDetach() {
-    const sql = generateDetachPartition(tab.schema, tab.table, detachName);
+    const sql = dialect?.detachPartition(tab.schema, tab.table, detachName);
+    if (!sql) return;
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);

@@ -5,6 +5,8 @@
   import * as RadioGroup from '$lib/components/ui/radio-group';
   import { invoke } from '@tauri-apps/api/core';
   import { getAppState } from '$lib/stores';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let {
     open = $bindable(false),
@@ -42,10 +44,10 @@
       const rid = app.getRuntimeConnectionId(connectionId, databaseName);
       if (!rid) throw new Error('Not connected');
 
-      const sql =
-        mode === 'structure'
-          ? `CREATE TABLE "${schema}"."${newName}" (LIKE "${schema}"."${tableName}" INCLUDING ALL);`
-          : `CREATE TABLE "${schema}"."${newName}" AS SELECT * FROM "${schema}"."${tableName}";`;
+      const engine = app.getSavedConnection(connectionId)?.engine;
+      if (!engine) throw new Error('Unknown engine');
+      const dialect = getDialect(engine as EngineType);
+      const sql = dialect.duplicateTable(schema, tableName, newName, mode as 'structure' | 'data');
 
       await invoke('execute_batch', { activeConnectionId: rid, sql });
       open = false;
@@ -65,7 +67,7 @@
     <Dialog.Header>
       <Dialog.Title>Duplicate Table</Dialog.Title>
       <Dialog.Description>
-        Create a copy of <span class="font-mono text-foreground">"{schema}"."{tableName}"</span>
+        Create a copy of <span class="font-mono text-foreground">{schema ? `"${schema}".` : ''}"{tableName}"</span>
       </Dialog.Description>
     </Dialog.Header>
 

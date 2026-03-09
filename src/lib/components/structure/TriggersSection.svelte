@@ -7,11 +7,13 @@
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import DdlPreview from './DdlPreview.svelte';
   import { Badge } from '$lib/components/ui/badge';
-  import { generateCreateTrigger, generateDropTrigger, generateToggleTrigger } from '$lib/utils/ddl';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
   // ── Create trigger dialog ──
   let addOpen = $state(false);
@@ -26,7 +28,7 @@
 
   const addSql = $derived(
     addName && addFuncName
-      ? generateCreateTrigger(tab.schema, tab.table, {
+      ? (dialect?.createTrigger(tab.schema, tab.table, {
           name: addName,
           timing: addTiming,
           event: addEvent,
@@ -34,7 +36,7 @@
           functionSchema: addFuncSchema,
           functionName: addFuncName,
           condition: addCondition || undefined,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -57,7 +59,8 @@
 
   // ── Toggle trigger ──
   async function toggleTrigger(triggerName: string, enable: boolean) {
-    const sql = generateToggleTrigger(tab.schema, tab.table, triggerName, enable);
+    const sql = dialect?.toggleTrigger(tab.schema, tab.table, triggerName, enable);
+    if (!sql) return;
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);
@@ -76,7 +79,7 @@
   }
 
   async function handleDrop() {
-    const sql = generateDropTrigger(tab.schema, tab.table, dropName);
+    const sql = dialect!.dropTrigger(tab.schema, tab.table, dropName);
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);

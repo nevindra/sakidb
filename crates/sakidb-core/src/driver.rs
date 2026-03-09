@@ -193,6 +193,42 @@ pub trait Restorer: Send + Sync {
     ) -> Result<RestoreProgress>;
 }
 
+// ── SQL export formatting — engine-specific DDL + data format ──
+
+pub trait SqlFormatter: Send + Sync {
+    /// Generate DDL for a table export (CREATE TABLE, indexes, triggers, constraints).
+    fn format_ddl(
+        &self,
+        columns: &[ColumnInfo],
+        indexes: &[IndexInfo],
+        constraints: &[UniqueConstraintInfo],
+        foreign_keys: &[ForeignKeyInfo],
+        check_constraints: &[CheckConstraintInfo],
+        triggers: &[TriggerInfo],
+        qualified_table: &str,
+        table_name: &str,
+    ) -> Option<String>;
+
+    /// Data section header. PG: "COPY ... FROM stdin;", SQLite: None.
+    fn format_data_header(
+        &self,
+        columns: &[ColumnDef],
+        qualified_table: &str,
+    ) -> Option<String>;
+
+    /// Format a single data row into buf.
+    fn format_data_row(
+        &self,
+        columns: &[ColumnDef],
+        cells: &[CellValue],
+        qualified_table: &str,
+        buf: &mut String,
+    );
+
+    /// Data section footer. PG: Some("\\."), SQLite: None.
+    fn format_data_footer(&self) -> Option<String>;
+}
+
 // ── Key-value operations — Redis (future) ──
 
 #[async_trait]

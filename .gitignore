@@ -19,3 +19,6 @@ Thumbs.db
 
 # Rust
 *.pdb
+
+# Worktrees
+.worktrees/

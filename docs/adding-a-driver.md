@@ -13,10 +13,11 @@ This guide walks through adding a new database engine to SakiDB. The architectur
 2. Create driver crate             → crates/sakidb-<engine>/
 3. Implement traits                → Driver (required) + optional traits
 4. Set EngineCapabilities          → tells frontend what to show/hide
-5. Feature-flag in src-tauri       → src-tauri/Cargo.toml
-6. Register in DriverRegistry      → src-tauri/src/lib.rs
-7. Add engine-specific commands    → src-tauri/src/commands/ (if needed)
-8. Add tests                       → unit, integration, benchmarks
+5. Add frontend SqlDialect         → src/lib/dialects/ (if SQL engine)
+6. Feature-flag in src-tauri       → src-tauri/Cargo.toml
+7. Register in DriverRegistry      → src-tauri/src/lib.rs
+8. Add engine-specific commands    → src-tauri/src/commands/ (if needed)
+9. Add tests                       → unit, integration, benchmarks
 ```
 
 ---
@@ -166,6 +167,26 @@ For engines that support schema introspection. Methods that your engine doesn't 
 
 For streaming data export and SQL file restore. Both support cancellation via `AtomicBool`.
 
+### Optional: `SqlFormatter`
+
+For engine-specific SQL export formatting (DDL generation, data row serialization). Without this, SQL export falls back to `Introspector::get_create_table_sql()` for DDL.
+
+```rust
+use sakidb_core::SqlFormatter;
+
+impl SqlFormatter for YourDriver {
+    fn format_ddl(&self, columns, indexes, constraints, foreign_keys, check_constraints, triggers, qualified_table, table_name) -> Option<String> {
+        // Return None to fall back to get_create_table_sql()
+        // Return Some(ddl) to use custom DDL generation
+    }
+    fn format_data_header(&self, columns, qualified_table) -> Option<String> { /* e.g. COPY header */ }
+    fn format_data_row(&self, columns, cells, qualified_table, buf) { /* write one row to buf */ }
+    fn format_data_footer(&self) -> Option<String> { /* e.g. COPY terminator */ }
+}
+```
+
+**Reference:** PostgreSQL uses COPY format (`format_data_header` → `COPY ... FROM stdin;`, tab-separated rows, `\.` footer). SQLite uses INSERT statements (`format_data_row` → `INSERT INTO ... VALUES (...);`, no header/footer).
+
 ### Optional: `KeyValueDriver`, `DocumentDriver`
 
 For non-SQL engines (Redis, MongoDB). These are not yet wired into the frontend.
@@ -195,7 +216,26 @@ The `EngineCapabilities` struct you return from `capabilities()` directly contro
 
 ---
 
-## Step 5: Feature-flag in src-tauri
+## Step 5: Add frontend SqlDialect (SQL engines only)
+
+If your engine supports SQL, add a dialect implementation in `src/lib/dialects/`. The `SqlDialect` interface handles all engine-specific SQL generation on the frontend (DDL, DML, cell literals, profiling queries).
+
+1. Create `src/lib/dialects/<engine>.ts` implementing `SqlDialect` from `types.ts`
+2. Add your dialect to the `getDialect()` factory in `src/lib/dialects/index.ts`
+
+```typescript
+// src/lib/dialects/index.ts
+case '<engine>':
+  return <engine>Dialect;
+```
+
+**Reference:** `sqlite.ts` is the simplest dialect — it returns `null` for unsupported features (profiling, triggers, partitions) and the UI handles null gracefully. `postgres.ts` is the full-featured reference.
+
+Methods returning `string | null`: return `null` when the engine doesn't support the operation. Components guard against null and hide the relevant UI.
+
+---
+
+## Step 6: Feature-flag in src-tauri
 
 In `src-tauri/Cargo.toml`:
 
@@ -210,7 +250,7 @@ default = ["postgres", "sqlite", "<engine>"]
 
 ---
 
-## Step 6: Register in DriverRegistry
+## Step 7: Register in DriverRegistry
 
 In `src-tauri/src/lib.rs`, add a registration block:
 
@@ -227,6 +267,7 @@ In `src-tauri/src/lib.rs`, add a registration block:
             introspector: Some(drv.clone()), // if Introspector implemented
             exporter: None,                 // if not implemented
             restorer: None,
+            formatter: Some(drv.clone()),   // if SqlFormatter implemented
             key_value: None,
             document: None,
         },
@@ -238,7 +279,7 @@ The `DriverEntry` fields must match what you declared in `EngineCapabilities`. I
 
 ---
 
-## Step 7: Engine-specific commands (optional)
+## Step 8: Engine-specific commands (optional)
 
 If your engine has operations that don't fit any trait (e.g., SQLite's `VACUUM`, `PRAGMA integrity_check`), add a dedicated command module:
 
@@ -251,7 +292,7 @@ Keep these minimal. If an operation can be expressed as a SQL query, use `SqlDri
 
 ---
 
-## Step 8: Tests
+## Step 9: Tests
 
 Follow the conventions in `CONTRIBUTING.md`:
 
@@ -278,11 +319,14 @@ Before submitting your PR:
 - [ ] Crate added to workspace `members`
 - [ ] `Driver` trait implemented with correct `EngineCapabilities`
 - [ ] Optional traits implemented (at minimum `SqlDriver` + `Introspector` for a useful driver)
+- [ ] `SqlFormatter` implemented for SQL export support
+- [ ] Frontend `SqlDialect` added in `src/lib/dialects/` with factory updated (SQL engines)
 - [ ] Feature flag added in `src-tauri/Cargo.toml`
-- [ ] Driver registered in `src-tauri/src/lib.rs`
-- [ ] Unit tests in `_test.rs` files covering public API
+- [ ] Driver registered in `src-tauri/src/lib.rs` (including `formatter` field)
+- [ ] Unit tests in `_test.rs` files covering public API (including `formatter_test.rs`)
+- [ ] Frontend dialect tests in `src/lib/dialects/__tests__/dialects.test.ts`
 - [ ] Integration tests behind `#![cfg(feature = "integration")]`
 - [ ] `cargo test --workspace` passes
 - [ ] `cargo clippy --workspace` passes
+- [ ] `pnpm check` and `pnpm test` pass
 - [ ] No changes to `sakidb-core` types (except `EngineType` variant)
-- [ ] No changes to frontend code

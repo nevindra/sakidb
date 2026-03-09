@@ -1,4 +1,5 @@
 import type { CellValue, ColumnDef, ColumnInfo } from '$lib/types';
+import type { SqlDialect } from '$lib/dialects/types';
 
 /** Escape a SQL identifier (column/table/schema name) by doubling embedded quotes. */
 export function quoteIdent(name: string): string {
@@ -10,59 +11,18 @@ export function qualifiedTable(schema: string, table: string): string {
   return schema ? `${quoteIdent(schema)}.${quoteIdent(table)}` : quoteIdent(table);
 }
 
-// Types that need explicit SQL casts when used as literals
-const SQL_CAST_MAP: Record<string, string> = {
-  uuid: 'uuid', inet: 'inet', cidr: 'cidr',
-  macaddr: 'macaddr', macaddr8: 'macaddr8',
-  date: 'date', time: 'time', timetz: 'timetz',
-  interval: 'interval', xml: 'xml',
-  point: 'point', line: 'line', lseg: 'lseg',
-  box: 'box', circle: 'circle', polygon: 'polygon', path: 'path',
-  tsvector: 'tsvector', tsquery: 'tsquery',
-  bit: 'bit', varbit: 'varbit',
-  pg_lsn: 'pg_lsn',
-};
-
-export function cellValueToSqlLiteral(cell: CellValue, dataType?: string): string {
-  if (cell === 'Null') return 'NULL';
-  if ('Bool' in cell) return cell.Bool ? 'TRUE' : 'FALSE';
-  if ('Int' in cell) return String(cell.Int);
-  if ('Float' in cell) return Number.isFinite(cell.Float) ? String(cell.Float) : 'NULL';
-  if ('Text' in cell) {
-    const escaped = `'${cell.Text.replace(/'/g, "''")}'`;
-    if (dataType) {
-      const t = dataType.toLowerCase().replace(/\s*\(.*\)$/, '');
-      const cast = SQL_CAST_MAP[t];
-      if (cast) return `${escaped}::${cast}`;
-    }
-    return escaped;
-  }
-  if ('Json' in cell) return `'${cell.Json.replace(/'/g, "''")}'::jsonb`;
-  if ('Timestamp' in cell) {
-    const escaped = `'${cell.Timestamp.replace(/'/g, "''")}'`;
-    if (dataType) {
-      const t = dataType.toLowerCase();
-      if (t === 'date') return `${escaped}::date`;
-      if (t === 'timetz' || t === 'time with time zone') return `${escaped}::timetz`;
-      if (t === 'time' || t === 'time without time zone') return `${escaped}::time`;
-      if (t.startsWith('timestamptz') || t.startsWith('timestamp with')) return `${escaped}::timestamptz`;
-    }
-    return `${escaped}::timestamp`;
-  }
-  if ('Bytes' in cell) {
-    const hex = cell.Bytes.map(b => b.toString(16).padStart(2, '0')).join('');
-    return `'\\x${hex}'::bytea`;
-  }
-  return 'NULL';
+export function cellValueToSqlLiteral(cell: CellValue, dataType: string | undefined, dialect: SqlDialect): string {
+  return dialect.cellLiteral(cell, dataType);
 }
 
 function buildWhereClause(
   pkColumns: string[],
   pkValues: CellValue[],
-  pkDataTypes?: string[],
+  pkDataTypes: string[] | undefined,
+  dialect: SqlDialect,
 ): string {
   return pkColumns
-    .map((col, i) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(pkValues[i], pkDataTypes?.[i])}`)
+    .map((col, i) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(pkValues[i], pkDataTypes?.[i], dialect)}`)
     .join(' AND ');
 }
 
@@ -72,12 +32,13 @@ export function generateUpdateSql(
   pkColumns: string[],
   pkValues: CellValue[],
   changes: [string, CellValue, string?][],
-  pkDataTypes?: string[],
+  pkDataTypes: string[] | undefined,
+  dialect: SqlDialect,
 ): string {
   const setClauses = changes.map(
-    ([col, val, dt]) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(val, dt)}`
+    ([col, val, dt]) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(val, dt, dialect)}`
   );
-  return `UPDATE ${qualifiedTable(schema, table)} SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
+  return `UPDATE ${qualifiedTable(schema, table)} SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes, dialect)}`;
 }
 
 export function generateInsertSql(
@@ -85,7 +46,8 @@ export function generateInsertSql(
   table: string,
   columns: string[],
   values: CellValue[],
-  dataTypes?: string[],
+  dataTypes: string[] | undefined,
+  dialect: SqlDialect,
 ): string {
   const nonNullPairs = columns
     .map((col, i) => ({ col, val: values[i], dt: dataTypes?.[i] }))
@@ -94,7 +56,7 @@ export function generateInsertSql(
     return `INSERT INTO ${qualifiedTable(schema, table)} DEFAULT VALUES`;
   }
   const colList = nonNullPairs.map(p => quoteIdent(p.col)).join(', ');
-  const valList = nonNullPairs.map(p => cellValueToSqlLiteral(p.val, p.dt)).join(', ');
+  const valList = nonNullPairs.map(p => cellValueToSqlLiteral(p.val, p.dt, dialect)).join(', ');
   return `INSERT INTO ${qualifiedTable(schema, table)} (${colList}) VALUES (${valList})`;
 }
 
@@ -103,9 +65,10 @@ export function generateDeleteSql(
   table: string,
   pkColumns: string[],
   pkValues: CellValue[],
-  pkDataTypes?: string[],
+  pkDataTypes: string[] | undefined,
+  dialect: SqlDialect,
 ): string {
-  return `DELETE FROM ${qualifiedTable(schema, table)} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
+  return `DELETE FROM ${qualifiedTable(schema, table)} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes, dialect)}`;
 }
 
 export function wrapInTransaction(statements: string[]): string {

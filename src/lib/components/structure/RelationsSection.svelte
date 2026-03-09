@@ -6,11 +6,13 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import DdlPreview from './DdlPreview.svelte';
-  import { generateAddForeignKey, generateDropConstraint } from '$lib/utils/ddl';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
   // ── Add FK dialog ──
   let addOpen = $state(false);
@@ -25,7 +27,7 @@
 
   const addSql = $derived(
     addColumns && addRefTable && addRefColumns
-      ? generateAddForeignKey(tab.schema, tab.table, {
+      ? (dialect?.addForeignKey(tab.schema, tab.table, {
           name: addName || undefined,
           columns: addColumns.split(',').map(c => c.trim()).filter(Boolean),
           refSchema: addRefSchema,
@@ -33,7 +35,7 @@
           refColumns: addRefColumns.split(',').map(c => c.trim()).filter(Boolean),
           onUpdate: addOnUpdate,
           onDelete: addOnDelete,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -65,7 +67,7 @@
   }
 
   async function handleDrop() {
-    const sql = generateDropConstraint(tab.schema, tab.table, dropName);
+    const sql = dialect!.dropConstraint(tab.schema, tab.table, dropName);
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);

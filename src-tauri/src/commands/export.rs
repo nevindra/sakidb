@@ -73,39 +73,6 @@ fn write_csv_cell(buf: &mut String, cell: &CellValue) {
     }
 }
 
-/// Write a CellValue in PostgreSQL COPY text format into the buffer.
-fn write_copy_cell(buf: &mut String, cell: &CellValue) {
-    match cell {
-        CellValue::Null => buf.push_str("\\N"),
-        CellValue::Bool(b) => {
-            let _ = write!(buf, "{b}");
-        }
-        CellValue::Int(i) => {
-            let _ = write!(buf, "{i}");
-        }
-        CellValue::Float(f) => {
-            let _ = write!(buf, "{f}");
-        }
-        CellValue::Text(s) | CellValue::Json(s) | CellValue::Timestamp(s) => {
-            for ch in s.chars() {
-                match ch {
-                    '\\' => buf.push_str("\\\\"),
-                    '\t' => buf.push_str("\\t"),
-                    '\n' => buf.push_str("\\n"),
-                    '\r' => buf.push_str("\\r"),
-                    _ => buf.push(ch),
-                }
-            }
-        }
-        CellValue::Bytes(b) => {
-            buf.push_str("\\\\x");
-            for byte in b {
-                let _ = write!(buf, "{byte:02x}");
-            }
-        }
-    }
-}
-
 /// Run a single COUNT(*) query. Returns None on failure (non-fatal).
 async fn count_estimate(state: &AppState, conn_id: &ConnectionId, sql: &str) -> Option<i64> {
     let sql_driver = state.registry.sql_for(conn_id).ok()?;
@@ -280,141 +247,38 @@ pub async fn export_table_sql(
 
     let qualified = qualified_table(&schema, &table);
 
-    // Phase 1: DDL — fetch all metadata first (async), then write synchronously
+    // Phase 1: DDL — use SqlFormatter if available, else fall back to get_create_table_sql
     if include_ddl {
         let introspector = state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?;
+        let formatter = state.registry.formatter_for(&conn_id).ok();
 
-        let columns = introspector
-            .list_columns(&conn_id, &schema, &table)
-            .await
-            .map_err(|e| e.to_string())?;
+        // Try formatter-generated DDL first (uses introspected metadata)
+        let ddl_text = if let Some(fmt) = formatter {
+            let columns = introspector.list_columns(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
+            let indexes = introspector.list_indexes(&conn_id, &schema).await.map_err(|e| e.to_string())?;
+            let constraints = introspector.list_unique_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
+            let foreign_keys = introspector.list_foreign_keys(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
+            let check_constraints = introspector.list_check_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
+            let triggers = introspector.list_triggers(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
 
-        let unique_constraints = introspector
-            .list_unique_constraints(&conn_id, &schema, &table)
-            .await
-            .map_err(|e| e.to_string())?;
+            fmt.format_ddl(&columns, &indexes, &constraints, &foreign_keys, &check_constraints, &triggers, &qualified, &table)
+        } else {
+            None
+        };
 
-        let foreign_keys = introspector
-            .list_foreign_keys(&conn_id, &schema, &table)
-            .await
-            .map_err(|e| e.to_string())?;
+        // Fall back to engine's native CREATE TABLE SQL (e.g. SQLite's sqlite_master)
+        let ddl_text = match ddl_text {
+            Some(ddl) => ddl,
+            None => introspector.get_create_table_sql(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?,
+        };
 
-        let check_constraints = introspector
-            .list_check_constraints(&conn_id, &schema, &table)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let indexes = introspector
-            .list_indexes(&conn_id, &schema)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let triggers = introspector
-            .list_triggers(&conn_id, &schema, &table)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        // All async fetches done — now write DDL synchronously (no await while holding lock)
         {
             let mut w = writer.lock().unwrap();
-
-            writeln!(w, "CREATE TABLE {qualified} (")
-                .map_err(|e| format!("Write error: {e}"))?;
-
-            let mut col_defs: Vec<String> = Vec::new();
-            for col in &columns {
-                let mut def = format!("    {} {}", quote_ident(&col.name), col.data_type);
-                if !col.is_nullable {
-                    def.push_str(" NOT NULL");
-                }
-                if let Some(ref default) = col.default_value {
-                    def.push_str(&format!(" DEFAULT {default}"));
-                }
-                col_defs.push(def);
-            }
-
-            for uc in &unique_constraints {
-                let cols: Vec<String> = uc.columns.iter().map(|c| quote_ident(c)).collect();
-                if uc.is_primary {
-                    col_defs.push(format!(
-                        "    CONSTRAINT {} PRIMARY KEY ({})",
-                        quote_ident(&uc.constraint_name),
-                        cols.join(", ")
-                    ));
-                } else {
-                    col_defs.push(format!(
-                        "    CONSTRAINT {} UNIQUE ({})",
-                        quote_ident(&uc.constraint_name),
-                        cols.join(", ")
-                    ));
-                }
-            }
-
-            for fk in &foreign_keys {
-                let local_cols: Vec<String> = fk.columns.iter().map(|c| quote_ident(c)).collect();
-                let foreign_cols: Vec<String> =
-                    fk.foreign_columns.iter().map(|c| quote_ident(c)).collect();
-                col_defs.push(format!(
-                    "    CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}.{} ({}) ON UPDATE {} ON DELETE {}",
-                    quote_ident(&fk.constraint_name),
-                    local_cols.join(", "),
-                    quote_ident(&fk.foreign_table_schema),
-                    quote_ident(&fk.foreign_table_name),
-                    foreign_cols.join(", "),
-                    fk.on_update,
-                    fk.on_delete
-                ));
-            }
-
-            for cc in &check_constraints {
-                col_defs.push(format!(
-                    "    CONSTRAINT {} {}",
-                    quote_ident(&cc.constraint_name),
-                    cc.check_clause
-                ));
-            }
-
-            writeln!(w, "{}\n);\n", col_defs.join(",\n"))
-                .map_err(|e| format!("Write error: {e}"))?;
-
-            for idx in indexes
-                .iter()
-                .filter(|i| i.table_name == table && !i.is_primary)
-            {
-                let unique = if idx.is_unique { "UNIQUE " } else { "" };
-                writeln!(
-                    w,
-                    "CREATE {unique}INDEX {} ON {qualified} USING {} ({});\n",
-                    quote_ident(&idx.name),
-                    idx.index_type,
-                    idx.columns
-                )
-                .map_err(|e| format!("Write error: {e}"))?;
-            }
-
-            for trig in &triggers {
-                let condition = trig
-                    .condition
-                    .as_ref()
-                    .map(|c| format!("\n    WHEN ({c})"))
-                    .unwrap_or_default();
-                writeln!(
-                    w,
-                    "CREATE TRIGGER {} {} {} ON {qualified}\n    FOR EACH {}{}\n    EXECUTE FUNCTION {}.{}();\n",
-                    quote_ident(&trig.name),
-                    trig.timing,
-                    trig.event,
-                    trig.for_each,
-                    condition,
-                    quote_ident(&trig.function_schema),
-                    quote_ident(&trig.function_name)
-                )
-                .map_err(|e| format!("Write error: {e}"))?;
-            }
-        } // MutexGuard dropped here
+            writeln!(w, "{ddl_text}").map_err(|e| format!("Write error: {e}"))?;
+        }
     }
 
-    // Phase 2: Data using COPY format
+    // Phase 2: Data using engine-specific format via SqlFormatter
     let mut total_rows: u64 = 0;
 
     if include_data {
@@ -429,24 +293,27 @@ pub async fn export_table_sql(
             .export_cancel_flags
             .insert(conn_id, cancel_flag.clone());
 
-        let copy_state = Arc::new(Mutex::new((String::with_capacity(4096), false))); // (line_buf, copy_header_written)
-        let copy_state_cb = copy_state.clone();
+        let formatter = state.registry.formatter_arc_for(&conn_id).map_err(|e| e.to_string())?;
+
+        let data_state = Arc::new(Mutex::new((String::with_capacity(4096), false))); // (line_buf, header_written)
+        let data_state_cb = data_state.clone();
         let writer_cb = writer.clone();
         let app_clone = app_handle.clone();
         let qualified_clone = qualified.clone();
+        let formatter_cb = formatter.clone();
 
         let on_batch = move |columns: &[ColumnDef], cells: &[CellValue], rows_so_far: u64| -> sakidb_core::error::Result<()> {
-            let mut cs = copy_state_cb.lock().unwrap();
-            let (ref mut line_buf, ref mut copy_header_written) = *cs;
+            let mut ds = data_state_cb.lock().unwrap();
+            let (ref mut line_buf, ref mut header_written) = *ds;
             let mut w = writer_cb.lock().unwrap();
 
-            // Write COPY header on first batch
-            if !*copy_header_written && !columns.is_empty() {
-                let col_names: Vec<String> =
-                    columns.iter().map(|c| quote_ident(&c.name)).collect();
-                writeln!(w, "COPY {qualified_clone} ({}) FROM stdin;", col_names.join(", "))
-                    .map_err(|e| SakiError::QueryFailed(format!("Write error: {e}")))?;
-                *copy_header_written = true;
+            // Write data header on first batch (e.g. COPY ... FROM stdin; for Postgres)
+            if !*header_written && !columns.is_empty() {
+                if let Some(header) = formatter_cb.format_data_header(columns, &qualified_clone) {
+                    w.write_all(header.as_bytes())
+                        .map_err(|e| SakiError::QueryFailed(format!("Write error: {e}")))?;
+                }
+                *header_written = true;
             }
 
             let num_cols = columns.len();
@@ -454,13 +321,8 @@ pub async fn export_table_sql(
 
             for row_idx in 0..row_count {
                 line_buf.clear();
-                for col_idx in 0..num_cols {
-                    if col_idx > 0 {
-                        line_buf.push('\t');
-                    }
-                    write_copy_cell(line_buf, &cells[row_idx * num_cols + col_idx]);
-                }
-                line_buf.push('\n');
+                let row_cells = &cells[row_idx * num_cols..(row_idx + 1) * num_cols];
+                formatter_cb.format_data_row(columns, row_cells, &qualified_clone, line_buf);
                 w.write_all(line_buf.as_bytes())
                     .map_err(|e| SakiError::QueryFailed(format!("Write error: {e}")))?;
             }
@@ -486,11 +348,14 @@ pub async fn export_table_sql(
 
         match result {
             Ok(rows) => {
-                // Write COPY terminator
-                let cs = copy_state.lock().unwrap();
-                if cs.1 {
-                    let mut w = writer.lock().unwrap();
-                    writeln!(w, "\\.").map_err(|e| format!("Write error: {e}"))?;
+                // Write data footer (e.g. \. for Postgres COPY)
+                let ds = data_state.lock().unwrap();
+                if ds.1 {
+                    if let Some(footer) = formatter.format_data_footer() {
+                        let mut w = writer.lock().unwrap();
+                        w.write_all(footer.as_bytes())
+                            .map_err(|e| format!("Write error: {e}"))?;
+                    }
                 }
                 total_rows = rows;
                 let _ = app_handle.emit(

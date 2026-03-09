@@ -79,7 +79,7 @@ A button is a button everywhere. An input is an input everywhere. If your new fe
 
 ### The Trait Is the Extension Point
 
-Adding a new database engine means creating a new crate that implements composable traits from `sakidb-core`: `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`). Zero changes to frontend — the UI adapts automatically via `EngineCapabilities`. See **[docs/adding-a-driver.md](docs/adding-a-driver.md)** for the full step-by-step guide.
+Adding a new database engine means creating a new crate that implements composable traits from `sakidb-core`: `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `SqlFormatter`). For SQL engines, also add a frontend `SqlDialect` in `src/lib/dialects/` — this handles engine-specific SQL generation (DDL, DML, cell literals, profiling queries). The UI adapts automatically via `EngineCapabilities`. See **[docs/adding-a-driver.md](docs/adding-a-driver.md)** for the full step-by-step guide.
 
 - All shared types live in `sakidb-core` (`CellValue`, `ColumnarResult`, `QueryResult`, `ErdData`, `SakiError`). New database crates depend on `sakidb-core` and nothing else from the workspace.
 - DO NOT add database-specific types to `sakidb-core`. If only Postgres needs it, it lives in `sakidb-postgres`.

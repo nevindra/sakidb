@@ -7,11 +7,13 @@
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import DdlPreview from './DdlPreview.svelte';
-  import { generateAddColumn, generateAlterColumn, generateDropColumn } from '$lib/utils/ddl';
+  import { getDialect } from '$lib/dialects';
+  import type { EngineType } from '$lib/types';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
   // ── Add column dialog ──
   let addOpen = $state(false);
@@ -23,12 +25,12 @@
 
   const addSql = $derived(
     addName
-      ? generateAddColumn(tab.schema, tab.table, {
+      ? (dialect?.addColumn(tab.schema, tab.table, {
           name: addName,
           type: addType,
           nullable: addNullable,
           defaultValue: addDefault || undefined,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -64,14 +66,14 @@
 
   const editSql = $derived(
     editOrigName
-      ? generateAlterColumn(tab.schema, tab.table, editOrigName, {
+      ? (dialect?.alterColumn(tab.schema, tab.table, editOrigName, {
           type: editType !== editOrigType ? editType : undefined,
           nullable: editNullable !== editOrigNullable ? editNullable : undefined,
           defaultValue: editDefault !== editOrigDefault
             ? (editDefault || null)
             : undefined,
           rename: editName !== editOrigName ? editName : undefined,
-        })
+        }) ?? '')
       : ''
   );
 
@@ -111,7 +113,7 @@
   }
 
   async function handleDrop() {
-    const sql = generateDropColumn(tab.schema, tab.table, dropColName);
+    const sql = dialect!.dropColumn(tab.schema, tab.table, dropColName);
     try {
       await app.executeDdl(tab.runtimeConnectionId, sql);
       app.loadStructureTab(tab.id);
