@@ -116,10 +116,12 @@ src/lib/stores/             — Modular state (Svelte 5 runes), barrel-exported 
   ├── search.svelte.ts      — Schema tree search/filter
   ├── shared.svelte.ts      — Global error state
   └── exports.svelte.ts     — CSV/SQL export, SQL restore
-src/lib/dialects/           — Engine-specific SQL generation (SqlDialect interface + implementations)
+src/lib/dialects/           — Engine-specific SQL generation AND static data (types, options)
   ├── types.ts              — SqlDialect interface and param types
   ├── postgres.ts           — PostgresDialect (casts, CASCADE, COPY, TRUNCATE, profiling)
   ├── sqlite.ts             — SqliteDialect (INSERT, no CASCADE, no profiling)
+  ├── pg-types.ts           — PostgreSQL data type groups and precision hints
+  ├── sqlite-types.ts       — SQLite data type groups and precision hints
   └── index.ts              — getDialect() factory with exhaustive engine switch
 src/lib/context-menus/      — Centralized context menu definitions and renderer
   ├── types.ts              — MenuEntry, MenuItemDef, MenuSeparatorDef, MenuContext

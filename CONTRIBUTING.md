@@ -58,6 +58,7 @@ Components should be database-agnostic. SakiDB will support multiple database en
 - Keep database-specific logic in store modules, not in components. Components receive data through props — they don't know or care which driver produced it.
 - If you're building a component that displays columns, rows, indexes, or constraints, design it against the types in `src/lib/types/index.ts` (which mirror `sakidb-core` Rust types), not against Postgres-specific structures.
 - When a component needs database-specific behavior (e.g., Postgres-only features), use conditional rendering based on data, not hardcoded assumptions.
+- **Static data must be engine-aware too.** Type lists, option menus, validation rules, and any other data that differs between engines must switch based on the active `EngineType`. Never import a Postgres-specific constant (e.g., `PG_TYPE_GROUPS`) without also handling other engines. Engine-specific data files live in `src/lib/dialects/` (e.g., `pg-types.ts`, `sqlite-types.ts`).
 
 ### Context Menus
 

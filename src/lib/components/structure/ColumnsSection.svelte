@@ -13,6 +13,7 @@
   import { getDialect } from '$lib/dialects';
   import type { EngineType } from '$lib/types';
   import { PG_TYPE_GROUPS, PG_PRECISION_TYPES } from '$lib/dialects/pg-types';
+  import { SQLITE_TYPE_GROUPS, SQLITE_PRECISION_TYPES } from '$lib/dialects/sqlite-types';
 
   let { tab }: { tab: StructureTab } = $props();
 
@@ -36,12 +37,15 @@
   let addComment = $state('');
   let addLoading = $state(false);
 
-  const addPrecisionHint = $derived(PG_PRECISION_TYPES[addType] ?? null);
+  const typeGroups = $derived(engine === 'sqlite' ? SQLITE_TYPE_GROUPS : PG_TYPE_GROUPS);
+  const precisionTypes = $derived(engine === 'sqlite' ? SQLITE_PRECISION_TYPES : PG_PRECISION_TYPES);
+
+  const addPrecisionHint = $derived(precisionTypes[addType] ?? null);
 
   const addFilteredTypes = $derived(
     addTypeSearch === ''
-      ? PG_TYPE_GROUPS
-      : PG_TYPE_GROUPS
+      ? typeGroups
+      : typeGroups
           .map(g => ({ ...g, types: g.types.filter(t => t.includes(addTypeSearch.toLowerCase())) }))
           .filter(g => g.types.length > 0)
   );
@@ -107,8 +111,8 @@
 
   const editFilteredTypes = $derived(
     editTypeSearch === ''
-      ? PG_TYPE_GROUPS
-      : PG_TYPE_GROUPS
+      ? typeGroups
+      : typeGroups
           .map(g => ({ ...g, types: g.types.filter(t => t.includes(editTypeSearch.toLowerCase())) }))
           .filter(g => g.types.length > 0)
   );
