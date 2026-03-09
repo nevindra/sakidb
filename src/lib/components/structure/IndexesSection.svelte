@@ -2,10 +2,13 @@
   import { getAppState } from '$lib/stores';
   import type { StructureTab } from '$lib/types';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { Plus, Trash2 } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Select from '$lib/components/ui/select';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
+  import { MultiSelect } from '$lib/components/ui/multi-select';
   import DdlPreview from './DdlPreview.svelte';
   import { getDialect } from '$lib/dialects';
   import type { EngineType } from '$lib/types';
@@ -16,19 +19,23 @@
   const app = getAppState();
   const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
+  const columnNames = $derived(tab.columns.map(c => c.name));
+
+  const indexTypes = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist'];
+
   // ── Create index dialog ──
   let addOpen = $state(false);
   let addName = $state('');
-  let addColumns = $state('');
+  let addColumns: string[] = $state([]);
   let addUnique = $state(false);
   let addType = $state('btree');
   let addLoading = $state(false);
 
   const addSql = $derived(
-    addName && addColumns
+    addName && addColumns.length > 0
       ? (dialect?.createIndex(tab.schema, tab.table, {
           name: addName,
-          columns: addColumns.split(',').map(c => c.trim()).filter(Boolean),
+          columns: addColumns,
           unique: addUnique,
           type: addType,
         }) ?? '')
@@ -42,7 +49,7 @@
       await app.executeDdl(tab.runtimeConnectionId, addSql);
       addOpen = false;
       addName = '';
-      addColumns = '';
+      addColumns = [];
       addUnique = false;
       addType = 'btree';
       app.loadStructureTab(tab.id);
@@ -136,22 +143,28 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="idx-name">Index Name</label>
-        <input id="idx-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addName} placeholder="idx_table_column" />
+        <Input id="idx-name" class="mt-1" bind:value={addName} placeholder="idx_table_column" />
       </div>
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="idx-cols">Columns (comma separated)</label>
-        <input id="idx-cols" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addColumns} placeholder="col1, col2" />
+        <label class="text-xs font-medium text-muted-foreground">Columns</label>
+        <div class="mt-1">
+          <MultiSelect options={columnNames} bind:selected={addColumns} placeholder="Select columns..." />
+        </div>
       </div>
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="idx-type">Index Type</label>
-        <select id="idx-type" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addType}>
-          <option value="btree">btree</option>
-          <option value="hash">hash</option>
-          <option value="gin">gin</option>
-          <option value="gist">gist</option>
-          <option value="brin">brin</option>
-          <option value="spgist">spgist</option>
-        </select>
+        <label class="text-xs font-medium text-muted-foreground">Index Type</label>
+        <div class="mt-1">
+          <Select.Root type="single" bind:value={addType}>
+            <Select.Trigger class="w-full">
+              <span data-slot="select-value">{addType}</span>
+            </Select.Trigger>
+            <Select.Content>
+              {#each indexTypes as t}
+                <Select.Item value={t} label={t} />
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
       </div>
       <label class="flex items-center gap-2 cursor-pointer">
         <Checkbox bind:checked={addUnique} />
@@ -161,7 +174,7 @@
     </div>
     <Dialog.Footer>
       <Button variant="outline" size="sm" onclick={() => (addOpen = false)} disabled={addLoading}>Cancel</Button>
-      <Button size="sm" onclick={handleAdd} disabled={!addName || !addColumns || addLoading}>Execute</Button>
+      <Button size="sm" onclick={handleAdd} disabled={!addName || addColumns.length === 0 || addLoading}>Execute</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

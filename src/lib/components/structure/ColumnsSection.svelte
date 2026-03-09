@@ -2,26 +2,49 @@
   import { getAppState } from '$lib/stores';
   import type { StructureTab } from '$lib/types';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { Plus, Pencil, Trash2, Key } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Combobox from '$lib/components/ui/combobox';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Switch } from '$lib/components/ui/switch';
   import DdlPreview from './DdlPreview.svelte';
   import { getDialect } from '$lib/dialects';
   import type { EngineType } from '$lib/types';
+  import { PG_TYPE_GROUPS, PG_PRECISION_TYPES } from '$lib/dialects/pg-types';
 
   let { tab }: { tab: StructureTab } = $props();
 
   const app = getAppState();
-  const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
+  const engine = $derived(app.getSavedConnection(tab.savedConnectionId)?.engine as EngineType | undefined);
+  const dialect = $derived(engine ? getDialect(engine) : null);
+  const isPostgres = $derived(engine === 'postgres');
 
   // ── Add column dialog ──
   let addOpen = $state(false);
   let addName = $state('');
   let addType = $state('text');
+  let addTypeSearch = $state('');
+  let addPrecision = $state('');
   let addNullable = $state(true);
   let addDefault = $state('');
+  let addPrimaryKey = $state(false);
+  let addUnique = $state(false);
+  let addIsArray = $state(false);
+  let addCheck = $state('');
+  let addComment = $state('');
   let addLoading = $state(false);
+
+  const addPrecisionHint = $derived(PG_PRECISION_TYPES[addType] ?? null);
+
+  const addFilteredTypes = $derived(
+    addTypeSearch === ''
+      ? PG_TYPE_GROUPS
+      : PG_TYPE_GROUPS
+          .map(g => ({ ...g, types: g.types.filter(t => t.includes(addTypeSearch.toLowerCase())) }))
+          .filter(g => g.types.length > 0)
+  );
 
   const addSql = $derived(
     addName
@@ -30,9 +53,29 @@
           type: addType,
           nullable: addNullable,
           defaultValue: addDefault || undefined,
+          primaryKey: addPrimaryKey,
+          unique: addUnique,
+          isArray: addIsArray,
+          precision: addPrecision || undefined,
+          check: addCheck || undefined,
+          comment: addComment || undefined,
         }) ?? '')
       : ''
   );
+
+  function resetAddForm() {
+    addName = '';
+    addType = 'text';
+    addTypeSearch = '';
+    addPrecision = '';
+    addNullable = true;
+    addDefault = '';
+    addPrimaryKey = false;
+    addUnique = false;
+    addIsArray = false;
+    addCheck = '';
+    addComment = '';
+  }
 
   async function handleAdd() {
     if (!addSql) return;
@@ -40,10 +83,7 @@
     try {
       await app.executeDdl(tab.runtimeConnectionId, addSql);
       addOpen = false;
-      addName = '';
-      addType = 'text';
-      addNullable = true;
-      addDefault = '';
+      resetAddForm();
       app.loadStructureTab(tab.id);
     } catch (e) {
       // Error shown via toast
@@ -57,12 +97,21 @@
   let editOrigName = $state('');
   let editName = $state('');
   let editType = $state('');
+  let editTypeSearch = $state('');
   let editNullable = $state(true);
   let editDefault = $state('');
   let editLoading = $state(false);
   let editOrigType = $state('');
   let editOrigNullable = $state(true);
   let editOrigDefault = $state('');
+
+  const editFilteredTypes = $derived(
+    editTypeSearch === ''
+      ? PG_TYPE_GROUPS
+      : PG_TYPE_GROUPS
+          .map(g => ({ ...g, types: g.types.filter(t => t.includes(editTypeSearch.toLowerCase())) }))
+          .filter(g => g.types.length > 0)
+  );
 
   const editSql = $derived(
     editOrigName
@@ -82,6 +131,7 @@
     editName = col.name;
     editType = col.data_type;
     editOrigType = col.data_type;
+    editTypeSearch = '';
     editNullable = col.is_nullable;
     editOrigNullable = col.is_nullable;
     editDefault = col.default_value ?? '';
@@ -185,20 +235,82 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="add-col-name">Name</label>
-        <input id="add-col-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addName} />
+        <Input id="add-col-name" class="mt-1" bind:value={addName} placeholder="column_name" />
       </div>
+
+      <!-- Type + Precision row -->
+      <div class="grid gap-2" class:grid-cols-2={addPrecisionHint !== null} class:grid-cols-1={addPrecisionHint === null}>
+        <div>
+          <label class="text-xs font-medium text-muted-foreground">Type</label>
+          <div class="relative mt-1">
+            <Combobox.Root type="single" bind:value={addType} onOpenChangeComplete={(o) => { if (!o) addTypeSearch = ''; }}>
+              <Combobox.Input
+                placeholder="Search types..."
+                oninput={(e) => { addTypeSearch = e.currentTarget.value; }}
+              />
+              <Combobox.Trigger />
+              <Combobox.Content>
+                {#each addFilteredTypes as group}
+                  <Combobox.Group>
+                    <Combobox.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group.label}</Combobox.GroupHeading>
+                    {#each group.types as t}
+                      <Combobox.Item value={t} label={t} />
+                    {/each}
+                  </Combobox.Group>
+                {:else}
+                  <div class="py-2 text-center text-xs text-muted-foreground">No matching types</div>
+                {/each}
+              </Combobox.Content>
+            </Combobox.Root>
+          </div>
+        </div>
+        {#if addPrecisionHint !== null}
+          <div>
+            <label class="text-xs font-medium text-muted-foreground" for="add-col-precision">Length / Precision</label>
+            <Input id="add-col-precision" class="mt-1" bind:value={addPrecision} placeholder={addPrecisionHint || '...'} />
+          </div>
+        {/if}
+      </div>
+
+      <!-- Constraints row -->
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <Checkbox bind:checked={addNullable} disabled={addPrimaryKey} />
+          <span class="text-xs text-muted-foreground">Nullable</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <Checkbox bind:checked={addPrimaryKey} onCheckedChange={(v) => { if (v) { addNullable = false; addUnique = false; } }} />
+          <span class="text-xs text-muted-foreground">Primary Key</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <Checkbox bind:checked={addUnique} disabled={addPrimaryKey} />
+          <span class="text-xs text-muted-foreground">Unique</span>
+        </label>
+        {#if isPostgres}
+          <label class="flex items-center gap-2 cursor-pointer">
+            <Switch bind:checked={addIsArray} class="scale-75" />
+            <span class="text-xs text-muted-foreground">Array</span>
+          </label>
+        {/if}
+      </div>
+
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="add-col-type">Type</label>
-        <input id="add-col-type" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addType} />
+        <label class="text-xs font-medium text-muted-foreground" for="add-col-default">Default Value</label>
+        <Input id="add-col-default" class="mt-1" bind:value={addDefault} placeholder="e.g. 0, 'text', now(), gen_random_uuid()" />
       </div>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <Checkbox bind:checked={addNullable} />
-        <span class="text-xs text-muted-foreground">Nullable</span>
-      </label>
+
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="add-col-default">Default</label>
-        <input id="add-col-default" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addDefault} placeholder="e.g. 0, 'text', now()" />
+        <label class="text-xs font-medium text-muted-foreground" for="add-col-check">Check Constraint</label>
+        <Input id="add-col-check" class="mt-1" bind:value={addCheck} placeholder="e.g. age > 0, status IN ('active', 'inactive')" />
       </div>
+
+      {#if isPostgres}
+        <div>
+          <label class="text-xs font-medium text-muted-foreground" for="add-col-comment">Comment</label>
+          <Input id="add-col-comment" class="mt-1" bind:value={addComment} placeholder="Column description" />
+        </div>
+      {/if}
+
       <DdlPreview sql={addSql} />
     </div>
     <Dialog.Footer>
@@ -217,11 +329,31 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="edit-col-name">Name</label>
-        <input id="edit-col-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={editName} />
+        <Input id="edit-col-name" class="mt-1" bind:value={editName} />
       </div>
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="edit-col-type">Type</label>
-        <input id="edit-col-type" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={editType} />
+        <label class="text-xs font-medium text-muted-foreground">Type</label>
+        <div class="relative mt-1">
+          <Combobox.Root type="single" bind:value={editType} onOpenChangeComplete={(o) => { if (!o) editTypeSearch = ''; }}>
+            <Combobox.Input
+              placeholder="Search types..."
+              oninput={(e) => { editTypeSearch = e.currentTarget.value; }}
+            />
+            <Combobox.Trigger />
+            <Combobox.Content>
+              {#each editFilteredTypes as group}
+                <Combobox.Group>
+                  <Combobox.GroupHeading class="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group.label}</Combobox.GroupHeading>
+                  {#each group.types as t}
+                    <Combobox.Item value={t} label={t} />
+                  {/each}
+                </Combobox.Group>
+              {:else}
+                <div class="py-2 text-center text-xs text-muted-foreground">No matching types</div>
+              {/each}
+            </Combobox.Content>
+          </Combobox.Root>
+        </div>
       </div>
       <label class="flex items-center gap-2 cursor-pointer">
         <Checkbox bind:checked={editNullable} />
@@ -229,7 +361,7 @@
       </label>
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="edit-col-default">Default</label>
-        <input id="edit-col-default" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={editDefault} placeholder="e.g. 0, 'text', now()" />
+        <Input id="edit-col-default" class="mt-1" bind:value={editDefault} placeholder="e.g. 0, 'text', now()" />
       </div>
       <DdlPreview sql={editSql} />
     </div>

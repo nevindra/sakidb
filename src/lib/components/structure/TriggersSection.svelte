@@ -1,9 +1,11 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { StructureTab } from '$lib/types';
+  import type { StructureTab, SchemaInfo, FunctionInfo } from '$lib/types';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { Plus, Trash2, Power, PowerOff } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Select from '$lib/components/ui/select';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import DdlPreview from './DdlPreview.svelte';
   import { Badge } from '$lib/components/ui/badge';
@@ -14,6 +16,25 @@
 
   const app = getAppState();
   const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
+
+  const timingOptions = ['BEFORE', 'AFTER', 'INSTEAD OF'];
+  const eventOptions = ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'INSERT OR UPDATE', 'INSERT OR DELETE', 'UPDATE OR DELETE', 'INSERT OR UPDATE OR DELETE'];
+  const forEachOptions = ['ROW', 'STATEMENT'];
+
+  // ── Schema / function lookups ──
+  let funcSchemas: string[] = $state([]);
+  let funcNames: string[] = $state([]);
+
+  function loadFuncSchemas() {
+    const schemas = app.getSchemas(tab.savedConnectionId, tab.databaseName);
+    funcSchemas = schemas.map((s: SchemaInfo) => s.name);
+  }
+
+  async function loadFuncNames(schema: string) {
+    funcNames = [];
+    const funcs = await app.loadFunctions(tab.savedConnectionId, tab.databaseName, schema);
+    funcNames = funcs.map((f: FunctionInfo) => f.name);
+  }
 
   // ── Create trigger dialog ──
   let addOpen = $state(false);
@@ -39,6 +60,18 @@
         }) ?? '')
       : ''
   );
+
+  function handleOpenDialog() {
+    addOpen = true;
+    loadFuncSchemas();
+    loadFuncNames(addFuncSchema);
+  }
+
+  function handleFuncSchemaChange(schema: string) {
+    addFuncSchema = schema;
+    addFuncName = '';
+    loadFuncNames(schema);
+  }
 
   async function handleAdd() {
     if (!addSql) return;
@@ -148,7 +181,7 @@
   {/if}
 
   <div class="mt-3">
-    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => (addOpen = true)}>
+    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={handleOpenDialog}>
       <Plus class="h-3 w-3 mr-1" />
       Create Trigger
     </Button>
@@ -164,51 +197,90 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="trig-name">Trigger Name</label>
-        <input id="trig-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addName} />
+        <Input id="trig-name" class="mt-1" bind:value={addName} />
       </div>
       <div class="grid grid-cols-3 gap-2">
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="trig-timing">Timing</label>
-          <select id="trig-timing" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addTiming}>
-            <option>BEFORE</option>
-            <option>AFTER</option>
-            <option>INSTEAD OF</option>
-          </select>
+          <label class="text-xs font-medium text-muted-foreground">Timing</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addTiming}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addTiming}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each timingOptions as t}
+                  <Select.Item value={t} label={t} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="trig-event">Event</label>
-          <select id="trig-event" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addEvent}>
-            <option>INSERT</option>
-            <option>UPDATE</option>
-            <option>DELETE</option>
-            <option>TRUNCATE</option>
-            <option>INSERT OR UPDATE</option>
-            <option>INSERT OR DELETE</option>
-            <option>UPDATE OR DELETE</option>
-            <option>INSERT OR UPDATE OR DELETE</option>
-          </select>
+          <label class="text-xs font-medium text-muted-foreground">Event</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addEvent}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addEvent}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each eventOptions as e}
+                  <Select.Item value={e} label={e} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="trig-foreach">For Each</label>
-          <select id="trig-foreach" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addForEach}>
-            <option>ROW</option>
-            <option>STATEMENT</option>
-          </select>
+          <label class="text-xs font-medium text-muted-foreground">For Each</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addForEach}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addForEach}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each forEachOptions as f}
+                  <Select.Item value={f} label={f} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="trig-func-schema">Function Schema</label>
-          <input id="trig-func-schema" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addFuncSchema} />
+          <label class="text-xs font-medium text-muted-foreground">Function Schema</label>
+          <div class="mt-1">
+            <Select.Root type="single" value={addFuncSchema} onValueChange={(v) => { if (v) handleFuncSchemaChange(v); }}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addFuncSchema}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each funcSchemas as s}
+                  <Select.Item value={s} label={s} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="trig-func-name">Function Name</label>
-          <input id="trig-func-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addFuncName} />
+          <label class="text-xs font-medium text-muted-foreground">Function Name</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addFuncName}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addFuncName || 'Select function...'}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each funcNames as f}
+                  <Select.Item value={f} label={f} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
       </div>
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="trig-condition">WHEN Condition (optional)</label>
-        <input id="trig-condition" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addCondition} placeholder="OLD.status IS DISTINCT FROM NEW.status" />
+        <Input id="trig-condition" class="mt-1" bind:value={addCondition} placeholder="OLD.status IS DISTINCT FROM NEW.status" />
       </div>
       <DdlPreview sql={addSql} />
     </div>

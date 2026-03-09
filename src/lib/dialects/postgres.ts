@@ -113,10 +113,24 @@ export const postgresDialect: SqlDialect = {
   // -- DDL --
 
   addColumn(schema, table, col) {
-    let sql = `ALTER TABLE ${qualified(schema, table)} ADD COLUMN ${q(col.name)} ${col.type}`;
-    if (!col.nullable) sql += ' NOT NULL';
+    let typeSql = col.type;
+    if (col.precision) typeSql += `(${col.precision})`;
+    if (col.isArray) typeSql += '[]';
+
+    const stmts: string[] = [];
+    let sql = `ALTER TABLE ${qualified(schema, table)} ADD COLUMN ${q(col.name)} ${typeSql}`;
+    if (col.primaryKey) sql += ' PRIMARY KEY';
+    if (col.unique && !col.primaryKey) sql += ' UNIQUE';
+    if (!col.nullable && !col.primaryKey) sql += ' NOT NULL';
     if (col.defaultValue) sql += ` DEFAULT ${col.defaultValue}`;
-    return sql + ';';
+    if (col.check) sql += ` CHECK (${col.check})`;
+    stmts.push(sql + ';');
+
+    if (col.comment) {
+      stmts.push(`COMMENT ON COLUMN ${qualified(schema, table)}.${q(col.name)} IS '${col.comment.replace(/'/g, "''")}';`);
+    }
+
+    return stmts.join('\n');
   },
 
   alterColumn(schema, table, colName, changes) {

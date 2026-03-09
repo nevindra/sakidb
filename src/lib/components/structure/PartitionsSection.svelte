@@ -2,6 +2,7 @@
   import { getAppState } from '$lib/stores';
   import type { StructureTab } from '$lib/types';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { Plus, Trash2 } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
@@ -138,11 +139,11 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="part-name">Partition Name</label>
-        <input id="part-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addName} placeholder="{tab.table}_2024_q1" />
+        <Input id="part-name" class="mt-1" bind:value={addName} placeholder="{tab.table}_2024_q1" />
       </div>
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="part-values">FOR VALUES clause</label>
-        <input id="part-values" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addForValues} placeholder="FROM ('2024-01-01') TO ('2024-04-01')" />
+        <Input id="part-values" class="mt-1" bind:value={addForValues} placeholder="FROM ('2024-01-01') TO ('2024-04-01')" />
         <p class="text-[10px] text-muted-foreground mt-1">
           Examples: FROM ('2024-01-01') TO ('2024-04-01') | IN ('active', 'pending') | WITH (MODULUS 4, REMAINDER 0)
         </p>

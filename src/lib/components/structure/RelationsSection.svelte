@@ -1,10 +1,13 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { StructureTab } from '$lib/types';
+  import type { StructureTab, SchemaInfo, TableInfo, ColumnInfo } from '$lib/types';
   import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
   import { Plus, Trash2 } from '@lucide/svelte';
   import * as Dialog from '$lib/components/ui/dialog';
+  import * as Select from '$lib/components/ui/select';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import { MultiSelect } from '$lib/components/ui/multi-select';
   import DdlPreview from './DdlPreview.svelte';
   import { getDialect } from '$lib/dialects';
   import type { EngineType } from '$lib/types';
@@ -14,30 +17,76 @@
   const app = getAppState();
   const dialect = $derived((() => { const e = app.getSavedConnection(tab.savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : null; })());
 
+  const localColumnNames = $derived(tab.columns.map(c => c.name));
+
+  const refActions = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'];
+
+  // ── Schema / table / column lookups for ref fields ──
+  let refSchemas: string[] = $state([]);
+  let refTables: string[] = $state([]);
+  let refColumnNames: string[] = $state([]);
+
+  function loadRefSchemas() {
+    const schemas = app.getSchemas(tab.savedConnectionId, tab.databaseName);
+    refSchemas = schemas.map((s: SchemaInfo) => s.name);
+  }
+
+  async function loadRefTables(schema: string) {
+    refTables = [];
+    refColumnNames = [];
+    const tables = await app.loadTables(tab.savedConnectionId, tab.databaseName, schema);
+    refTables = tables.filter((t: TableInfo) => !t.is_partition).map((t: TableInfo) => t.name);
+  }
+
+  async function loadRefColumns(schema: string, table: string) {
+    refColumnNames = [];
+    const cols = await app.loadColumns(tab.savedConnectionId, tab.databaseName, schema, table);
+    refColumnNames = cols.map((c: ColumnInfo) => c.name);
+  }
+
   // ── Add FK dialog ──
   let addOpen = $state(false);
   let addName = $state('');
-  let addColumns = $state('');
+  let addColumns: string[] = $state([]);
   let addRefSchema = $state('public');
   let addRefTable = $state('');
-  let addRefColumns = $state('');
+  let addRefColumns: string[] = $state([]);
   let addOnUpdate = $state('NO ACTION');
   let addOnDelete = $state('NO ACTION');
   let addLoading = $state(false);
 
   const addSql = $derived(
-    addColumns && addRefTable && addRefColumns
+    addColumns.length > 0 && addRefTable && addRefColumns.length > 0
       ? (dialect?.addForeignKey(tab.schema, tab.table, {
           name: addName || undefined,
-          columns: addColumns.split(',').map(c => c.trim()).filter(Boolean),
+          columns: addColumns,
           refSchema: addRefSchema,
           refTable: addRefTable,
-          refColumns: addRefColumns.split(',').map(c => c.trim()).filter(Boolean),
+          refColumns: addRefColumns,
           onUpdate: addOnUpdate,
           onDelete: addOnDelete,
         }) ?? '')
       : ''
   );
+
+  function handleOpenDialog() {
+    addOpen = true;
+    loadRefSchemas();
+    loadRefTables(addRefSchema);
+  }
+
+  function handleRefSchemaChange(schema: string) {
+    addRefSchema = schema;
+    addRefTable = '';
+    addRefColumns = [];
+    loadRefTables(schema);
+  }
+
+  function handleRefTableChange(table: string) {
+    addRefTable = table;
+    addRefColumns = [];
+    if (table) loadRefColumns(addRefSchema, table);
+  }
 
   async function handleAdd() {
     if (!addSql) return;
@@ -46,9 +95,9 @@
       await app.executeDdl(tab.runtimeConnectionId, addSql);
       addOpen = false;
       addName = '';
-      addColumns = '';
+      addColumns = [];
       addRefTable = '';
-      addRefColumns = '';
+      addRefColumns = [];
       app.loadStructureTab(tab.id);
     } catch {
       // Error shown via toast
@@ -75,8 +124,6 @@
       // Error shown via toast
     }
   }
-
-  const refActions = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'];
 </script>
 
 <div class="p-3">
@@ -117,7 +164,7 @@
   {/if}
 
   <div class="mt-3">
-    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={() => (addOpen = true)}>
+    <Button variant="outline" size="sm" class="h-7 text-xs" onclick={handleOpenDialog}>
       <Plus class="h-3 w-3 mr-1" />
       Add Foreign Key
     </Button>
@@ -133,49 +180,89 @@
     <div class="space-y-3 py-2">
       <div>
         <label class="text-xs font-medium text-muted-foreground" for="fk-name">Constraint Name (optional)</label>
-        <input id="fk-name" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addName} placeholder="fk_table_column" />
+        <Input id="fk-name" class="mt-1" bind:value={addName} placeholder="fk_table_column" />
       </div>
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="fk-cols">Local Columns (comma separated)</label>
-        <input id="fk-cols" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addColumns} placeholder="user_id" />
+        <label class="text-xs font-medium text-muted-foreground">Local Columns</label>
+        <div class="mt-1">
+          <MultiSelect options={localColumnNames} bind:selected={addColumns} placeholder="Select columns..." />
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="fk-ref-schema">Ref Schema</label>
-          <input id="fk-ref-schema" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addRefSchema} />
+          <label class="text-xs font-medium text-muted-foreground">Ref Schema</label>
+          <div class="mt-1">
+            <Select.Root type="single" value={addRefSchema} onValueChange={(v) => { if (v) handleRefSchemaChange(v); }}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addRefSchema}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each refSchemas as s}
+                  <Select.Item value={s} label={s} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="fk-ref-table">Ref Table</label>
-          <input id="fk-ref-table" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addRefTable} placeholder="users" />
+          <label class="text-xs font-medium text-muted-foreground">Ref Table</label>
+          <div class="mt-1">
+            <Select.Root type="single" value={addRefTable} onValueChange={(v) => { if (v) handleRefTableChange(v); }}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addRefTable || 'Select table...'}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each refTables as t}
+                  <Select.Item value={t} label={t} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
       </div>
       <div>
-        <label class="text-xs font-medium text-muted-foreground" for="fk-ref-cols">Ref Columns (comma separated)</label>
-        <input id="fk-ref-cols" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addRefColumns} placeholder="id" />
+        <label class="text-xs font-medium text-muted-foreground">Ref Columns</label>
+        <div class="mt-1">
+          <MultiSelect options={refColumnNames} bind:selected={addRefColumns} placeholder="Select ref columns..." />
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="fk-on-update">On Update</label>
-          <select id="fk-on-update" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addOnUpdate}>
-            {#each refActions as action}
-              <option value={action}>{action}</option>
-            {/each}
-          </select>
+          <label class="text-xs font-medium text-muted-foreground">On Update</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addOnUpdate}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addOnUpdate}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each refActions as action}
+                  <Select.Item value={action} label={action} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
         <div>
-          <label class="text-xs font-medium text-muted-foreground" for="fk-on-delete">On Delete</label>
-          <select id="fk-on-delete" class="w-full mt-1 px-2 py-1.5 bg-card border border-border rounded text-sm text-foreground" bind:value={addOnDelete}>
-            {#each refActions as action}
-              <option value={action}>{action}</option>
-            {/each}
-          </select>
+          <label class="text-xs font-medium text-muted-foreground">On Delete</label>
+          <div class="mt-1">
+            <Select.Root type="single" bind:value={addOnDelete}>
+              <Select.Trigger class="w-full">
+                <span data-slot="select-value">{addOnDelete}</span>
+              </Select.Trigger>
+              <Select.Content>
+                {#each refActions as action}
+                  <Select.Item value={action} label={action} />
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
       </div>
       <DdlPreview sql={addSql} />
     </div>
     <Dialog.Footer>
       <Button variant="outline" size="sm" onclick={() => (addOpen = false)} disabled={addLoading}>Cancel</Button>
-      <Button size="sm" onclick={handleAdd} disabled={!addColumns || !addRefTable || !addRefColumns || addLoading}>Execute</Button>
+      <Button size="sm" onclick={handleAdd} disabled={addColumns.length === 0 || !addRefTable || addRefColumns.length === 0 || addLoading}>Execute</Button>
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>

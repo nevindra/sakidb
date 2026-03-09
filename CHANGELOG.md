@@ -6,6 +6,18 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
+- **Structure dialogs overhaul** — Replaced all raw HTML inputs and native `<select>` elements in structure section dialogs with proper shadcn-svelte components.
+  - New **Combobox** UI component (`src/lib/components/ui/combobox/`) — searchable dropdown built on bits-ui `Combobox` primitive with grouped items support. Used for column data type selection with categorized PostgreSQL types.
+  - New **MultiSelect** UI component (`src/lib/components/ui/multi-select/`) — Popover + Checkbox list with tag badges for selecting multiple columns. Used in Index and Foreign Key dialogs.
+  - **ColumnsSection** — Rich Add Column dialog with type combobox, conditional length/precision field, Primary Key / Unique / Nullable / Array constraints, check constraint, and column comment (PG). Edit Column dialog uses combobox for type. All inputs use shadcn `Input`.
+  - **IndexesSection** — Column selection via MultiSelect dropdown, index type via shadcn `Select`.
+  - **RelationsSection** — Local/ref columns via MultiSelect, ref schema and ref table via `Select` populated from backend IPC (`getSchemas`, `loadTables`, `loadColumns`). Ref table list filters out partitions. On Update / On Delete via shadcn `Select`.
+  - **TriggersSection** — Timing, Event, For Each via shadcn `Select`. Function schema/name via `Select` populated from IPC (`getSchemas`, `loadFunctions`).
+  - **PartitionsSection** — Inputs replaced with shadcn `Input`.
+  - Extended `ColumnDraft` type with `primaryKey`, `unique`, `isArray`, `precision`, `check`, and `comment` fields. Updated PostgreSQL and SQLite dialect implementations.
+  - Added `PG_PRECISION_TYPES` map in `src/lib/dialects/pg-types.ts` for conditional precision field display.
+  - Borderless styling for Select trigger, Combobox input, and MultiSelect trigger — consistent with existing Input component style.
+
 - **Centralized context menus** — All 9 sidebar context menus (table, view, materialized view, function, sequence/index/foreign table, database, schema, connection, saved query) extracted into a single config-driven registry (`src/lib/context-menus/`). Menu items defined as data with capability-based `when` guards, rendered by a shared `ContextMenuRenderer` component. Eliminates hardcoded PostgreSQL SQL from ViewNode, MaterializedViewNode, FunctionNode, and ObjectInfoRow — all now route through the dialect system. Added `refreshMaterializedView()` to `SqlDialect` interface.
 - **SQL dialect abstraction** — Engine-aware SQL generation on both frontend and backend, replacing all hardcoded PostgreSQL SQL.
   - Frontend `SqlDialect` interface (`src/lib/dialects/`) with `PostgresDialect` and `SqliteDialect` implementations. Factory function `getDialect()` with exhaustive engine switch. Covers DDL (add/alter/drop columns, indexes, foreign keys, triggers, partitions), DML (drop/truncate table, duplicate table, cell literals), and profiling queries.

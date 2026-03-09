@@ -9,6 +9,12 @@ export interface ColumnDraft {
   type: string;
   nullable: boolean;
   defaultValue?: string;
+  primaryKey?: boolean;
+  unique?: boolean;
+  isArray?: boolean;
+  precision?: string;   // e.g. "255" for varchar(255), "10,2" for numeric(10,2)
+  check?: string;       // e.g. "age > 0"
+  comment?: string;
 }
 
 export interface ColumnChanges {

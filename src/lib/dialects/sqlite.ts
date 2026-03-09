@@ -58,9 +58,15 @@ export const sqliteDialect: SqlDialect = {
   // -- DDL -- SQLite supports a subset --
 
   addColumn(schema, table, col) {
-    let sql = `ALTER TABLE ${qualified(schema, table)} ADD COLUMN ${q(col.name)} ${col.type}`;
-    if (!col.nullable) sql += ' NOT NULL';
+    let typeSql = col.type;
+    if (col.precision) typeSql += `(${col.precision})`;
+
+    let sql = `ALTER TABLE ${qualified(schema, table)} ADD COLUMN ${q(col.name)} ${typeSql}`;
+    if (col.primaryKey) sql += ' PRIMARY KEY';
+    if (col.unique && !col.primaryKey) sql += ' UNIQUE';
+    if (!col.nullable && !col.primaryKey) sql += ' NOT NULL';
     if (col.defaultValue) sql += ` DEFAULT ${col.defaultValue}`;
+    if (col.check) sql += ` CHECK (${col.check})`;
     return sql + ';';
   },
 
