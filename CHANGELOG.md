@@ -6,66 +6,33 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
-- **Structure dialogs overhaul** — Replaced all raw HTML inputs and native `<select>` elements in structure section dialogs with proper shadcn-svelte components.
-  - New **Combobox** UI component (`src/lib/components/ui/combobox/`) — searchable dropdown built on bits-ui `Combobox` primitive with grouped items support. Used for column data type selection with categorized PostgreSQL types.
-  - New **MultiSelect** UI component (`src/lib/components/ui/multi-select/`) — Popover + Checkbox list with tag badges for selecting multiple columns. Used in Index and Foreign Key dialogs.
-  - **ColumnsSection** — Rich Add Column dialog with type combobox, conditional length/precision field, Primary Key / Unique / Nullable / Array constraints, check constraint, and column comment (PG). Edit Column dialog uses combobox for type. All inputs use shadcn `Input`.
-  - **IndexesSection** — Column selection via MultiSelect dropdown, index type via shadcn `Select`.
-  - **RelationsSection** — Local/ref columns via MultiSelect, ref schema and ref table via `Select` populated from backend IPC (`getSchemas`, `loadTables`, `loadColumns`). Ref table list filters out partitions. On Update / On Delete via shadcn `Select`.
-  - **TriggersSection** — Timing, Event, For Each via shadcn `Select`. Function schema/name via `Select` populated from IPC (`getSchemas`, `loadFunctions`).
-  - **PartitionsSection** — Inputs replaced with shadcn `Input`.
-  - Extended `ColumnDraft` type with `primaryKey`, `unique`, `isArray`, `precision`, `check`, and `comment` fields. Updated PostgreSQL and SQLite dialect implementations.
-  - Added `PG_PRECISION_TYPES` map in `src/lib/dialects/pg-types.ts` for conditional precision field display.
-  - Borderless styling for Select trigger, Combobox input, and MultiSelect trigger — consistent with existing Input component style.
-
-- **Centralized context menus** — All 9 sidebar context menus (table, view, materialized view, function, sequence/index/foreign table, database, schema, connection, saved query) extracted into a single config-driven registry (`src/lib/context-menus/`). Menu items defined as data with capability-based `when` guards, rendered by a shared `ContextMenuRenderer` component. Eliminates hardcoded PostgreSQL SQL from ViewNode, MaterializedViewNode, FunctionNode, and ObjectInfoRow — all now route through the dialect system. Added `refreshMaterializedView()` to `SqlDialect` interface.
-- **SQL dialect abstraction** — Engine-aware SQL generation on both frontend and backend, replacing all hardcoded PostgreSQL SQL.
-  - Frontend `SqlDialect` interface (`src/lib/dialects/`) with `PostgresDialect` and `SqliteDialect` implementations. Factory function `getDialect()` with exhaustive engine switch. Covers DDL (add/alter/drop columns, indexes, foreign keys, triggers, partitions), DML (drop/truncate table, duplicate table, cell literals), and profiling queries.
-  - Backend `SqlFormatter` trait (`sakidb-core`) with implementations for `PostgresDriver` (COPY format) and `SqliteDriver` (INSERT statements). Integrated into `DriverRegistry` and `export.rs` — SQL export now uses engine-specific DDL and data formatting instead of hardcoded PostgreSQL COPY.
-  - All structure section components (Columns, Indexes, Relations, Triggers, Partitions), DataGrid, and profiling store migrated to use dialect system.
-  - Deleted legacy `ddl.ts` and `profiling-sql.ts` utility files.
-  - Query editor now uses dialect for CodeMirror language mode (`codemirrorDialect()`), SQL formatting (`formatterLanguage()`), and EXPLAIN wrapping (`explainAnalyzeQuery()`). Removed last hardcoded PostgreSQL references from `QueryTabView`.
-- **SQLite driver** — Full SQLite support via `sakidb-sqlite` crate (rusqlite with bundled SQLite). Implements `Driver`, `SqlDriver`, `Introspector`, `Exporter`, and `Restorer` traits. Performance-tuned with WAL mode, 256 MB mmap, 64 MB cache, and native columnar query path.
-- SQLite-specific commands — VACUUM and integrity check accessible from connection context menu.
-- File picker for SQLite connections — browse button with `.db`/`.sqlite`/`.sqlite3`/`.db3` filter in both new connection and edit dialogs.
-- **Multi-engine UX** — Engine selector in connection form, conditional form fields per engine (file-based engines hide host/port, Redis hides username, etc.).
-- Engine label badge (`PG`, `SL`, `RD`, etc.) next to each connection name in the sidebar.
-- `ConnectResult` bundles `runtime_id` + `EngineCapabilities` in a single IPC round-trip — no separate capabilities call needed.
+- **SQLite support** — Connect to local `.db`, `.sqlite`, and `.sqlite3` files with full browsing, editing, export, and restore. Includes VACUUM and integrity check commands.
+- **Multi-engine connections** — Engine selector in the connection form with adaptive fields per engine type. Engine badge (`PG`, `SL`, etc.) shown next to each connection in the sidebar.
+- **Improved structure dialogs** — Searchable type picker for column data types, multi-select dropdowns for index and foreign key columns, and polished inputs across all structure panels (Columns, Indexes, Relations, Triggers, Partitions).
+  - Add Column dialog now supports primary key, unique, nullable, array, precision, check constraint, and comment options.
+- **Smarter context menus** — Right-click menus across all sidebar items now adapt to each engine's capabilities. Unavailable actions are automatically hidden.
+- **File picker for SQLite** — Browse button with database file filter in connection dialogs.
 
 ### Performance
 
-- **Paged columnar IPC** — new `execute_query_paged` command with columnar format for memory-efficient paginated queries.
-- **DataGrid fast path** — optimized rendering for large result sets, avoiding unnecessary re-renders.
-- **Store optimizations** — cached engine capabilities, bulk profiling SQL generation, debounced sidebar search, reactive tab index.
-- **SQLite allocations** — reduced allocations in query execution and restore path (transaction batching).
+- Paginated queries for large result sets with lower memory usage.
+- Faster DataGrid rendering, avoiding unnecessary re-renders.
+- Optimized SQLite query execution and restore performance.
 
 ### Changed
 
-- **Comprehensive test coverage** — 260+ unit tests across all crates and frontend, feature-gated integration tests (postgres, sqlite), stress tests (1M rows, concurrency, cancellation), criterion benchmarks, and CI workflow with benchmark regression detection.
-- **Testing conventions** — Documented in CLAUDE.md and CONTRIBUTING.md: `_test.rs` file convention, mock helpers, frontend store test patterns, and non-negotiable test requirements for all new code.
-- **Test structure** — Migrated all 62 inline `#[cfg(test)]` blocks to dedicated `_test.rs` files across all crates. Tests now live side-by-side with implementation files but in separate modules, keeping source files clean.
-- **Multi-driver architecture** — Split monolithic `DatabaseDriver` trait into composable traits (`Driver`, `SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `KeyValueDriver`, `DocumentDriver`) for future database engine extensibility.
-- Added `DriverRegistry` with connection routing — commands no longer import driver crates directly.
-- All Tauri commands refactored to be engine-agnostic, routing through the registry.
-- `sakidb-postgres` is now an optional dependency behind the `postgres` feature flag (enabled by default).
-- Added `EngineType` enum, `EngineCapabilities` struct, and `available_engines` IPC command.
-- Sidebar tree adapts to engine capabilities — database layer hidden for single-database engines, schema layer hidden for schema-less engines, category folders (Tables, Views, Functions, etc.) only render when the engine supports them.
-- All context menus capability-gated — New Query (`sql`), Export (`export`), Restore (`restore`), Create/Drop/Rename Database (`multi_database`), View ERD (`introspection`).
-- Query toolbar hides database selector when `!multi_database`, schema selector when `!schemas`, EXPLAIN buttons when `!explain`.
-- Structure tab filters section tabs by capabilities (Indexes, Triggers, Partitions, Profiling).
-- Export dialog hides SQL format option for non-SQL engines.
+- UI adapts to engine capabilities — sidebar tree, query toolbar, structure tabs, and export dialog show only what the connected engine supports.
+- 260+ unit tests added across backend and frontend.
 
 ### Fixed
 
-- **SQLite data tab not loading** — `tabIndex` stored plain objects instead of Svelte 5 `$state` proxies, so property mutations (`isLoading`, `queryResult`) never triggered UI re-renders. This affected all tab types but was most visible on SQLite where schema-related timing differences made it consistently reproducible.
-- **SQLite schema-qualified queries failing** — All SQL generation (`SELECT`, `UPDATE`, `INSERT`, `DELETE`, `DROP`, `TRUNCATE`, export, profiling) used `"schema"."table"` format unconditionally. SQLite has no schemas (empty string), producing `""."table"` which SQLite misinterprets. Added `qualifiedTable()` helpers (frontend + Rust) that omit the schema prefix when empty.
-- **Cancel not recognized for SQLite** — `isCancelError()` only matched PostgreSQL's cancel message. Now also matches SQLite's `"interrupted"` and core's `"Cancelled"`.
-- **UTF-8 corruption in StreamingSqlSplitter** — byte-level splitting could break multi-byte characters during SQL restore; now splits on valid character boundaries.
-- **SQL escaping hardened** — improved identifier and value escaping in generated SQL to prevent injection in edge cases.
-- **tokio rt-multi-thread** — added missing feature flag for `block_in_place` support.
-- ERD view rendering as blank canvas with 0% zoom — root cause was `flex-1` instead of `h-full` on ErdTabView, causing container height to collapse to 0.
-- ERD minimap producing Infinity/NaN SVG attributes when zoom is 0.
-- ERD fitToScreen not guarding against zero viewport dimensions.
+- Data tab not loading on SQLite connections.
+- Schema-qualified queries failing on SQLite (which has no schemas).
+- Query cancellation not working on SQLite.
+- UTF-8 corruption when restoring SQL files with multi-byte characters.
+- SQL escaping hardened to prevent edge-case injection.
+- ERD view rendering as blank canvas at 0% zoom.
+- ERD minimap and fit-to-screen errors with zero dimensions.
 
 ## v1.1.0 (2026-03-06)
 

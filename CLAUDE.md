@@ -211,6 +211,13 @@ Below are reference-level conventions for working in the codebase:
 - TypeScript interfaces mirror Rust struct field names exactly (snake_case: `rows_affected`, `ssl_mode`, etc.)
 - `$lib` alias resolves to `src/lib/`
 
+### Changelog
+- `CHANGELOG.md` is **user-facing** — write for end users, not developers.
+- Describe what users can now *do*, not how it's built internally.
+- No crate names, trait names, file paths, IPC details, or internal component references.
+- Keep entries concise: one line per feature/fix. Use sub-bullets sparingly.
+- Technical implementation details belong in commit messages, PR descriptions, and `CONTRIBUTING.md`.
+
 ### Naming
 - camelCase in TypeScript/Svelte, snake_case in Rust
 - Tauri command names are snake_case on both sides
