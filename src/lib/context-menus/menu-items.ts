@@ -1,5 +1,43 @@
 import type { MenuContext, MenuEntry } from './types';
 
+// ── Category folder menus ──
+
+export function tablesFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create Table...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function viewsFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create View...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function materializedViewsFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create Materialized View...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function functionsFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create Function...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function sequencesFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create Sequence...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function indexesFolderMenuItems(): MenuEntry[] {
+  return [
+    { id: 'create', label: 'Create Index...', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
 // ── Tree node menus ──
 
 export function tableMenuItems(): MenuEntry[] {
@@ -22,31 +60,62 @@ export function tableMenuItems(): MenuEntry[] {
 export function viewMenuItems(): MenuEntry[] {
   return [
     { id: 'open-data', label: 'Open Data' },
-    { id: 'new-query', label: 'New Query' },
+    { id: 'view-structure', label: 'View Structure', when: c => c.capabilities?.introspection !== false },
+    { id: 'new-query', label: 'New Query', when: c => c.capabilities?.sql !== false },
     { kind: 'separator' },
     { id: 'copy-name', label: 'Copy Qualified Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop View...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
   ];
 }
 
 export function materializedViewMenuItems(): MenuEntry[] {
   return [
     { id: 'open-data', label: 'Open Data' },
+    { id: 'view-structure', label: 'View Structure', when: c => c.capabilities?.introspection !== false },
     { id: 'refresh', label: 'Refresh' },
-    { id: 'new-query', label: 'New Query' },
+    { id: 'new-query', label: 'New Query', when: c => c.capabilities?.sql !== false },
     { kind: 'separator' },
     { id: 'copy-name', label: 'Copy Qualified Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop Materialized View...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
   ];
 }
 
 export function functionMenuItems(): MenuEntry[] {
   return [
+    { id: 'view-structure', label: 'View Definition', when: c => c.capabilities?.introspection !== false },
     { id: 'copy-name', label: 'Copy Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop Function...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
   ];
 }
 
-export function objectInfoMenuItems(): MenuEntry[] {
+export function sequenceMenuItems(): MenuEntry[] {
   return [
     { id: 'copy-name', label: 'Copy Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'reset', label: 'Reset Sequence', when: c => c.capabilities?.sql !== false },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop Sequence...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function indexMenuItems(): MenuEntry[] {
+  return [
+    { id: 'copy-name', label: 'Copy Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'reindex', label: 'Reindex', when: c => c.capabilities?.sql !== false },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop Index...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
+  ];
+}
+
+export function foreignTableMenuItems(): MenuEntry[] {
+  return [
+    { id: 'copy-name', label: 'Copy Name' },
+    { kind: 'separator', when: c => c.capabilities?.sql !== false },
+    { id: 'drop', label: 'Drop Foreign Table...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
   ];
 }
 
@@ -67,6 +136,7 @@ export function databaseMenuItems(ctx: MenuContext): MenuEntry[] {
     { kind: 'separator', when: () => ctx.capabilities?.multi_database === true },
     { id: 'create-db', label: 'New Database', when: () => ctx.capabilities?.multi_database === true },
     { id: 'rename-db', label: 'Rename Database', when: () => ctx.capabilities?.multi_database === true },
+    { id: 'edit-db', label: 'Edit Database...', when: () => ctx.capabilities?.multi_database === true },
     { kind: 'separator', when: () => ctx.capabilities?.multi_database === true },
     { id: 'drop-db', label: 'Drop Database', variant: 'destructive', when: () => ctx.capabilities?.multi_database === true },
   ];
@@ -78,6 +148,11 @@ export function schemaMenuItems(ctx: MenuContext): MenuEntry[] {
     { id: 'new-query', label: 'New Query', when: () => ctx.capabilities?.sql !== false },
     { kind: 'separator', when: () => ctx.capabilities?.restore === true },
     { id: 'restore', label: 'Restore from SQL...', when: () => ctx.capabilities?.restore === true },
+    { kind: 'separator', when: () => ctx.capabilities?.sql !== false },
+    { id: 'create-schema', label: 'Create Schema...', when: () => ctx.capabilities?.sql !== false },
+    { id: 'rename-schema', label: 'Rename Schema...', when: () => ctx.capabilities?.sql !== false },
+    { kind: 'separator', when: () => ctx.capabilities?.sql !== false },
+    { id: 'drop-schema', label: 'Drop Schema...', variant: 'destructive', when: () => ctx.capabilities?.sql !== false },
   ];
 }
 

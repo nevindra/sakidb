@@ -1,10 +1,10 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { FunctionInfo } from '$lib/types';
+  import type { SequenceInfo } from '$lib/types';
   import type { FuzzyResult } from '$lib/utils/fuzzy';
-  import { FunctionSquare, ChevronRight, ChevronDown } from '@lucide/svelte';
+  import { Hash, ChevronRight, ChevronDown } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { ContextMenuRenderer, functionMenuItems } from '$lib/context-menus';
+  import { ContextMenuRenderer, sequenceMenuItems } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
@@ -12,7 +12,7 @@
   import { invoke } from '@tauri-apps/api/core';
 
   let {
-    func,
+    sequence,
     schema,
     connectionId,
     databaseName,
@@ -21,7 +21,7 @@
     schemaPrefix = '',
     onRefresh,
   }: {
-    func: FunctionInfo;
+    sequence: SequenceInfo;
     schema: string;
     connectionId?: string;
     databaseName?: string;
@@ -31,7 +31,9 @@
     onRefresh?: () => void;
   } = $props();
 
-  const selfMatch = $derived(schemaPrefix ? searchResults.get(`${schemaPrefix}/${func.name}`) : undefined);
+  let expanded = $state(false);
+  let dropConfirmOpen = $state(false);
+  let dropLoading = $state(false);
 
   const app = getAppState();
   const capabilities = $derived(connectionId ? app.getCapabilities(connectionId) : null);
@@ -43,15 +45,7 @@
   const engineType = $derived(connectionId ? app.getSavedConnection(connectionId)?.engine : null);
   const showCascade = $derived(engineType === 'postgres');
 
-  let expanded = $state(false);
-  let dropConfirmOpen = $state(false);
-  let dropLoading = $state(false);
-
-  const displayName = $derived(
-    func.argument_types
-      ? `${func.name}(${func.argument_types})`
-      : `${func.name}()`
-  );
+  const selfMatch = $derived(schemaPrefix ? searchResults.get(`${schemaPrefix}/${sequence.name}`) : undefined);
 
   async function handleDrop(cascade?: boolean) {
     dropLoading = true;
@@ -59,7 +53,7 @@
       if (!connectionId || !databaseName) return;
       const rid = app.getRuntimeConnectionId(connectionId, databaseName);
       if (!rid || !dialect) return;
-      const sql = dialect.dropFunction(schema, func.name, func.argument_types ?? null, cascade ?? false);
+      const sql = dialect.dropSequence(schema, sequence.name, cascade ?? false);
       await invoke('execute_batch', { activeConnectionId: rid, sql });
       onRefresh?.();
     } catch {
@@ -69,15 +63,28 @@
     }
   }
 
+  async function handleReset() {
+    if (!connectionId || !databaseName || !dialect) return;
+    const rid = app.getRuntimeConnectionId(connectionId, databaseName);
+    if (!rid) return;
+    const sql = dialect.resetSequence(schema, sequence.name);
+    if (sql) {
+      try {
+        await invoke('execute_batch', { activeConnectionId: rid, sql });
+        onRefresh?.();
+      } catch {
+        // Error handled by store
+      }
+    }
+  }
+
   const menuCtx: MenuContext = $derived({ capabilities });
 
   function handleMenuAction(id: string) {
     switch (id) {
-      case 'view-structure':
-        if (connectionId && databaseName) app.openStructureTab(connectionId, databaseName, schema, func.name);
-        return;
       case 'copy-name': return navigator.clipboard.writeText(
-        dialect?.qualifiedTable(schema, func.name) ?? `"${schema}"."${func.name}"`);
+        dialect?.qualifiedTable(schema, sequence.name) ?? `"${schema}"."${sequence.name}"`);
+      case 'reset': return handleReset();
       case 'drop': dropConfirmOpen = true; return;
     }
   }
@@ -95,22 +102,22 @@
       {:else}
         <ChevronRight class="h-3 w-3 text-muted-foreground shrink-0" />
       {/if}
-      <FunctionSquare class="h-3 w-3 text-emerald-400 shrink-0" />
+      <Hash class="h-3 w-3 text-orange-400 shrink-0" />
       {#if selfMatch}
-        <HighlightMatch name={func.name} positions={selfMatch.positions} />
+        <HighlightMatch name={sequence.name} positions={selfMatch.positions} />
       {:else}
-        <span class="truncate" title={displayName}>{func.name}</span>
+        <span class="truncate">{sequence.name}</span>
       {/if}
-      <span class="text-text-dim text-[10px] ml-auto shrink-0">{func.kind}</span>
+      <span class="text-text-dim text-[10px] ml-auto shrink-0">{sequence.data_type}</span>
     </button>
   </ContextMenu.Trigger>
-  <ContextMenuRenderer items={functionMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
+  <ContextMenuRenderer items={sequenceMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
 <ConfirmDialog
   bind:open={dropConfirmOpen}
-  title="Drop Function"
-  description={`This will permanently drop the function "${displayName}".`}
+  title="Drop Sequence"
+  description={`This will permanently drop the sequence ${schema ? `"${schema}".` : ''}"${sequence.name}".`}
   confirmLabel="Drop"
   variant="destructive"
   loading={dropLoading}
@@ -123,10 +130,9 @@
     class="pr-2 py-0.5 text-xs text-muted-foreground space-y-0.5"
     style:padding-left="{(depth + 3) * 4}px"
   >
-    {#if func.argument_types}
-      <div><span class="text-text-dim">args:</span> {func.argument_types}</div>
+    <div><span class="text-text-dim">type:</span> {sequence.data_type}</div>
+    {#if sequence.last_value != null}
+      <div><span class="text-text-dim">last value:</span> {sequence.last_value}</div>
     {/if}
-    <div><span class="text-text-dim">returns:</span> {func.return_type}</div>
-    <div><span class="text-text-dim">lang:</span> {func.language}</div>
   </div>
 {/if}

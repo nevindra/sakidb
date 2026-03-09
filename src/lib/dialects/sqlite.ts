@@ -14,6 +14,71 @@ export const sqliteDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
 
+  // -- Schema & object lifecycle -- SQLite has limited support --
+
+  createSchema() {
+    return '-- SQLite does not support CREATE SCHEMA.';
+  },
+
+  renameSchema() {
+    return '-- SQLite does not support ALTER SCHEMA.';
+  },
+
+  dropSchema() {
+    return '-- SQLite does not support DROP SCHEMA.';
+  },
+
+  dropView(_schema, view) {
+    return `DROP VIEW IF EXISTS ${q(view)};`;
+  },
+
+  dropMaterializedView() {
+    return '-- SQLite does not support materialized views.';
+  },
+
+  dropFunction() {
+    return '-- SQLite does not support user-defined functions.';
+  },
+
+  dropSequence() {
+    return '-- SQLite does not support sequences.';
+  },
+
+  dropIndexCascade(_schema, name) {
+    return `DROP INDEX IF EXISTS ${q(name)};`;
+  },
+
+  dropForeignTable() {
+    return '-- SQLite does not support foreign tables.';
+  },
+
+  reindex(_schema, name) {
+    return `REINDEX ${q(name)};`;
+  },
+
+  resetSequence() {
+    return null;
+  },
+
+  generateTemplate(objectType) {
+    switch (objectType) {
+      case 'schema':
+        return '-- SQLite does not support schemas.\n';
+      case 'table':
+        return `CREATE TABLE new_table (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL,\n    created_at TEXT DEFAULT (datetime('now'))\n);\n`;
+      case 'view':
+        return `CREATE VIEW new_view AS\nSELECT *\nFROM table_name\nWHERE 1;\n`;
+      case 'materialized_view':
+        return '-- SQLite does not support materialized views.\n';
+      case 'function':
+        return '-- SQLite does not support user-defined functions.\n';
+      case 'sequence':
+        return '-- SQLite does not support sequences.\n';
+      case 'index':
+        return `CREATE INDEX new_index\n    ON table_name (column_name);\n`;
+    }
+  },
+
   // -- Editor integration --
 
   codemirrorDialect() { return SQLite; },

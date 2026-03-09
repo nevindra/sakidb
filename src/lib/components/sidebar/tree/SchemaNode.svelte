@@ -16,7 +16,19 @@
   import ViewNode from './ViewNode.svelte';
   import MaterializedViewNode from './MaterializedViewNode.svelte';
   import FunctionNode from './FunctionNode.svelte';
-  import ObjectInfoRow from './ObjectInfoRow.svelte';
+  import SequenceNode from './SequenceNode.svelte';
+  import IndexNode from './IndexNode.svelte';
+  import ForeignTableNode from './ForeignTableNode.svelte';
+  import {
+    tablesFolderMenuItems,
+    viewsFolderMenuItems,
+    materializedViewsFolderMenuItems,
+    functionsFolderMenuItems,
+    sequencesFolderMenuItems,
+    indexesFolderMenuItems,
+  } from '$lib/context-menus';
+  import type { MenuContext } from '$lib/context-menus';
+  import { getDialect } from '$lib/dialects';
 
   let {
     schemaName,
@@ -114,11 +126,24 @@
   async function loadForeignTables() {
     foreignTables = await app.loadForeignTables(connectionId, databaseName, schemaName);
   }
+
+  const dialect = $derived((() => {
+    const e = app.getSavedConnection(connectionId)?.engine;
+    return e ? getDialect(e as import('$lib/types').EngineType) : null;
+  })());
+
+  const folderMenuCtx: MenuContext = $derived({ capabilities });
+
+  function handleFolderCreate(objectType: 'table' | 'view' | 'materialized_view' | 'function' | 'sequence' | 'index') {
+    if (!dialect) return;
+    const template = dialect.generateTemplate(objectType, schemaName);
+    app.openQueryTab(connectionId, databaseName, template);
+  }
 </script>
 
 <div class="py-px">
   {#if capabilities?.tables !== false}
-    <CategoryFolder label="Tables" count={tables.length} icon={Table2} iconClass="text-primary" load={loadTables} autoExpand={isSearching && categoryHasMatch(displayTables)} reveal={revealTablesExpand}>
+    <CategoryFolder label="Tables" count={tables.length} icon={Table2} iconClass="text-primary" load={loadTables} autoExpand={isSearching && categoryHasMatch(displayTables)} reveal={revealTablesExpand} menuItems={tablesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('table')}>
       {#snippet children()}
         {#each filteredTables as table (table.name)}
           <TableNode {table} schema={schemaName} {connectionId} {databaseName} partitions={partitionChildren.get(table.name)} onRefreshTables={loadTables} {searchResults} {schemaPrefix} />
@@ -128,50 +153,50 @@
   {/if}
 
   {#if capabilities?.views !== false}
-    <CategoryFolder label="Views" count={views.length} icon={Eye} iconClass="text-sky-400" load={loadViews} autoExpand={isSearching && categoryHasMatch(views)}>
+    <CategoryFolder label="Views" count={views.length} icon={Eye} iconClass="text-sky-400" load={loadViews} autoExpand={isSearching && categoryHasMatch(views)} menuItems={viewsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('view')}>
       {#snippet children()}
         {#each filteredViews as view (view.name)}
-          <ViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <ViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadViews} />
         {/each}
       {/snippet}
     </CategoryFolder>
   {/if}
 
   {#if capabilities?.materialized_views}
-    <CategoryFolder label="Materialized Views" count={materializedViews.length} icon={Layers} iconClass="text-violet-400" load={loadMaterializedViews} autoExpand={isSearching && categoryHasMatch(materializedViews)}>
+    <CategoryFolder label="Materialized Views" count={materializedViews.length} icon={Layers} iconClass="text-violet-400" load={loadMaterializedViews} autoExpand={isSearching && categoryHasMatch(materializedViews)} menuItems={materializedViewsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('materialized_view')}>
       {#snippet children()}
         {#each filteredMatViews as view (view.name)}
-          <MaterializedViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <MaterializedViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadMaterializedViews} />
         {/each}
       {/snippet}
     </CategoryFolder>
   {/if}
 
   {#if capabilities?.functions}
-    <CategoryFolder label="Functions" count={functions.length} icon={FunctionSquare} iconClass="text-emerald-400" load={loadFunctions} autoExpand={isSearching && categoryHasMatch(functions)}>
+    <CategoryFolder label="Functions" count={functions.length} icon={FunctionSquare} iconClass="text-emerald-400" load={loadFunctions} autoExpand={isSearching && categoryHasMatch(functions)} menuItems={functionsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('function')}>
       {#snippet children()}
         {#each filteredFunctions as func (func.name + '(' + func.argument_types + ')')}
-          <FunctionNode {func} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <FunctionNode {func} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadFunctions} />
         {/each}
       {/snippet}
     </CategoryFolder>
   {/if}
 
   {#if capabilities?.sequences}
-    <CategoryFolder label="Sequences" count={sequences.length} icon={Hash} iconClass="text-orange-400" load={loadSequences}>
+    <CategoryFolder label="Sequences" count={sequences.length} icon={Hash} iconClass="text-orange-400" load={loadSequences} menuItems={sequencesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('sequence')}>
       {#snippet children()}
         {#each sequences as seq (seq.name)}
-          <ObjectInfoRow item={{ kind: 'sequence', data: seq }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <SequenceNode sequence={seq} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadSequences} />
         {/each}
       {/snippet}
     </CategoryFolder>
   {/if}
 
   {#if capabilities?.indexes}
-    <CategoryFolder label="Indexes" count={indexes.length} icon={ListTree} iconClass="text-teal-400" load={loadIndexes}>
+    <CategoryFolder label="Indexes" count={indexes.length} icon={ListTree} iconClass="text-teal-400" load={loadIndexes} menuItems={indexesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('index')}>
       {#snippet children()}
         {#each indexes as idx (idx.name)}
-          <ObjectInfoRow item={{ kind: 'index', data: idx }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <IndexNode index={idx} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadIndexes} />
         {/each}
       {/snippet}
     </CategoryFolder>
@@ -181,7 +206,7 @@
     <CategoryFolder label="Foreign Tables" count={foreignTables.length} icon={ExternalLink} iconClass="text-rose-400" load={loadForeignTables}>
       {#snippet children()}
         {#each foreignTables as ft (ft.name)}
-          <ObjectInfoRow item={{ kind: 'foreign_table', data: ft }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
+          <ForeignTableNode foreignTable={ft} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadForeignTables} />
         {/each}
       {/snippet}
     </CategoryFolder>

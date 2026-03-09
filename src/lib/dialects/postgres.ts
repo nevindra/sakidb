@@ -44,6 +44,73 @@ export const postgresDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
 
+  // -- Schema & object lifecycle --
+
+  createSchema(schemaName) {
+    return `CREATE SCHEMA ${q(schemaName)};`;
+  },
+
+  renameSchema(oldName, newName) {
+    return `ALTER SCHEMA ${q(oldName)} RENAME TO ${q(newName)};`;
+  },
+
+  dropSchema(schemaName, cascade) {
+    return `DROP SCHEMA ${q(schemaName)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropView(schema, view, cascade) {
+    return `DROP VIEW ${qualified(schema, view)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropMaterializedView(schema, view, cascade) {
+    return `DROP MATERIALIZED VIEW ${qualified(schema, view)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropFunction(schema, name, argTypes, cascade) {
+    const sig = argTypes ? `${qualified(schema, name)}(${argTypes})` : `${qualified(schema, name)}`;
+    return `DROP FUNCTION ${sig}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropSequence(schema, name, cascade) {
+    return `DROP SEQUENCE ${qualified(schema, name)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropIndexCascade(schema, name, cascade) {
+    return `DROP INDEX ${qualified(schema, name)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  dropForeignTable(schema, name, cascade) {
+    return `DROP FOREIGN TABLE ${qualified(schema, name)}${cascade ? ' CASCADE' : ''};`;
+  },
+
+  reindex(schema, name) {
+    return `REINDEX INDEX ${qualified(schema, name)};`;
+  },
+
+  resetSequence(schema, name) {
+    return `ALTER SEQUENCE ${qualified(schema, name)} RESTART WITH 1;`;
+  },
+
+  generateTemplate(objectType, schemaName) {
+    const s = schemaName ? q(schemaName) : '"public"';
+    switch (objectType) {
+      case 'schema':
+        return `CREATE SCHEMA new_schema;\n`;
+      case 'table':
+        return `CREATE TABLE ${s}.new_table (\n    id SERIAL PRIMARY KEY,\n    name VARCHAR(255) NOT NULL,\n    created_at TIMESTAMPTZ DEFAULT NOW()\n);\n`;
+      case 'view':
+        return `CREATE OR REPLACE VIEW ${s}.new_view AS\nSELECT *\nFROM ${s}.table_name\nWHERE true;\n`;
+      case 'materialized_view':
+        return `CREATE MATERIALIZED VIEW ${s}.new_materialized_view AS\nSELECT *\nFROM ${s}.table_name\nWHERE true;\n`;
+      case 'function':
+        return `CREATE OR REPLACE FUNCTION ${s}.new_function()\nRETURNS void\nLANGUAGE plpgsql\nAS $$\nBEGIN\n    -- function body\nEND;\n$$;\n`;
+      case 'sequence':
+        return `CREATE SEQUENCE ${s}.new_sequence\n    INCREMENT 1\n    START 1\n    MINVALUE 1\n    NO MAXVALUE\n    CACHE 1;\n`;
+      case 'index':
+        return `CREATE INDEX new_index\n    ON ${s}.table_name\n    USING btree (column_name);\n`;
+    }
+  },
+
   // -- Editor integration --
 
   codemirrorDialect() { return PostgreSQL; },

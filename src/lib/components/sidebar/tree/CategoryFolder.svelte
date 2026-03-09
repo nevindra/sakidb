@@ -2,6 +2,9 @@
   import { ChevronRight, ChevronDown, Loader2 } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import type { Snippet } from 'svelte';
+  import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer } from '$lib/context-menus';
+  import type { MenuEntry, MenuContext } from '$lib/context-menus';
 
   let {
     label,
@@ -13,6 +16,9 @@
     children,
     autoExpand = false,
     reveal = false,
+    menuItems,
+    menuCtx = {},
+    onmenuaction,
   }: {
     label: string;
     count: number;
@@ -23,6 +29,9 @@
     children: Snippet;
     autoExpand?: boolean;
     reveal?: boolean;
+    menuItems?: MenuEntry[];
+    menuCtx?: MenuContext;
+    onmenuaction?: (id: string) => void;
   } = $props();
 
   let expanded = $state(false);
@@ -63,7 +72,7 @@
   }
 </script>
 
-{#if count > 0 || !loaded}
+{#snippet folderButton()}
   <button
     class="w-full text-left pr-2 py-0.5 text-[11px] font-medium flex items-center gap-1 hover:bg-sidebar-accent transition-colors text-muted-foreground"
     style:padding-left="{depth * 4}px"
@@ -84,6 +93,19 @@
       </span>
     {/if}
   </button>
+{/snippet}
+
+{#if count > 0 || !loaded}
+  {#if menuItems}
+    <ContextMenu.Root>
+      <ContextMenu.Trigger class="block w-full">
+        {@render folderButton()}
+      </ContextMenu.Trigger>
+      <ContextMenuRenderer items={menuItems} ctx={menuCtx} onaction={(id) => onmenuaction?.(id)} />
+    </ContextMenu.Root>
+  {:else}
+    {@render folderButton()}
+  {/if}
 
   {#if isExpanded && loaded}
     {@render children()}

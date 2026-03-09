@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from '$lib/components/ui/dialog';
   import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
 
   let {
     open = $bindable(false),
@@ -10,6 +11,7 @@
     cancelLabel = 'Cancel',
     variant = 'destructive' as 'destructive' | 'default',
     loading = false,
+    showCascade = false,
     onconfirm,
   }: {
     open?: boolean;
@@ -19,11 +21,19 @@
     cancelLabel?: string;
     variant?: 'destructive' | 'default';
     loading?: boolean;
-    onconfirm?: () => void | Promise<void>;
+    showCascade?: boolean;
+    onconfirm?: (cascade?: boolean) => void | Promise<void>;
   } = $props();
 
+  let cascade = $state(false);
+
+  // Reset cascade when dialog closes
+  $effect(() => {
+    if (!open) cascade = false;
+  });
+
   async function handleConfirm() {
-    await onconfirm?.();
+    await onconfirm?.(showCascade ? cascade : undefined);
     open = false;
   }
 </script>
@@ -36,6 +46,12 @@
         <Dialog.Description>{description}</Dialog.Description>
       {/if}
     </Dialog.Header>
+    {#if showCascade}
+      <div class="flex items-center gap-2 py-1">
+        <Checkbox id="cascade-check" bind:checked={cascade} />
+        <label for="cascade-check" class="text-sm font-normal cursor-pointer select-none">CASCADE (also drop dependent objects)</label>
+      </div>
+    {/if}
     <Dialog.Footer>
       <Button variant="outline" size="sm" onclick={() => (open = false)} disabled={loading}>
         {cancelLabel}

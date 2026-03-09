@@ -86,6 +86,20 @@ export interface SqlDialect {
   addPartition(schema: string, parentTable: string, part: PartitionDraft): string | null;
   detachPartition(schema: string, parentTable: string, partitionName: string): string | null;
 
+  // Schema & object lifecycle
+  createSchema(schemaName: string): string;
+  renameSchema(oldName: string, newName: string): string;
+  dropSchema(schemaName: string, cascade: boolean): string;
+  dropView(schema: string, view: string, cascade: boolean): string;
+  dropMaterializedView(schema: string, view: string, cascade: boolean): string;
+  dropFunction(schema: string, name: string, argTypes: string | null, cascade: boolean): string;
+  dropSequence(schema: string, name: string, cascade: boolean): string;
+  dropIndexCascade(schema: string, name: string, cascade: boolean): string;
+  dropForeignTable(schema: string, name: string, cascade: boolean): string;
+  reindex(schema: string, name: string): string | null;
+  resetSequence(schema: string, name: string): string | null;
+  generateTemplate(objectType: 'table' | 'view' | 'materialized_view' | 'function' | 'sequence' | 'index' | 'schema', schemaName?: string): string;
+
   // Editor integration
   codemirrorDialect(): SQLDialect;
   formatterLanguage(): SqlLanguage;

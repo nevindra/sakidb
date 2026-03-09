@@ -12,6 +12,8 @@
   import SchemaNode from './SchemaNode.svelte';
   import RestoreDialog from './RestoreDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
+  import { getDialect } from '$lib/dialects';
+  import { invoke } from '@tauri-apps/api/core';
 
   let {
     database,
@@ -118,12 +120,26 @@
     expandedSchemas = new Set(expandedSchemas);
   }
 
+  const dialect = $derived((() => {
+    const e = app.getSavedConnection(connectionId)?.engine;
+    return e ? getDialect(e as import('$lib/types').EngineType) : null;
+  })());
+  const engineType = $derived(app.getSavedConnection(connectionId)?.engine);
+  const showCascade = $derived(engineType === 'postgres');
+
   let showDropConfirm = $state(false);
   let showCreateDialog = $state(false);
   let showRenameDialog = $state(false);
   let showDbRestore = $state(false);
   let showSchemaRestore = $state(false);
   let restoreSchemaName = $state('');
+
+  // Schema CRUD state
+  let showCreateSchemaDialog = $state(false);
+  let showRenameSchemaDialog = $state(false);
+  let showDropSchemaConfirm = $state(false);
+  let targetSchemaName = $state('');
+  let dropSchemaLoading = $state(false);
 
   async function handleDropDatabase() {
     await app.dropDatabase(connectionId, database.name);
@@ -152,7 +168,57 @@
       case 'connect': return app.connectToSpecificDatabase(connectionId, database.name);
       case 'create-db': showCreateDialog = true; return;
       case 'rename-db': showRenameDialog = true; return;
+      case 'edit-db': {
+        // Open a query tab with ALTER DATABASE template
+        if (dialect) {
+          const sql = `-- Edit database properties\nALTER DATABASE ${dialect.quoteIdent(database.name)}\n    -- OWNER TO new_owner\n    -- SET configuration_parameter = value\n;\n`;
+          app.openQueryTab(connectionId, database.name, sql);
+        }
+        return;
+      }
       case 'drop-db': showDropConfirm = true; return;
+    }
+  }
+
+  async function handleCreateSchema(name: string) {
+    if (!dialect) return;
+    const rid = app.getRuntimeConnectionId(connectionId, database.name);
+    if (!rid) return;
+    try {
+      const sql = dialect.createSchema(name);
+      await invoke('execute_batch', { activeConnectionId: rid, sql });
+      await handleRefresh();
+    } catch {
+      // Error handled by store
+    }
+  }
+
+  async function handleRenameSchema(newName: string) {
+    if (!dialect) return;
+    const rid = app.getRuntimeConnectionId(connectionId, database.name);
+    if (!rid) return;
+    try {
+      const sql = dialect.renameSchema(targetSchemaName, newName);
+      await invoke('execute_batch', { activeConnectionId: rid, sql });
+      await handleRefresh();
+    } catch {
+      // Error handled by store
+    }
+  }
+
+  async function handleDropSchema(cascade?: boolean) {
+    dropSchemaLoading = true;
+    try {
+      if (!dialect) return;
+      const rid = app.getRuntimeConnectionId(connectionId, database.name);
+      if (!rid) return;
+      const sql = dialect.dropSchema(targetSchemaName, cascade ?? false);
+      await invoke('execute_batch', { activeConnectionId: rid, sql });
+      await handleRefresh();
+    } catch {
+      // Error handled by store
+    } finally {
+      dropSchemaLoading = false;
     }
   }
 
@@ -161,6 +227,9 @@
       case 'view-erd': return app.openErdTab(connectionId, database.name, schemaName);
       case 'new-query': return app.openQueryTab(connectionId, database.name);
       case 'restore': restoreSchemaName = schemaName; showSchemaRestore = true; return;
+      case 'create-schema': showCreateSchemaDialog = true; return;
+      case 'rename-schema': targetSchemaName = schemaName; showRenameSchemaDialog = true; return;
+      case 'drop-schema': targetSchemaName = schemaName; showDropSchemaConfirm = true; return;
     }
   }
 </script>
@@ -278,4 +347,36 @@
   savedConnectionId={connectionId}
   databaseName={database.name}
   schema={restoreSchemaName}
+/>
+
+<InputDialog
+  bind:open={showCreateSchemaDialog}
+  title="Create Schema"
+  description="Enter a name for the new schema."
+  label="Schema name"
+  placeholder="new_schema"
+  confirmLabel="Create"
+  onconfirm={handleCreateSchema}
+/>
+
+<InputDialog
+  bind:open={showRenameSchemaDialog}
+  title="Rename Schema"
+  description={`Rename "${targetSchemaName}" to a new name.`}
+  label="New name"
+  placeholder={targetSchemaName}
+  initialValue={targetSchemaName}
+  confirmLabel="Rename"
+  onconfirm={handleRenameSchema}
+/>
+
+<ConfirmDialog
+  bind:open={showDropSchemaConfirm}
+  title="Drop Schema"
+  description={`This will permanently drop the schema "${targetSchemaName}" and all objects within it.`}
+  confirmLabel="Drop"
+  variant="destructive"
+  loading={dropSchemaLoading}
+  {showCascade}
+  onconfirm={handleDropSchema}
 />
