@@ -15,6 +15,7 @@
     "core:window:allow-is-maximized",
     "opener:default",
     "dialog:default",
+    "fs:allow-write-text-file",
     "updater:default",
     "process:allow-restart"
   ]

@@ -290,6 +290,15 @@ export interface DataTab {
   filters: TableFilter[];
 }
 
+export type CompareMatchMode = 'position' | 'key';
+
+export interface CompareConfig {
+  resultIndexA: number;
+  resultIndexB: number;
+  matchMode: CompareMatchMode;
+  keyColumn?: string;
+}
+
 export interface QueryTab {
   type: 'query';
   id: string;
@@ -304,6 +313,8 @@ export interface QueryTab {
   activeResultIndex: number;
   isExecuting: boolean;
   statementTimeoutMs: number | null;
+  compareMode?: boolean;
+  compareConfig?: CompareConfig;
 }
 
 // ── Data profiling types ──

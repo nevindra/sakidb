@@ -81,6 +81,9 @@ Everything Saki can do, at a glance.
 | Query timeout | Set per-query execution time limits |
 | Saved queries | Promote any query from history to your permanent library |
 | Query history | Auto-saved with execution time and row count metrics |
+| Result export | Export query results to CSV or JSON files |
+| Copy to clipboard | One-click copy results as tab-separated values for Excel/Sheets |
+| Result comparison | Side-by-side diff of two results with cell-level highlighting |
 
 #### Data Grid
 | Feature | Description |

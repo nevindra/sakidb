@@ -6,6 +6,10 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
+- **Query result export** — Export query results to CSV or JSON files directly from the query editor, without going through the Data tab.
+- **Copy results to clipboard** — One-click copy of query results as tab-separated values, ready to paste into Excel or Google Sheets.
+- **Result comparison** — Compare two results from a multi-statement query side by side. Highlights added, removed, and changed cells. Match rows by position or by a key column of your choice.
+- **Column count in status bar** — The query result bar now shows the number of columns alongside the row count.
 - **SQLite support** — Connect to local `.db`, `.sqlite`, and `.sqlite3` files with full browsing, editing, export, and restore. Includes VACUUM and integrity check commands.
 - **Multi-engine connections** — Engine selector in the connection form with adaptive fields per engine type. Engine badge (`PG`, `SL`, etc.) shown next to each connection in the sidebar.
 - **Improved structure dialogs** — Searchable type picker for column data types, multi-select dropdowns for index and foreign key columns, and polished inputs across all structure panels (Columns, Indexes, Relations, Triggers, Partitions).

@@ -7,7 +7,9 @@
   import QueryResultBar from './QueryResultBar.svelte';
   import ResultTabBar from './ResultTabBar.svelte';
   import ExplainViewer from './ExplainViewer.svelte';
+  import CompareView from './CompareView.svelte';
   import { Loader2 } from '@lucide/svelte';
+  import type { CompareConfig } from '$lib/types';
   import { EditorView, keymap } from '@codemirror/view';
   import { EditorState, Compartment, Prec } from '@codemirror/state';
   import { basicSetup } from 'codemirror';
@@ -80,6 +82,28 @@
 
   // Track the SQL statements for result tab labels
   let lastExecutedStatements = $state<string[]>([]);
+
+  // ── Compare mode ──
+  function enterCompareMode() {
+    const nextIndex = tab.activeResultIndex + 1 < tab.queryResults.length
+      ? tab.activeResultIndex + 1
+      : 0;
+    tab.compareMode = true;
+    tab.compareConfig = {
+      resultIndexA: tab.activeResultIndex,
+      resultIndexB: nextIndex,
+      matchMode: 'position',
+    };
+  }
+
+  function updateCompareConfig(config: CompareConfig) {
+    tab.compareConfig = config;
+  }
+
+  function exitCompareMode() {
+    tab.compareMode = false;
+    tab.compareConfig = undefined;
+  }
 
   // ── Execution helpers ──
   function getEditorContent(): string {
@@ -368,7 +392,15 @@
 
       <!-- Result content -->
       <div class="flex-1 overflow-hidden flex flex-col">
-        {#if isExplain}
+        {#if tab.compareMode && tab.compareConfig}
+          <CompareView
+            results={tab.queryResults}
+            statements={lastExecutedStatements}
+            config={tab.compareConfig}
+            onupdate={updateCompareConfig}
+            onclose={exitCompareMode}
+          />
+        {:else if isExplain}
           <ExplainViewer result={activeResult} onshowraw={() => { forceRawView = true; }} />
         {:else}
           <div class="flex-1 overflow-hidden">
@@ -376,13 +408,16 @@
           </div>
         {/if}
 
-        <!-- Status bar -->
-        <QueryResultBar
-          result={activeResult}
-          resultIndex={tab.activeResultIndex}
-          totalResults={tab.queryResults.length}
-          {totalExecutionTimeMs}
-        />
+        <!-- Status bar (hidden in compare mode) -->
+        {#if !tab.compareMode}
+          <QueryResultBar
+            result={activeResult}
+            resultIndex={tab.activeResultIndex}
+            totalResults={tab.queryResults.length}
+            {totalExecutionTimeMs}
+            oncompare={tab.queryResults.length > 1 ? enterCompareMode : undefined}
+          />
+        {/if}
       </div>
     {:else}
       <div class="flex items-center justify-center h-full text-muted-foreground text-sm">
