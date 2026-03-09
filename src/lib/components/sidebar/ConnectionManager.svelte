@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, connectionManagerMenuItems } from '$lib/context-menus';
   import * as Select from '$lib/components/ui/select';
   import { Input } from '$lib/components/ui/input';
   import { getAppState } from '$lib/stores';
@@ -331,21 +332,13 @@
                 <span class="text-[10px] text-text-dim/50 shrink-0 font-mono opacity-0 group-hover:opacity-100 transition-opacity duration-100 {isSelected ? '!opacity-100' : ''}">{conn.port}</span>
               </button>
             </ContextMenu.Trigger>
-            <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => selectConnection(conn)}>
-                Edit
-              </ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleDuplicate(conn)}>
-                Duplicate
-              </ContextMenu.Item>
-              <ContextMenu.Separator />
-              <ContextMenu.Item
-                class="text-destructive focus:text-destructive"
-                onclick={() => handleDelete(conn.id)}
-              >
-                Delete
-              </ContextMenu.Item>
-            </ContextMenu.Content>
+            <ContextMenuRenderer items={connectionManagerMenuItems()} ctx={{}} onaction={(id) => {
+              switch (id) {
+                case 'edit': return selectConnection(conn);
+                case 'duplicate': return handleDuplicate(conn);
+                case 'delete': return handleDelete(conn.id);
+              }
+            }} />
           </ContextMenu.Root>
         {/each}
       {/if}

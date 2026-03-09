@@ -1,25 +1,39 @@
 <script lang="ts">
+  import { getAppState } from '$lib/stores';
   import type { FunctionInfo } from '$lib/types';
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { FunctionSquare, ChevronRight, ChevronDown } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, functionMenuItems } from '$lib/context-menus';
   import HighlightMatch from '../HighlightMatch.svelte';
+  import { getDialect } from '$lib/dialects';
 
   let {
     func,
     schema,
+    connectionId,
+    databaseName,
     depth = 14,
     searchResults = new Map(),
     schemaPrefix = '',
   }: {
     func: FunctionInfo;
     schema: string;
+    connectionId?: string;
+    databaseName?: string;
     depth?: number;
     searchResults?: Map<string, FuzzyResult>;
     schemaPrefix?: string;
   } = $props();
 
   const selfMatch = $derived(schemaPrefix ? searchResults.get(`${schemaPrefix}/${func.name}`) : undefined);
+
+  const app = getAppState();
+  const dialect = $derived((() => {
+    if (!connectionId) return null;
+    const e = app.getSavedConnection(connectionId)?.engine;
+    return e ? getDialect(e as import('$lib/types').EngineType) : null;
+  })());
 
   let expanded = $state(false);
 
@@ -28,6 +42,13 @@
       ? `${func.name}(${func.argument_types})`
       : `${func.name}()`
   );
+
+  function handleMenuAction(id: string) {
+    switch (id) {
+      case 'copy-name': return navigator.clipboard.writeText(
+        dialect?.qualifiedTable(schema, func.name) ?? `"${schema}"."${func.name}"`);
+    }
+  }
 </script>
 
 <ContextMenu.Root>
@@ -51,11 +72,7 @@
       <span class="text-text-dim text-[10px] ml-auto shrink-0">{func.kind}</span>
     </button>
   </ContextMenu.Trigger>
-  <ContextMenu.Content>
-    <ContextMenu.Item onclick={() => navigator.clipboard.writeText(`"${schema}"."${func.name}"`)}>
-      Copy Name
-    </ContextMenu.Item>
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={functionMenuItems()} ctx={{}} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
 {#if expanded}

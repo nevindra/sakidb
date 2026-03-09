@@ -151,7 +151,7 @@
     <CategoryFolder label="Functions" count={functions.length} icon={FunctionSquare} iconClass="text-emerald-400" load={loadFunctions} autoExpand={isSearching && categoryHasMatch(functions)}>
       {#snippet children()}
         {#each filteredFunctions as func (func.name + '(' + func.argument_types + ')')}
-          <FunctionNode {func} schema={schemaName} {searchResults} {schemaPrefix} />
+          <FunctionNode {func} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
         {/each}
       {/snippet}
     </CategoryFolder>
@@ -161,7 +161,7 @@
     <CategoryFolder label="Sequences" count={sequences.length} icon={Hash} iconClass="text-orange-400" load={loadSequences}>
       {#snippet children()}
         {#each sequences as seq (seq.name)}
-          <ObjectInfoRow item={{ kind: 'sequence', data: seq }} schema={schemaName} {searchResults} {schemaPrefix} />
+          <ObjectInfoRow item={{ kind: 'sequence', data: seq }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
         {/each}
       {/snippet}
     </CategoryFolder>
@@ -171,7 +171,7 @@
     <CategoryFolder label="Indexes" count={indexes.length} icon={ListTree} iconClass="text-teal-400" load={loadIndexes}>
       {#snippet children()}
         {#each indexes as idx (idx.name)}
-          <ObjectInfoRow item={{ kind: 'index', data: idx }} schema={schemaName} {searchResults} {schemaPrefix} />
+          <ObjectInfoRow item={{ kind: 'index', data: idx }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
         {/each}
       {/snippet}
     </CategoryFolder>
@@ -181,7 +181,7 @@
     <CategoryFolder label="Foreign Tables" count={foreignTables.length} icon={ExternalLink} iconClass="text-rose-400" load={loadForeignTables}>
       {#snippet children()}
         {#each foreignTables as ft (ft.name)}
-          <ObjectInfoRow item={{ kind: 'foreign_table', data: ft }} schema={schemaName} {searchResults} {schemaPrefix} />
+          <ObjectInfoRow item={{ kind: 'foreign_table', data: ft }} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} />
         {/each}
       {/snippet}
     </CategoryFolder>

@@ -233,6 +233,8 @@ case '<engine>':
 
 Methods returning `string | null`: return `null` when the engine doesn't support the operation. Components guard against null and hide the relevant UI.
 
+**Context menus are automatic.** All sidebar context menus are centralized in `src/lib/context-menus/menu-items.ts` with `when` guards based on `EngineCapabilities`. Setting capabilities correctly in your `Driver` implementation is sufficient — menu items show/hide automatically. You do NOT need to modify context menu definitions for a new engine unless you need engine-specific menu items (like SQLite's "Vacuum" command in `ConnectionTree`).
+
 ---
 
 ## Step 6: Feature-flag in src-tauri

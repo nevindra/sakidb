@@ -59,6 +59,17 @@ Components should be database-agnostic. SakiDB will support multiple database en
 - If you're building a component that displays columns, rows, indexes, or constraints, design it against the types in `src/lib/types/index.ts` (which mirror `sakidb-core` Rust types), not against Postgres-specific structures.
 - When a component needs database-specific behavior (e.g., Postgres-only features), use conditional rendering based on data, not hardcoded assumptions.
 
+### Context Menus
+
+All sidebar context menus are centralized in `src/lib/context-menus/`. DO NOT add inline `ContextMenu.Content` with hardcoded items in components.
+
+- **Menu definitions** live in `menu-items.ts` — each node type has a function returning `MenuEntry[]` with capability-based `when` guards.
+- **Rendering** uses `ContextMenuRenderer.svelte` — pass items, a `MenuContext`, and an `onaction` callback.
+- **Action handlers** live in the node component as a `switch` on the menu item `id`. Dialogs stay in node components where their state lives.
+- **SQL generation** must go through the dialect system (`getDialect()`) — never hardcode `"${schema}"."${table}"` or engine-specific SQL in components.
+- To add a menu item: add an entry to the relevant function in `menu-items.ts`, then handle the new `id` in the component's action handler.
+- To add menus for a new node type: add a new function to `menu-items.ts`, use `<ContextMenuRenderer>` in the component.
+
 ### Svelte Conventions
 
 - Svelte 5 runes only: `$state()`, `$derived()`, `$effect()`, `$props()`. DO NOT use legacy Svelte stores or reactive declarations (`$:`, `let x; $: x = ...`).

@@ -61,6 +61,10 @@ export const postgresDialect: SqlDialect = {
       : `CREATE TABLE ${d} AS SELECT * FROM ${s};`;
   },
 
+  refreshMaterializedView(schema, view) {
+    return `REFRESH MATERIALIZED VIEW ${qualified(schema, view)};`;
+  },
+
   // -- Cell literals --
 
   cellLiteral(cell: CellValue, dataType?: string): string {

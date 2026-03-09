@@ -6,6 +6,7 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Added
 
+- **Centralized context menus** — All 9 sidebar context menus (table, view, materialized view, function, sequence/index/foreign table, database, schema, connection, saved query) extracted into a single config-driven registry (`src/lib/context-menus/`). Menu items defined as data with capability-based `when` guards, rendered by a shared `ContextMenuRenderer` component. Eliminates hardcoded PostgreSQL SQL from ViewNode, MaterializedViewNode, FunctionNode, and ObjectInfoRow — all now route through the dialect system. Added `refreshMaterializedView()` to `SqlDialect` interface.
 - **SQL dialect abstraction** — Engine-aware SQL generation on both frontend and backend, replacing all hardcoded PostgreSQL SQL.
   - Frontend `SqlDialect` interface (`src/lib/dialects/`) with `PostgresDialect` and `SqliteDialect` implementations. Factory function `getDialect()` with exhaustive engine switch. Covers DDL (add/alter/drop columns, indexes, foreign keys, triggers, partitions), DML (drop/truncate table, duplicate table, cell literals), and profiling queries.
   - Backend `SqlFormatter` trait (`sakidb-core`) with implementations for `PostgresDriver` (COPY format) and `SqliteDriver` (INSERT statements). Integrated into `DriverRegistry` and `export.rs` — SQL export now uses engine-specific DDL and data formatting instead of hardcoded PostgreSQL COPY.

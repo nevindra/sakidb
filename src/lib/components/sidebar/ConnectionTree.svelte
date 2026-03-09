@@ -5,6 +5,8 @@
   import { ChevronRight, ChevronDown, Loader2, Server, FolderClosed, FolderOpen } from '@lucide/svelte';
   import { invoke } from '@tauri-apps/api/core';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, connectionTreeMenuItems } from '$lib/context-menus';
+  import type { MenuContext } from '$lib/context-menus';
   import DatabaseNode from './tree/DatabaseNode.svelte';
   import SchemaNode from './tree/SchemaNode.svelte';
   import HighlightMatch from './HighlightMatch.svelte';
@@ -107,6 +109,32 @@
       expanded = !expanded;
     }
   }
+
+  const connMenuCtx: MenuContext = $derived({ capabilities, isConnected, engineType: connection.engine });
+
+  function handleConnMenuAction(id: string) {
+    switch (id) {
+      case 'new-query': return app.openQueryTab(connection.id, connection.database);
+      case 'vacuum': {
+        const rid = app._getRuntimeId(connection.id, connection.database);
+        if (rid) invoke('vacuum_database', { connId: rid }).catch(e => console.error('VACUUM failed:', e));
+        return;
+      }
+      case 'integrity-check': {
+        const rid = app._getRuntimeId(connection.id, connection.database);
+        if (rid) invoke('check_integrity', { connId: rid }).then((messages: unknown) => {
+          const msgs = messages as string[];
+          if (msgs.length === 1 && msgs[0] === 'ok') console.log('Integrity check passed');
+          else console.warn('Integrity check issues:', msgs);
+        }).catch(e => console.error('Integrity check failed:', e));
+        return;
+      }
+      case 'disconnect': return app.disconnectFromDatabase(connection.id);
+      case 'connect': return app.connectToDatabase(connection.id);
+      case 'edit': return app.openEditDialog(connection.id);
+      case 'delete': return app.deleteConnection(connection.id);
+    }
+  }
 </script>
 
 <ContextMenu.Root>
@@ -185,63 +213,5 @@
     {/if}
   </ContextMenu.Trigger>
 
-  <ContextMenu.Content>
-    {#if isConnected}
-      {#if capabilities?.sql !== false}
-        <ContextMenu.Item onclick={() => {
-          app.openQueryTab(connection.id, connection.database);
-        }}>
-          New Query
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-      {/if}
-      {#if connection.engine === 'sqlite'}
-        <ContextMenu.Item onclick={async () => {
-          const rid = app._getRuntimeId(connection.id, connection.database);
-          if (!rid) return;
-          try {
-            await invoke('vacuum_database', { connId: rid });
-          } catch (e) {
-            console.error('VACUUM failed:', e);
-          }
-        }}>
-          Vacuum
-        </ContextMenu.Item>
-        <ContextMenu.Item onclick={async () => {
-          const rid = app._getRuntimeId(connection.id, connection.database);
-          if (!rid) return;
-          try {
-            const messages: string[] = await invoke('check_integrity', { connId: rid });
-            if (messages.length === 1 && messages[0] === 'ok') {
-              console.log('Integrity check passed');
-            } else {
-              console.warn('Integrity check issues:', messages);
-            }
-          } catch (e) {
-            console.error('Integrity check failed:', e);
-          }
-        }}>
-          Integrity Check
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-      {/if}
-      <ContextMenu.Item onclick={() => app.disconnectFromDatabase(connection.id)}>
-        Disconnect
-      </ContextMenu.Item>
-    {:else}
-      <ContextMenu.Item onclick={() => app.connectToDatabase(connection.id)}>
-        Connect
-      </ContextMenu.Item>
-    {/if}
-    <ContextMenu.Separator />
-    <ContextMenu.Item onclick={() => app.openEditDialog(connection.id)}>
-      Edit
-    </ContextMenu.Item>
-    <ContextMenu.Item
-      class="text-destructive focus:text-destructive"
-      onclick={() => app.deleteConnection(connection.id)}
-    >
-      Delete
-    </ContextMenu.Item>
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={connectionTreeMenuItems(connMenuCtx)} ctx={connMenuCtx} onaction={handleConnMenuAction} />
 </ContextMenu.Root>

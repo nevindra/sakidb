@@ -29,6 +29,10 @@ export const sqliteDialect: SqlDialect = {
       : `CREATE TABLE ${d} AS SELECT * FROM ${s};`;
   },
 
+  refreshMaterializedView() {
+    return null;
+  },
+
   cellLiteral(cell: CellValue, _dataType?: string): string {
     if (cell === 'Null') return 'NULL';
     if ('Bool' in cell) return cell.Bool ? '1' : '0';

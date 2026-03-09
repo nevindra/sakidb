@@ -69,7 +69,7 @@ crates/sakidb-store/      — Encrypted credential storage (rusqlite + AES-256-G
 src-tauri/                — Tauri app. DriverRegistry + store wired into IPC commands. registry.rs routes connections to drivers.
 ```
 
-**Extension point:** Composable trait system — new engines implement `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `SqlFormatter`). Register via `DriverRegistry` in `src-tauri/src/registry.rs`. For SQL engines, also add a frontend `SqlDialect` in `src/lib/dialects/`. See `CONTRIBUTING.md` for details.
+**Extension point:** Composable trait system — new engines implement `Driver` (required) plus optional capability traits (`SqlDriver`, `Introspector`, `Exporter`, `Restorer`, `SqlFormatter`). Register via `DriverRegistry` in `src-tauri/src/registry.rs`. For SQL engines, also add a frontend `SqlDialect` in `src/lib/dialects/`. Context menus auto-adapt via `EngineCapabilities` — menu items are defined in `src/lib/context-menus/menu-items.ts` with `when` guards that check capabilities. See `CONTRIBUTING.md` for details.
 
 ### Key Rust types
 
@@ -121,6 +121,11 @@ src/lib/dialects/           — Engine-specific SQL generation (SqlDialect inter
   ├── postgres.ts           — PostgresDialect (casts, CASCADE, COPY, TRUNCATE, profiling)
   ├── sqlite.ts             — SqliteDialect (INSERT, no CASCADE, no profiling)
   └── index.ts              — getDialect() factory with exhaustive engine switch
+src/lib/context-menus/      — Centralized context menu definitions and renderer
+  ├── types.ts              — MenuEntry, MenuItemDef, MenuSeparatorDef, MenuContext
+  ├── menu-items.ts         — All menu definition functions (tree nodes + connections + queries)
+  ├── ContextMenuRenderer.svelte — Shared renderer: filters by `when` guards, emits action IDs
+  └── index.ts              — Barrel export
 src/lib/types/index.ts      — TypeScript mirrors of all Rust types
 src/lib/components/         — UI components (organized by domain)
 src/routes/+page.svelte     — Root page: main layout

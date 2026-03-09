@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { getAppState } from '$lib/stores';
   import type { SequenceInfo, IndexInfo, ForeignTableInfo } from '$lib/types';
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { Hash, ListTree, ExternalLink, ChevronRight, ChevronDown } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, objectInfoMenuItems } from '$lib/context-menus';
   import HighlightMatch from '../HighlightMatch.svelte';
+  import { getDialect } from '$lib/dialects';
 
   type ObjectItem =
     | { kind: 'sequence'; data: SequenceInfo }
@@ -13,18 +16,29 @@
   let {
     item,
     schema,
+    connectionId,
+    databaseName,
     depth = 14,
     searchResults = new Map(),
     schemaPrefix = '',
   }: {
     item: ObjectItem;
     schema: string;
+    connectionId?: string;
+    databaseName?: string;
     depth?: number;
     searchResults?: Map<string, FuzzyResult>;
     schemaPrefix?: string;
   } = $props();
 
   let expanded = $state(false);
+
+  const app = getAppState();
+  const dialect = $derived((() => {
+    if (!connectionId) return null;
+    const e = app.getSavedConnection(connectionId)?.engine;
+    return e ? getDialect(e as import('$lib/types').EngineType) : null;
+  })());
 
   const Icon = $derived(
     item.kind === 'sequence' ? Hash
@@ -47,6 +61,13 @@
     : item.kind === 'index' ? (item.data as IndexInfo).index_type
     : (item.data as ForeignTableInfo).server_name
   );
+
+  function handleMenuAction(id: string) {
+    switch (id) {
+      case 'copy-name': return navigator.clipboard.writeText(
+        dialect?.qualifiedTable(schema, name) ?? `"${schema}"."${name}"`);
+    }
+  }
 </script>
 
 <ContextMenu.Root>
@@ -70,11 +91,7 @@
       <span class="text-text-dim text-[10px] ml-auto shrink-0">{subtitle}</span>
     </button>
   </ContextMenu.Trigger>
-  <ContextMenu.Content>
-    <ContextMenu.Item onclick={() => navigator.clipboard.writeText(`"${schema}"."${name}"`)}>
-      Copy Name
-    </ContextMenu.Item>
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={objectInfoMenuItems()} ctx={{}} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
 {#if expanded}

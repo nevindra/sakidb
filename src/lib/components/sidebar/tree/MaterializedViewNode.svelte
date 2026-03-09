@@ -4,7 +4,9 @@
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { Layers } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, materializedViewMenuItems } from '$lib/context-menus';
   import HighlightMatch from '../HighlightMatch.svelte';
+  import { getDialect } from '$lib/dialects';
 
   let {
     view,
@@ -27,6 +29,7 @@
   const selfMatch = $derived(schemaPrefix ? searchResults.get(`${schemaPrefix}/${view.name}`) : undefined);
 
   const app = getAppState();
+  const dialect = $derived((() => { const e = app.getSavedConnection(connectionId)?.engine; return e ? getDialect(e as import('$lib/types').EngineType) : null; })());
 
   function handleClick() {
     app.openDataTab(connectionId, databaseName, schema, view.name);
@@ -37,6 +40,21 @@
     if (count >= 1_000_000) return `~${(count / 1_000_000).toFixed(1)}M`;
     if (count >= 1_000) return `~${(count / 1_000).toFixed(1)}k`;
     return `~${count}`;
+  }
+
+  function handleMenuAction(id: string) {
+    switch (id) {
+      case 'open-data': return handleClick();
+      case 'refresh': {
+        const sql = dialect?.refreshMaterializedView(schema, view.name);
+        if (sql) app.openQueryTab(connectionId, databaseName, sql);
+        return;
+      }
+      case 'new-query': return app.openQueryTab(connectionId, databaseName,
+        `SELECT * FROM ${dialect?.qualifiedTable(schema, view.name) ?? '"' + view.name + '"'} LIMIT 100;`);
+      case 'copy-name': return navigator.clipboard.writeText(
+        dialect?.qualifiedTable(schema, view.name) ?? `"${schema}"."${view.name}"`);
+    }
   }
 </script>
 
@@ -62,23 +80,5 @@
       {/if}
     </button>
   </ContextMenu.Trigger>
-  <ContextMenu.Content>
-    <ContextMenu.Item onclick={handleClick}>
-      Open Data
-    </ContextMenu.Item>
-    <ContextMenu.Item onclick={() => {
-      app.openQueryTab(connectionId, databaseName, `REFRESH MATERIALIZED VIEW "${schema}"."${view.name}";`);
-    }}>
-      Refresh
-    </ContextMenu.Item>
-    <ContextMenu.Item onclick={() => {
-      app.openQueryTab(connectionId, databaseName, `SELECT * FROM "${schema}"."${view.name}" LIMIT 100;`);
-    }}>
-      New Query
-    </ContextMenu.Item>
-    <ContextMenu.Separator />
-    <ContextMenu.Item onclick={() => navigator.clipboard.writeText(`"${schema}"."${view.name}"`)}>
-      Copy Qualified Name
-    </ContextMenu.Item>
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={materializedViewMenuItems()} ctx={{}} onaction={handleMenuAction} />
 </ContextMenu.Root>

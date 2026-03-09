@@ -4,6 +4,8 @@
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { ChevronRight, ChevronDown, Table2 } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, tableMenuItems } from '$lib/context-menus';
+  import type { MenuContext } from '$lib/context-menus';
   import ColumnList from './ColumnList.svelte';
   import ExportDialog from '$lib/components/structure/ExportDialog.svelte';
   import RestoreDialog from './RestoreDialog.svelte';
@@ -142,6 +144,23 @@
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
+
+  const menuCtx: MenuContext = $derived({ capabilities });
+
+  function handleMenuAction(id: string) {
+    switch (id) {
+      case 'open-data': return handleClick();
+      case 'view-structure': return app.openStructureTab(connectionId, databaseName, schema, table.name);
+      case 'view-erd': return app.openErdTab(connectionId, databaseName, schema, table.name);
+      case 'new-query': return app.openQueryTab(connectionId, databaseName, `SELECT * FROM ${dialect?.qualifiedTable(schema, table.name) ?? '"' + table.name + '"'} LIMIT 100;`);
+      case 'export': exportOpen = true; return;
+      case 'restore': restoreOpen = true; return;
+      case 'sql-create': return handleCreateSql();
+      case 'duplicate': duplicateOpen = true; return;
+      case 'truncate': truncateConfirmOpen = true; return;
+      case 'drop': dropConfirmOpen = true; return;
+    }
+  }
 </script>
 
 <ContextMenu.Root>
@@ -185,30 +204,7 @@
       </span>
     </button>
   </ContextMenu.Trigger>
-  <ContextMenu.Content>
-    <ContextMenu.Item onclick={handleClick}>Open Data</ContextMenu.Item>
-    <ContextMenu.Item onclick={() => app.openStructureTab(connectionId, databaseName, schema, table.name)}>View Structure</ContextMenu.Item>
-    {#if capabilities?.introspection !== false}
-      <ContextMenu.Item onclick={() => app.openErdTab(connectionId, databaseName, schema, table.name)}>View ERD</ContextMenu.Item>
-    {/if}
-    {#if capabilities?.sql !== false}
-      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM ${dialect?.qualifiedTable(schema, table.name) ?? '"' + table.name + '"'} LIMIT 100;`)}>New Query</ContextMenu.Item>
-    {/if}
-    <ContextMenu.Separator />
-    {#if capabilities?.export !== false}
-      <ContextMenu.Item onclick={() => (exportOpen = true)}>Export Table...</ContextMenu.Item>
-    {/if}
-    {#if capabilities?.restore}
-      <ContextMenu.Item onclick={() => (restoreOpen = true)}>Restore from SQL...</ContextMenu.Item>
-    {/if}
-    {#if capabilities?.sql !== false}
-      <ContextMenu.Item onclick={handleCreateSql}>SQL: Create</ContextMenu.Item>
-      <ContextMenu.Item onclick={() => (duplicateOpen = true)}>Duplicate Table...</ContextMenu.Item>
-      <ContextMenu.Separator />
-      <ContextMenu.Item variant="destructive" onclick={() => (truncateConfirmOpen = true)}>Truncate Table...</ContextMenu.Item>
-      <ContextMenu.Item variant="destructive" onclick={() => (dropConfirmOpen = true)}>Drop Table...</ContextMenu.Item>
-    {/if}
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={tableMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
 {#if expanded}

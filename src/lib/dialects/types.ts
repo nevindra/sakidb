@@ -59,6 +59,7 @@ export interface SqlDialect {
   dropTable(schema: string, table: string): string;
   truncateTable(schema: string, table: string): string;
   duplicateTable(schema: string, src: string, dst: string, mode: 'structure' | 'data'): string;
+  refreshMaterializedView(schema: string, view: string): string | null;
 
   // Cell literals (for UPDATE/INSERT/DELETE)
   cellLiteral(cell: CellValue, dataType?: string): string;

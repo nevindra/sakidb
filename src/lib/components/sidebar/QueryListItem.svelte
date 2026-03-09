@@ -2,6 +2,7 @@
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { Star, Copy } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, savedQueryMenuItems } from '$lib/context-menus';
   import * as Tooltip from '$lib/components/ui/tooltip';
   import HighlightMatch from './HighlightMatch.svelte';
 
@@ -43,6 +44,18 @@
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
+  }
+
+  const menuCtx = $derived({ isHistory: !isSaved });
+
+  function handleMenuAction(id: string) {
+    switch (id) {
+      case 'open': return onOpen();
+      case 'copy-sql': return onCopySql();
+      case 'edit': return onEdit?.();
+      case 'delete': return onDelete?.();
+      case 'save': return onSave?.();
+    }
   }
 </script>
 
@@ -104,31 +117,5 @@
     </button>
   </ContextMenu.Trigger>
 
-  <ContextMenu.Content>
-    <ContextMenu.Item onclick={onOpen}>
-      Open in New Tab
-    </ContextMenu.Item>
-    <ContextMenu.Item onclick={onCopySql}>
-      <Copy class="h-3.5 w-3.5 mr-2" />
-      Copy SQL
-    </ContextMenu.Item>
-    {#if isSaved}
-      <ContextMenu.Separator />
-      <ContextMenu.Item onclick={onEdit}>
-        Edit
-      </ContextMenu.Item>
-      <ContextMenu.Item
-        class="text-destructive focus:text-destructive"
-        onclick={onDelete}
-      >
-        Delete
-      </ContextMenu.Item>
-    {:else}
-      <ContextMenu.Separator />
-      <ContextMenu.Item onclick={onSave}>
-        <Star class="h-3.5 w-3.5 mr-2" />
-        Save Query
-      </ContextMenu.Item>
-    {/if}
-  </ContextMenu.Content>
+  <ContextMenuRenderer items={savedQueryMenuItems(menuCtx)} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>

@@ -5,6 +5,8 @@
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { ChevronRight, ChevronDown, Database, Loader2, FolderClosed, FolderOpen } from '@lucide/svelte';
   import * as ContextMenu from '$lib/components/ui/context-menu';
+  import { ContextMenuRenderer, databaseMenuItems, schemaMenuItems } from '$lib/context-menus';
+  import type { MenuContext } from '$lib/context-menus';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
   import SchemaNode from './SchemaNode.svelte';
@@ -138,6 +140,29 @@
   async function handleRefresh() {
     await app.refreshDatabases(connectionId);
   }
+
+  const dbMenuCtx: MenuContext = $derived({ capabilities, isDbConnected });
+
+  function handleDbMenuAction(id: string) {
+    switch (id) {
+      case 'new-query': return app.openQueryTab(connectionId, database.name);
+      case 'restore': showDbRestore = true; return;
+      case 'refresh': return handleRefresh();
+      case 'disconnect': return app.disconnectSpecificDatabase(connectionId, database.name);
+      case 'connect': return app.connectToSpecificDatabase(connectionId, database.name);
+      case 'create-db': showCreateDialog = true; return;
+      case 'rename-db': showRenameDialog = true; return;
+      case 'drop-db': showDropConfirm = true; return;
+    }
+  }
+
+  function handleSchemaMenuAction(schemaName: string, id: string) {
+    switch (id) {
+      case 'view-erd': return app.openErdTab(connectionId, database.name, schemaName);
+      case 'new-query': return app.openQueryTab(connectionId, database.name);
+      case 'restore': restoreSchemaName = schemaName; showSchemaRestore = true; return;
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -197,18 +222,7 @@
                   {/if}
                 </button>
               </ContextMenu.Trigger>
-              <ContextMenu.Content>
-                {#if capabilities?.introspection !== false}
-                  <ContextMenu.Item onclick={() => app.openErdTab(connectionId, database.name, schema.name)}>View ERD</ContextMenu.Item>
-                {/if}
-                {#if capabilities?.sql !== false}
-                  <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>New Query</ContextMenu.Item>
-                {/if}
-                {#if capabilities?.restore}
-                  <ContextMenu.Separator />
-                  <ContextMenu.Item onclick={() => { restoreSchemaName = schema.name; showSchemaRestore = true; }}>Restore from SQL...</ContextMenu.Item>
-                {/if}
-              </ContextMenu.Content>
+              <ContextMenuRenderer items={schemaMenuItems(dbMenuCtx)} ctx={dbMenuCtx} onaction={(id) => handleSchemaMenuAction(schema.name, id)} />
             </ContextMenu.Root>
           </div>
 
@@ -219,48 +233,7 @@
       {/if}
     </ContextMenu.Trigger>
 
-    <ContextMenu.Content>
-      {#if isDbConnected}
-        {#if capabilities?.sql !== false}
-          <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, database.name)}>
-            New Query
-          </ContextMenu.Item>
-          <ContextMenu.Separator />
-        {/if}
-        {#if capabilities?.restore}
-          <ContextMenu.Item onclick={() => (showDbRestore = true)}>
-            Restore from SQL...
-          </ContextMenu.Item>
-          <ContextMenu.Separator />
-        {/if}
-        <ContextMenu.Item onclick={handleRefresh}>
-          Refresh
-        </ContextMenu.Item>
-        <ContextMenu.Item onclick={() => app.disconnectSpecificDatabase(connectionId, database.name)}>
-          Disconnect
-        </ContextMenu.Item>
-      {:else}
-        <ContextMenu.Item onclick={() => app.connectToSpecificDatabase(connectionId, database.name)}>
-          Connect
-        </ContextMenu.Item>
-      {/if}
-      {#if capabilities?.multi_database}
-        <ContextMenu.Separator />
-        <ContextMenu.Item onclick={() => (showCreateDialog = true)}>
-          New Database
-        </ContextMenu.Item>
-        <ContextMenu.Item onclick={() => (showRenameDialog = true)}>
-          Rename Database
-        </ContextMenu.Item>
-        <ContextMenu.Separator />
-        <ContextMenu.Item
-          class="text-destructive focus:text-destructive"
-          onclick={() => (showDropConfirm = true)}
-        >
-          Drop Database
-        </ContextMenu.Item>
-      {/if}
-    </ContextMenu.Content>
+    <ContextMenuRenderer items={databaseMenuItems(dbMenuCtx)} ctx={dbMenuCtx} onaction={handleDbMenuAction} />
   </ContextMenu.Root>
 </div>
 
