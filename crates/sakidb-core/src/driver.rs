@@ -44,6 +44,20 @@ pub trait SqlDriver: Send + Sync {
         let result = self.execute_multi(conn_id, sql).await?;
         Ok(rows_to_columnar(result))
     }
+
+    /// Columnar paged results for DataTab browsing.
+    /// Default: converts execute_paged() output via paged_to_columnar().
+    /// Drivers can override with native columnar streaming for better performance.
+    async fn execute_paged_columnar(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Result<PagedColumnarResult> {
+        let result = self.execute_paged(conn_id, sql, page, page_size).await?;
+        Ok(paged_to_columnar(result))
+    }
 }
 
 // ── Schema introspection — relational databases ──
@@ -175,7 +189,7 @@ pub trait Restorer: Send + Sync {
         file_path: &str,
         options: &RestoreOptions,
         cancelled: &AtomicBool,
-        on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+        on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync>,
     ) -> Result<RestoreProgress>;
 }
 
@@ -217,6 +231,35 @@ pub trait DocumentDriver: Send + Sync {
 }
 
 // ── Utility: convert row-based results to columnar format ──
+
+/// Convert a PagedResult into a PagedColumnarResult by wrapping the single-result conversion.
+pub fn paged_to_columnar(paged: PagedResult) -> PagedColumnarResult {
+    let page = paged.page;
+    let page_size = paged.page_size;
+    let total_rows_estimate = paged.total_rows_estimate;
+
+    let qr = QueryResult {
+        columns: paged.columns,
+        cells: paged.cells,
+        row_count: paged.row_count,
+        execution_time_ms: paged.execution_time_ms,
+        truncated: false,
+    };
+
+    let multi = rows_to_columnar(MultiQueryResult {
+        results: vec![qr],
+        total_execution_time_ms: 0,
+    });
+
+    let result = multi.results.into_iter().next().unwrap();
+
+    PagedColumnarResult {
+        result,
+        page,
+        page_size,
+        total_rows_estimate,
+    }
+}
 
 pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
     let total_execution_time_ms = multi.total_execution_time_ms;
@@ -301,10 +344,10 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                         let mut offsets = Vec::with_capacity(row_count + 1);
                         let mut data = Vec::new();
                         offsets.push(0u32);
-                        for row_idx in 0..row_count {
+                        for (row_idx, null_flag) in nulls.iter_mut().enumerate() {
                             match &qr.cells[row_idx * num_cols + col_idx] {
                                 CellValue::Null => {
-                                    nulls[row_idx] = 1;
+                                    *null_flag = 1;
                                     offsets.push(data.len() as u32);
                                 }
                                 CellValue::Text(s)
@@ -329,10 +372,10 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                         let mut offsets = Vec::with_capacity(row_count + 1);
                         let mut data = Vec::new();
                         offsets.push(0u32);
-                        for row_idx in 0..row_count {
+                        for (row_idx, null_flag) in nulls.iter_mut().enumerate() {
                             match &qr.cells[row_idx * num_cols + col_idx] {
                                 CellValue::Null => {
-                                    nulls[row_idx] = 1;
+                                    *null_flag = 1;
                                     offsets.push(data.len() as u32);
                                 }
                                 CellValue::Bytes(b) => {
@@ -340,7 +383,7 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                                     offsets.push(data.len() as u32);
                                 }
                                 _ => {
-                                    nulls[row_idx] = 1;
+                                    *null_flag = 1;
                                     offsets.push(data.len() as u32);
                                 }
                             }

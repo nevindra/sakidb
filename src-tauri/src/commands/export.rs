@@ -29,6 +29,14 @@ fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
+fn qualified_table(schema: &str, table: &str) -> String {
+    if schema.is_empty() {
+        quote_ident(table)
+    } else {
+        format!("{}.{}", quote_ident(schema), quote_ident(table))
+    }
+}
+
 /// Write a CellValue into a CSV field directly into the buffer. No intermediate allocations.
 fn write_csv_cell(buf: &mut String, cell: &CellValue) {
     match cell {
@@ -127,15 +135,10 @@ pub async fn export_table_csv(
     let conn_id = parse_conn_id(&active_connection_id)?;
     info!(schema = %schema, table = %table, file_path = %file_path, "starting CSV export");
 
+    let qt = qualified_table(&schema, &table);
     let base_sql = match &where_clause {
-        Some(wc) if !wc.is_empty() => {
-            format!(
-                "SELECT * FROM {}.{} WHERE {wc}",
-                quote_ident(&schema),
-                quote_ident(&table)
-            )
-        }
-        _ => format!("SELECT * FROM {}.{}", quote_ident(&schema), quote_ident(&table)),
+        Some(wc) if !wc.is_empty() => format!("SELECT * FROM {qt} WHERE {wc}"),
+        _ => format!("SELECT * FROM {qt}"),
     };
 
     // Optional count for progress
@@ -275,7 +278,7 @@ pub async fn export_table_sql(
         .map_err(|e| format!("Failed to create file: {e}"))?;
     let writer = Arc::new(Mutex::new(std::io::BufWriter::new(file)));
 
-    let qualified = format!("{}.{}", quote_ident(&schema), quote_ident(&table));
+    let qualified = qualified_table(&schema, &table);
 
     // Phase 1: DDL — fetch all metadata first (async), then write synchronously
     if include_ddl {

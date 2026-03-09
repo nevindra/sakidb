@@ -32,12 +32,18 @@ pub struct ConnectionManager {
     interrupt_handles: DashMap<ConnectionId, InterruptHandle>,
 }
 
-impl ConnectionManager {
-    pub fn new() -> Self {
+impl Default for ConnectionManager {
+    fn default() -> Self {
         Self {
             connections: DashMap::new(),
             interrupt_handles: DashMap::new(),
         }
+    }
+}
+
+impl ConnectionManager {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn connect(&self, file_path: &str) -> Result<ConnectionId> {

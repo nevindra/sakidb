@@ -188,11 +188,40 @@ impl StreamingSqlSplitter {
     }
 
     /// Feed a chunk of SQL text. Returns any complete statements found.
+    ///
+    /// Uses `&str` slice copies instead of per-byte `ch as char` to correctly
+    /// preserve multi-byte UTF-8 sequences. All SQL syntax delimiters are ASCII,
+    /// so we only need byte-level checks for state transitions.
     pub fn feed(&mut self, chunk: &str) -> Vec<String> {
         let mut stmts = Vec::new();
         let bytes = chunk.as_bytes();
         let len = bytes.len();
         let mut i = 0;
+        // Start of a run of bytes to bulk-copy into buf.
+        let mut run_start = 0;
+        let mut in_run = false;
+
+        // Flush buffered run of bytes as a &str slice (preserves UTF-8).
+        macro_rules! flush_run {
+            () => {
+                if in_run {
+                    self.buf.push_str(&chunk[run_start..i]);
+                    #[allow(unused_assignments)]
+                    {
+                        in_run = false;
+                    }
+                }
+            };
+        }
+
+        macro_rules! start_run {
+            () => {
+                if !in_run {
+                    run_start = i;
+                    in_run = true;
+                }
+            };
+        }
 
         while i < len {
             let ch = bytes[i];
@@ -201,14 +230,15 @@ impl StreamingSqlSplitter {
                 ParserState::Normal => {
                     // Line comment start
                     if ch == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
-                        self.buf.push('-');
-                        self.buf.push('-');
+                        flush_run!();
+                        self.buf.push_str("--");
                         i += 2;
                         self.state = ParserState::LineComment;
                         continue;
                     }
                     // Edge: `-` at end of chunk — buffer it, stay Normal
                     if ch == b'-' && i + 1 == len {
+                        flush_run!();
                         self.buf.push('-');
                         i += 1;
                         continue;
@@ -216,8 +246,8 @@ impl StreamingSqlSplitter {
 
                     // Block comment start
                     if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-                        self.buf.push('/');
-                        self.buf.push('*');
+                        flush_run!();
+                        self.buf.push_str("/*");
                         i += 2;
                         self.state = ParserState::BlockComment { depth: 1 };
                         continue;
@@ -225,6 +255,7 @@ impl StreamingSqlSplitter {
 
                     // Single-quoted string
                     if ch == b'\'' {
+                        flush_run!();
                         self.buf.push('\'');
                         i += 1;
                         self.state = ParserState::SingleQuote;
@@ -233,6 +264,7 @@ impl StreamingSqlSplitter {
 
                     // Double-quoted identifier
                     if ch == b'"' {
+                        flush_run!();
                         self.buf.push('"');
                         i += 1;
                         self.state = ParserState::DoubleQuote;
@@ -241,6 +273,7 @@ impl StreamingSqlSplitter {
 
                     // Dollar-quoting (PG)
                     if self.opts.dollar_quoting && ch == b'$' {
+                        flush_run!();
                         self.buf.push('$');
                         self.dollar_tag.clear();
                         self.dollar_tag.push(b'$');
@@ -251,6 +284,7 @@ impl StreamingSqlSplitter {
 
                     // Semicolon — statement boundary
                     if ch == b';' {
+                        flush_run!();
                         let trimmed = self.buf.trim();
                         if !trimmed.is_empty() {
                             stmts.push(trimmed.to_string());
@@ -260,26 +294,28 @@ impl StreamingSqlSplitter {
                         continue;
                     }
 
-                    self.buf.push(ch as char);
+                    start_run!();
                     i += 1;
                 }
 
                 ParserState::LineComment => {
-                    self.buf.push(ch as char);
+                    start_run!();
                     i += 1;
                     if ch == b'\n' {
+                        flush_run!();
                         self.state = ParserState::Normal;
                     }
                 }
 
                 ParserState::BlockComment { depth } => {
-                    self.buf.push(ch as char);
                     if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
-                        self.buf.push('*');
+                        flush_run!();
+                        self.buf.push_str("/*");
                         i += 2;
                         self.state = ParserState::BlockComment { depth: depth + 1 };
                     } else if ch == b'*' && i + 1 < len && bytes[i + 1] == b'/' {
-                        self.buf.push('/');
+                        flush_run!();
+                        self.buf.push_str("*/");
                         i += 2;
                         if depth == 1 {
                             self.state = ParserState::Normal;
@@ -287,49 +323,66 @@ impl StreamingSqlSplitter {
                             self.state = ParserState::BlockComment { depth: depth - 1 };
                         }
                     } else {
+                        start_run!();
                         i += 1;
                     }
                 }
 
                 ParserState::SingleQuote => {
-                    self.buf.push(ch as char);
-                    i += 1;
                     if ch == b'\'' {
-                        if i < len && bytes[i] == b'\'' {
-                            self.buf.push('\'');
-                            i += 1; // escaped ''
+                        if i + 1 < len && bytes[i + 1] == b'\'' {
+                            // escaped '' — include both quotes
+                            start_run!();
+                            i += 2;
                         } else {
+                            // closing quote
+                            start_run!();
+                            i += 1;
+                            flush_run!();
                             self.state = ParserState::Normal;
                         }
+                    } else {
+                        start_run!();
+                        i += 1;
                     }
                 }
 
                 ParserState::DoubleQuote => {
-                    self.buf.push(ch as char);
-                    i += 1;
                     if ch == b'"' {
-                        if i < len && bytes[i] == b'"' {
-                            self.buf.push('"');
-                            i += 1; // escaped ""
+                        if i + 1 < len && bytes[i + 1] == b'"' {
+                            // escaped ""
+                            start_run!();
+                            i += 2;
                         } else {
+                            // closing quote
+                            start_run!();
+                            i += 1;
+                            flush_run!();
                             self.state = ParserState::Normal;
                         }
+                    } else {
+                        start_run!();
+                        i += 1;
                     }
                 }
 
                 ParserState::DollarTag => {
-                    self.buf.push(ch as char);
                     if ch == b'$' {
                         // Tag is complete: dollar_tag contains `$tag$`
+                        flush_run!();
+                        self.buf.push('$');
                         self.dollar_tag.push(b'$');
                         let tag_len = self.dollar_tag.len() as u16;
                         i += 1;
                         self.state = ParserState::DollarBody { tag_len };
                     } else if ch.is_ascii_alphanumeric() || ch == b'_' {
+                        flush_run!();
+                        self.buf.push(ch as char); // safe: ASCII alphanumeric
                         self.dollar_tag.push(ch);
                         i += 1;
                     } else {
                         // Not a valid dollar-quote, treat as normal text
+                        start_run!();
                         self.dollar_tag.clear();
                         i += 1;
                         self.state = ParserState::Normal;
@@ -337,20 +390,28 @@ impl StreamingSqlSplitter {
                 }
 
                 ParserState::DollarBody { tag_len } => {
-                    self.buf.push(ch as char);
+                    start_run!();
                     i += 1;
                     let tl = tag_len as usize;
                     // Check if we just completed the closing tag
-                    if ch == b'$' && self.buf.len() >= tl {
-                        let buf_bytes = self.buf.as_bytes();
-                        let candidate = &buf_bytes[buf_bytes.len() - tl..];
-                        if candidate == &self.dollar_tag[..] {
-                            self.dollar_tag.clear();
-                            self.state = ParserState::Normal;
+                    if ch == b'$' {
+                        flush_run!();
+                        if self.buf.len() >= tl {
+                            let buf_bytes = self.buf.as_bytes();
+                            let candidate = &buf_bytes[buf_bytes.len() - tl..];
+                            if candidate == &self.dollar_tag[..] {
+                                self.dollar_tag.clear();
+                                self.state = ParserState::Normal;
+                            }
                         }
                     }
                 }
             }
+        }
+
+        // Flush any trailing run
+        if in_run {
+            self.buf.push_str(&chunk[run_start..len]);
         }
 
         stmts

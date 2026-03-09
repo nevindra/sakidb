@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { encode } from '@msgpack/msgpack';
 import {
   mockCommand,
   resetMocks,
   makeSavedConnection,
   makeDatabaseInfo,
   makeSchemaInfo,
-  makePagedResult,
+  makePagedColumnarBuffer,
   makeConnectResult,
   mockInvoke,
 } from './setup';
-import type { PagedResult, DataTab } from '$lib/types';
+import type { DataTab } from '$lib/types';
 
 // Fresh module imports to avoid state leaking between tests
 async function freshStores() {
@@ -37,10 +36,6 @@ async function setupConnected(stores: Awaited<ReturnType<typeof freshStores>>) {
   await connections.connectToDatabase('conn-1');
 }
 
-function makePagedMsgpack(overrides: Partial<PagedResult> = {}): Uint8Array {
-  return encode(makePagedResult(overrides));
-}
-
 describe('data-tab store', () => {
   beforeEach(() => {
     resetMocks();
@@ -50,17 +45,15 @@ describe('data-tab store', () => {
     const stores = await freshStores();
     await setupConnected(stores);
 
-    const pagedResult = makePagedResult({
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({
       columns: [
-        { name: 'id', data_type: 'integer' },
-        { name: 'name', data_type: 'text' },
+        { name: 'id', type: 'integer' },
+        { name: 'name', type: 'text' },
       ],
-      cells: [{ Int: 1 }, { Text: 'Alice' }, { Int: 2 }, { Text: 'Bob' }],
-      row_count: 2,
-      total_rows_estimate: 100,
-      execution_time_ms: 10,
-    });
-    mockCommand('execute_query_paged', encode(pagedResult));
+      rowCount: 2,
+      totalRowsEstimate: 100,
+      execTimeMs: 10,
+    }));
 
     stores.dataTab.openDataTab('conn-1', 'testdb', 'public', 'users');
 
@@ -73,9 +66,8 @@ describe('data-tab store', () => {
 
     const tab = stores.tabs.getTabs().find(t => t.type === 'data') as DataTab;
     expect(tab.queryResult).not.toBeNull();
-    // QueryResultData wraps the paged result
     expect(tab.queryResult!.columns).toHaveLength(2);
-    expect(tab.queryResult!.row_count).toBe(100); // total_rows_estimate
+    expect(tab.totalRowEstimate).toBe(100);
     expect(tab.currentPage).toBe(0);
   });
 
@@ -84,8 +76,7 @@ describe('data-tab store', () => {
     await setupConnected(stores);
 
     // Initial load
-    const page0 = makePagedResult({ page: 0, total_rows_estimate: 200 });
-    mockCommand('execute_query_paged', encode(page0));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ page: 0, totalRowsEstimate: 200 }));
     stores.dataTab.openDataTab('conn-1', 'testdb', 'public', 'users');
 
     await vi.waitFor(() => {
@@ -97,8 +88,7 @@ describe('data-tab store', () => {
     expect(tab.currentPage).toBe(0);
 
     // Load next page
-    const page1 = makePagedResult({ page: 1, total_rows_estimate: 200 });
-    mockCommand('execute_query_paged', encode(page1));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ page: 1, totalRowsEstimate: 200 }));
     await stores.dataTab.loadDataTab(tab.id, 1);
 
     await vi.waitFor(() => {
@@ -107,7 +97,7 @@ describe('data-tab store', () => {
     });
 
     // Verify the invoke was called with page=1
-    expect(mockInvoke).toHaveBeenCalledWith('execute_query_paged', expect.objectContaining({
+    expect(mockInvoke).toHaveBeenCalledWith('execute_query_paged_columnar', expect.objectContaining({
       page: 1,
     }));
   });
@@ -116,9 +106,8 @@ describe('data-tab store', () => {
     const stores = await freshStores();
     await setupConnected(stores);
 
-    // Initial load at page 3
-    const page3 = makePagedResult({ page: 0, total_rows_estimate: 500 });
-    mockCommand('execute_query_paged', encode(page3));
+    // Initial load
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ page: 0, totalRowsEstimate: 500 }));
     stores.dataTab.openDataTab('conn-1', 'testdb', 'public', 'orders');
 
     await vi.waitFor(() => {
@@ -129,7 +118,7 @@ describe('data-tab store', () => {
     const tab = stores.tabs.getTabs().find(t => t.type === 'data') as DataTab;
 
     // Navigate to page 3 first
-    mockCommand('execute_query_paged', encode(makePagedResult({ page: 3 })));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ page: 3 }));
     await stores.dataTab.loadDataTab(tab.id, 3);
 
     await vi.waitFor(() => {
@@ -138,8 +127,7 @@ describe('data-tab store', () => {
     });
 
     // Apply filter — should reset to page 0
-    const filtered = makePagedResult({ page: 0, total_rows_estimate: 10 });
-    mockCommand('execute_query_paged', encode(filtered));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ page: 0, totalRowsEstimate: 10 }));
 
     stores.dataTab.updateDataTabFilters(tab.id, [
       { column: 'status', operator: 'equals', value: 'active' },
@@ -170,6 +158,7 @@ describe('data-tab store', () => {
       schema: 'public',
       table: 'users',
       queryResult: null,
+      totalRowEstimate: 0,
       isLoading: false,
       currentPage: 0,
       pageSize: 50,
@@ -213,7 +202,7 @@ describe('data-tab store', () => {
     const stores = await freshStores();
     await setupConnected(stores);
 
-    mockCommand('execute_query_paged', encode(makePagedResult()));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer());
     stores.dataTab.openDataTab('conn-1', 'testdb', 'public', 'users');
 
     await vi.waitFor(() => {
@@ -224,7 +213,7 @@ describe('data-tab store', () => {
     const tab = stores.tabs.getTabs().find(t => t.type === 'data') as DataTab;
 
     // Update page size
-    mockCommand('execute_query_paged', encode(makePagedResult({ page_size: 100 })));
+    mockCommand('execute_query_paged_columnar', makePagedColumnarBuffer({ pageSize: 100 }));
     stores.dataTab.updateDataTabPageSize(tab.id, 100);
 
     await vi.waitFor(() => {
@@ -237,7 +226,7 @@ describe('data-tab store', () => {
     expect(updated.currentPage).toBe(0);
 
     // Verify invoke was called with pageSize=100
-    expect(mockInvoke).toHaveBeenCalledWith('execute_query_paged', expect.objectContaining({
+    expect(mockInvoke).toHaveBeenCalledWith('execute_query_paged_columnar', expect.objectContaining({
       pageSize: 100,
     }));
   });

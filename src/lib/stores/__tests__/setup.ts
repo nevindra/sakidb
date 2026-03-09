@@ -207,6 +207,88 @@ export function makeColumnarBuffer(opts: {
   return buffer;
 }
 
+/**
+ * Build a paged columnar binary buffer for testing.
+ * Paging header (21 bytes): u32 page, u32 page_size, u8 has_estimate, i64 estimate, 4 padding.
+ * Then: encoded ColumnarResult bytes.
+ */
+export function makePagedColumnarBuffer(opts: {
+  columns?: { name: string; type: string }[];
+  rowCount?: number;
+  execTimeMs?: number;
+  page?: number;
+  pageSize?: number;
+  totalRowsEstimate?: number | null;
+} = {}): ArrayBuffer {
+  const columns = opts.columns ?? [{ name: 'id', type: 'integer' }, { name: 'name', type: 'text' }];
+  const rowCount = opts.rowCount ?? 1;
+  const execTimeMs = opts.execTimeMs ?? 5;
+  const page = opts.page ?? 0;
+  const pageSize = opts.pageSize ?? 50;
+  const estimate = opts.totalRowsEstimate ?? rowCount;
+
+  // Build columnar result payload
+  const resultParts: number[] = [];
+
+  // ColumnarResult header (25 bytes)
+  pushU32(resultParts, columns.length);
+  pushU64(resultParts, rowCount);
+  pushU64(resultParts, execTimeMs);
+  resultParts.push(0); // truncated
+  pushU32(resultParts, 0); // padding
+
+  // Column definitions
+  const encoder = new TextEncoder();
+  for (const col of columns) {
+    const nameBytes = encoder.encode(col.name);
+    pushU16(resultParts, nameBytes.length);
+    resultParts.push(...nameBytes);
+    const typeBytes = encoder.encode(col.type);
+    pushU16(resultParts, typeBytes.length);
+    resultParts.push(...typeBytes);
+  }
+
+  // Column data — all number columns for simplicity
+  for (let c = 0; c < columns.length; c++) {
+    resultParts.push(0); // type tag: Number
+    for (let r = 0; r < rowCount; r++) resultParts.push(0); // nulls
+
+    // Alignment for Float64Array — offset from start of full buffer includes paging header (21 bytes)
+    const totalOffset = 21 + resultParts.length;
+    const padding = (8 - (totalOffset % 8)) % 8;
+    for (let p = 0; p < padding; p++) resultParts.push(0);
+
+    const floatBuf = new ArrayBuffer(rowCount * 8);
+    const floatView = new Float64Array(floatBuf);
+    for (let r = 0; r < rowCount; r++) floatView[r] = r + 1;
+    resultParts.push(...new Uint8Array(floatBuf));
+  }
+
+  const resultPayload = new Uint8Array(resultParts);
+
+  // Build full buffer: paging header + columnar payload
+  const totalSize = 21 + resultPayload.length;
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+
+  let offset = 0;
+  view.setUint32(offset, page, true); offset += 4;
+  view.setUint32(offset, pageSize, true); offset += 4;
+  if (estimate !== null) {
+    bytes[offset] = 1; offset += 1;
+    view.setBigInt64(offset, BigInt(estimate), true); offset += 8;
+  } else {
+    bytes[offset] = 0; offset += 1;
+    view.setBigInt64(offset, 0n, true); offset += 8;
+  }
+  // 4 bytes padding
+  offset += 4;
+
+  bytes.set(resultPayload, offset);
+  return buffer;
+}
+
 function pushU16(arr: number[], val: number) {
   arr.push(val & 0xff, (val >> 8) & 0xff);
 }
@@ -245,6 +327,7 @@ const defaultResponses: Record<string, unknown> = {
   list_foreign_tables: [],
   execute_query_multi_columnar: makeColumnarBuffer(),
   execute_query_paged: encode(makePagedResult()),
+  execute_query_paged_columnar: makePagedColumnarBuffer(),
   save_query: undefined,
   list_saved_queries: [],
   update_saved_query: undefined,

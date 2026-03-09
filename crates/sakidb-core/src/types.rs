@@ -82,9 +82,15 @@ pub struct ConnectResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConnectionId(pub Uuid);
 
+impl Default for ConnectionId {
+    fn default() -> Self {
+        Self(Uuid::now_v7())
+    }
+}
+
 impl ConnectionId {
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self::default()
     }
 }
 
@@ -117,17 +123,12 @@ impl std::fmt::Debug for ConnectionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum SslMode {
     Disable,
+    #[default]
     Prefer,
     Require,
-}
-
-impl Default for SslMode {
-    fn default() -> Self {
-        Self::Prefer
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,9 +266,14 @@ impl ColumnarResult {
                     buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
                     buf.extend_from_slice(&data);
                     drop(data); // free text data immediately (can be 100+ MB)
-                    for offset in offsets {
-                        buf.extend_from_slice(&offset.to_le_bytes());
-                    }
+                    // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
+                    let byte_slice = unsafe {
+                        std::slice::from_raw_parts(
+                            offsets.as_ptr() as *const u8,
+                            offsets.len() * 4,
+                        )
+                    };
+                    buf.extend_from_slice(byte_slice);
                 }
                 ColumnStorage::Bytes { nulls, offsets, data } => {
                     buf.push(3); // type tag
@@ -276,15 +282,20 @@ impl ColumnarResult {
                     buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
                     buf.extend_from_slice(&data);
                     drop(data); // free byte data immediately
-                    for offset in offsets {
-                        buf.extend_from_slice(&offset.to_le_bytes());
-                    }
+                    // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
+                    let byte_slice = unsafe {
+                        std::slice::from_raw_parts(
+                            offsets.as_ptr() as *const u8,
+                            offsets.len() * 4,
+                        )
+                    };
+                    buf.extend_from_slice(byte_slice);
                 }
             }
         }
     }
 
-    fn estimate_size(&self) -> usize {
+    pub fn estimate_size(&self) -> usize {
         let mut size = 25; // header
         for col in &self.columns {
             size += 4 + col.name.len() + col.data_type.len();
@@ -314,6 +325,45 @@ pub struct PagedResult {
     pub page_size: usize,
     pub total_rows_estimate: Option<i64>,
     pub execution_time_ms: u64,
+}
+
+/// Columnar equivalent of PagedResult — for memory-efficient DataTab browsing.
+#[derive(Debug)]
+pub struct PagedColumnarResult {
+    pub result: ColumnarResult,
+    pub page: usize,
+    pub page_size: usize,
+    pub total_rows_estimate: Option<i64>,
+}
+
+impl PagedColumnarResult {
+    /// Encode to binary format: paging header + ColumnarResult payload.
+    ///
+    /// Paging header (21 bytes):
+    /// - u32 page
+    /// - u32 page_size
+    /// - u8  has_estimate (0 or 1)
+    /// - i64 total_rows_estimate (only meaningful if has_estimate == 1)
+    /// - 4 bytes padding
+    pub fn encode(self) -> Vec<u8> {
+        let est = 21 + self.result.estimate_size();
+        let mut buf = Vec::with_capacity(est);
+        buf.extend_from_slice(&(self.page as u32).to_le_bytes());
+        buf.extend_from_slice(&(self.page_size as u32).to_le_bytes());
+        match self.total_rows_estimate {
+            Some(est) => {
+                buf.push(1);
+                buf.extend_from_slice(&est.to_le_bytes());
+            }
+            None => {
+                buf.push(0);
+                buf.extend_from_slice(&0i64.to_le_bytes());
+            }
+        }
+        buf.extend_from_slice(&[0u8; 4]); // padding
+        self.result.encode_into(&mut buf);
+        buf
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

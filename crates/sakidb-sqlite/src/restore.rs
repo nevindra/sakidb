@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use rusqlite::Connection;
-use tracing::{info, warn};
+use tracing::info;
 
 use sakidb_core::sql::{SqlSplitOptions, StreamingSqlSplitter};
 use sakidb_core::types::RestoreProgress;
@@ -21,7 +21,7 @@ pub fn restore_from_sql(
     file_path: &str,
     continue_on_error: bool,
     cancelled: &AtomicBool,
-    on_progress: &dyn Fn(RestoreProgress),
+    on_progress: &(dyn Fn(&RestoreProgress) + Send + Sync),
 ) -> Result<RestoreProgress, SakiError> {
     info!(file_path, continue_on_error, "starting SQL restore");
 
@@ -50,15 +50,16 @@ pub fn restore_from_sql(
     let mut last_progress = Instant::now();
 
     // Stream file line-by-line, feeding each line to the incremental parser.
+    let mut line = String::new();
     loop {
         if cancelled.load(Ordering::Relaxed) {
             progress.phase = "Cancelled".to_string();
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(progress.clone());
+            on_progress(&progress);
             return Err(SakiError::Cancelled);
         }
 
-        let mut line = String::new();
+        line.clear();
         let bytes_read = reader
             .read_line(&mut line)
             .map_err(|e| SakiError::QueryFailed(format!("Read error: {e}")))?;
@@ -85,7 +86,7 @@ pub fn restore_from_sql(
 
         if last_progress.elapsed().as_millis() > 100 {
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(progress.clone());
+            on_progress(&progress);
             last_progress = Instant::now();
         }
     }
@@ -97,7 +98,7 @@ pub fn restore_from_sql(
 
     progress.phase = "Complete".to_string();
     progress.elapsed_ms = start.elapsed().as_millis() as u64;
-    on_progress(progress.clone());
+    on_progress(&progress);
 
     info!(
         statements = progress.statements_executed,
@@ -119,33 +120,31 @@ fn flush_batch(
         return Ok(());
     }
 
-    let sql = batch.join(";\n");
-    match conn.execute_batch(&sql) {
-        Ok(()) => {
-            progress.statements_executed += batch.len() as u64;
-        }
-        Err(e) => {
-            if !continue_on_error {
-                batch.clear();
-                return Err(SakiError::QueryFailed(e.to_string()));
-            }
-            warn!(batch_size = batch.len(), "batch failed, retrying one-by-one");
-            for stmt in batch.iter() {
-                match conn.execute_batch(stmt) {
-                    Ok(()) => progress.statements_executed += 1,
-                    Err(e) => {
-                        progress.errors_skipped += 1;
-                        if progress.error_messages.len() < MAX_ERROR_MESSAGES {
-                            let label: String = stmt.chars().take(80).collect();
-                            progress
-                                .error_messages
-                                .push(format!("{label}... → {e}"));
-                        }
-                    }
+    conn.execute_batch("BEGIN")
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
+
+    for stmt in batch.iter() {
+        match conn.execute_batch(stmt) {
+            Ok(()) => progress.statements_executed += 1,
+            Err(e) => {
+                if !continue_on_error {
+                    let _ = conn.execute_batch("ROLLBACK");
+                    batch.clear();
+                    return Err(SakiError::QueryFailed(e.to_string()));
+                }
+                progress.errors_skipped += 1;
+                if progress.error_messages.len() < MAX_ERROR_MESSAGES {
+                    let label: String = stmt.chars().take(80).collect();
+                    progress
+                        .error_messages
+                        .push(format!("{label}... → {e}"));
                 }
             }
         }
     }
+
+    conn.execute_batch("COMMIT")
+        .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     batch.clear();
     Ok(())

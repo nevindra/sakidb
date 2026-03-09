@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { DataTab, PagedResult, TableFilter } from '$lib/types';
-import { QueryResultData } from '$lib/types/query-result-data';
-import { decodeMsgpack, generateId, isCancelError, setError } from './shared.svelte';
+import type { DataTab, TableFilter } from '$lib/types';
+import { qualifiedTable, quoteIdent } from '$lib/sql-utils';
+import { decodePagedColumnar, generateId, isCancelError, setError } from './shared.svelte';
 import { addTab, findTab, setActiveTabId } from './tabs.svelte';
 import { getRuntimeId, getSavedConnection } from './connections.svelte';
 
@@ -32,6 +32,7 @@ export function openDataTab(savedConnectionId: string, databaseName: string, sch
     schema,
     table,
     queryResult: null,
+    totalRowEstimate: 0,
     isLoading: true,
     currentPage: 0,
     pageSize: 50,
@@ -54,23 +55,18 @@ export async function loadDataTab(tabId: string, page: number = 0, pageSize?: nu
 
   try {
     const sql = buildDataTabQuery(tab);
-    const bytes = await invoke('execute_query_paged', {
+    const bytes = await invoke('execute_query_paged_columnar', {
       activeConnectionId: tab.runtimeConnectionId,
       sql,
       page,
       pageSize: effectivePageSize,
     });
-    const result = decodeMsgpack<PagedResult>(bytes as ArrayBuffer | number[]);
+    const paged = decodePagedColumnar(bytes as ArrayBuffer);
 
     const updated = findTab((t): t is DataTab => t.type === 'data' && t.id === tabId);
     if (updated) {
-      updated.queryResult = new QueryResultData(
-        result.columns,
-        result.cells,
-        result.total_rows_estimate ?? result.row_count,
-        result.execution_time_ms,
-        false,
-      );
+      updated.queryResult = paged.result;
+      updated.totalRowEstimate = paged.total_rows_estimate ?? paged.result.row_count;
       updated.currentPage = page;
       updated.isLoading = false;
     }
@@ -89,7 +85,7 @@ export async function loadDataTab(tabId: string, page: number = 0, pageSize?: nu
 // ── Query building ──
 
 export function buildDataTabQuery(tab: DataTab): string {
-  let sql = `SELECT * FROM "${tab.schema}"."${tab.table}"`;
+  let sql = `SELECT * FROM ${qualifiedTable(tab.schema, tab.table)}`;
 
   const whereClauses: string[] = [];
 
@@ -106,18 +102,19 @@ export function buildDataTabQuery(tab: DataTab): string {
 }
 
 export function filterToSql(f: TableFilter): string {
-  const col = `"${f.column}"`;
+  const col = quoteIdent(f.column);
+  const escaped = f.value.replace(/'/g, "''");
   switch (f.operator) {
-    case 'equals': return `${col} = '${f.value.replace(/'/g, "''")}'`;
-    case 'not_equals': return `${col} != '${f.value.replace(/'/g, "''")}'`;
-    case 'contains': return `${col}::text ILIKE '%${f.value.replace(/'/g, "''")}%'`;
-    case 'starts_with': return `${col}::text ILIKE '${f.value.replace(/'/g, "''")}%'`;
+    case 'equals': return `${col} = '${escaped}'`;
+    case 'not_equals': return `${col} != '${escaped}'`;
+    case 'contains': return `${col}::text ILIKE '%${escaped}%'`;
+    case 'starts_with': return `${col}::text ILIKE '${escaped}%'`;
     case 'is_null': return `${col} IS NULL`;
     case 'is_not_null': return `${col} IS NOT NULL`;
-    case 'gt': return `${col} > '${f.value.replace(/'/g, "''")}'`;
-    case 'lt': return `${col} < '${f.value.replace(/'/g, "''")}'`;
-    case 'gte': return `${col} >= '${f.value.replace(/'/g, "''")}'`;
-    case 'lte': return `${col} <= '${f.value.replace(/'/g, "''")}'`;
+    case 'gt': return `${col} > '${escaped}'`;
+    case 'lt': return `${col} < '${escaped}'`;
+    case 'gte': return `${col} >= '${escaped}'`;
+    case 'lte': return `${col} <= '${escaped}'`;
     default: return '';
   }
 }

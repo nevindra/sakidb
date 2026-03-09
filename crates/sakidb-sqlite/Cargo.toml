@@ -9,7 +9,7 @@ edition = "2021"
 sakidb-core = { path = "../sakidb-core" }
 rusqlite = { version = "0.32", features = ["bundled", "column_decltype"] }
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 uuid = { version = "1", features = ["v4"] }
 dashmap = "6"
 tracing = "0.1"

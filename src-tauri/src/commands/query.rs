@@ -170,6 +170,47 @@ pub async fn execute_query_paged(
 }
 
 #[tauri::command]
+pub async fn execute_query_paged_columnar(
+    state: State<'_, AppState>,
+    active_connection_id: String,
+    sql: String,
+    page: usize,
+    page_size: usize,
+) -> Result<Response, String> {
+    let conn_id = ConnectionId(
+        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
+    );
+
+    let start = Instant::now();
+    let result = state
+        .registry
+        .sql_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .execute_paged_columnar(&conn_id, &sql, page, page_size)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let row_count = result.result.row_count;
+    let total_estimate = result.total_rows_estimate;
+    let result_page = result.page;
+
+    let buf = result.encode();
+
+    let total_ms = start.elapsed().as_millis() as u64;
+    debug!(
+        elapsed_ms = total_ms,
+        rows = row_count,
+        page = result_page,
+        page_size,
+        total_estimate = ?total_estimate,
+        payload_kb = buf.len() / 1024,
+        "paged columnar IPC complete"
+    );
+
+    Ok(Response::new(buf))
+}
+
+#[tauri::command]
 pub async fn execute_batch(
     state: State<'_, AppState>,
     active_connection_id: String,

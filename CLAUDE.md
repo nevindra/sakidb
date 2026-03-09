@@ -158,14 +158,14 @@ Stored in `~/.local/share/sakidb/config.db` (SQLite). Only the password field is
 
 ## CI/CD
 
-### Release Flow (`git tag v* → push`)
-1. **`changelog.yml`** — git-cliff regenerates `CHANGELOG.md`, commits to `main`. Unreleased commits move under the new version heading.
-2. **`release.yml`** — Builds 4 targets (Linux x86_64, macOS aarch64, macOS x86_64, Windows x86_64) via `tauri-action`. Creates a **draft** GitHub Release with artifacts attached. Release notes are written manually.
+### CI (`test.yml` — runs on push to `main` and all PRs)
+- **Rust Tests** — `cargo test --workspace` on Ubuntu + macOS
+- **Frontend Check** — `pnpm check` + `pnpm test`
+- **Lint** — `cargo clippy --workspace -- -D warnings` + `cargo fmt --all --check`
+- **Benchmarks** (PRs only) — criterion benchmarks for `sakidb-core` and `sakidb-sqlite`, warns on regressions
 
-### Changelog Flow (`cliff.toml`)
-- Uses conventional commits (`feat:`, `fix:`, `perf:`, etc.) to auto-generate changelog via git-cliff
-- PR merged to `main` → changelog updated with new commits under `## Unreleased`
-- Tag pushed → unreleased commits promoted to `## vX.Y.Z (date)`
+### Release Flow (`git tag v* → push`)
+**`release.yml`** — Builds 4 targets (Linux x86_64, macOS aarch64, macOS x86_64, Windows x86_64) via `tauri-action`. Creates a **draft** GitHub Release with artifacts attached. Release notes are written manually.
 
 ## Conventions
 

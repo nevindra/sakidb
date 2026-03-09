@@ -150,6 +150,7 @@ pub fn run() {
             commands::query::execute_query_multi,
             commands::query::execute_query_multi_columnar,
             commands::query::execute_query_paged,
+            commands::query::execute_query_paged_columnar,
             commands::query::execute_batch,
             commands::query::cancel_query,
             commands::explorer::list_databases,

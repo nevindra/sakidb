@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use std::borrow::Cow;
+
 use rusqlite::{types::ValueRef, Connection, Statement};
 use tracing::{debug, info};
 
@@ -12,11 +14,11 @@ const MAX_EXECUTE_ROWS: u64 = 100_000;
 
 /// Extract column definitions from a prepared statement.
 fn extract_column_defs(stmt: &Statement<'_>) -> Vec<ColumnDef> {
+    let columns = stmt.columns();
     (0..stmt.column_count())
         .map(|i| ColumnDef {
             name: stmt.column_name(i).unwrap_or("?").to_string(),
-            data_type: stmt
-                .columns()
+            data_type: columns
                 .get(i)
                 .and_then(|c| c.decl_type())
                 .unwrap_or("TEXT")
@@ -32,8 +34,11 @@ pub(crate) fn sqlite_value_to_cell(value: ValueRef<'_>) -> CellValue {
         ValueRef::Integer(i) => CellValue::Int(i),
         ValueRef::Real(f) => CellValue::Float(f),
         ValueRef::Text(bytes) => {
-            let s = String::from_utf8_lossy(bytes);
-            CellValue::Text(s.into_owned().into_boxed_str())
+            let boxed: Box<str> = match String::from_utf8_lossy(bytes) {
+                Cow::Borrowed(b) => b.into(),
+                Cow::Owned(o) => o.into_boxed_str(),
+            };
+            CellValue::Text(boxed)
         }
         ValueRef::Blob(bytes) => CellValue::Bytes(bytes.to_vec().into_boxed_slice()),
     }
@@ -218,12 +223,12 @@ pub fn execute_query_columnar(conn: &Connection, sql: &str) -> Result<ColumnarRe
     {
         // Determine column types from first row with non-null values
         if !types_determined {
-            for i in 0..col_count {
+            for (i, col_type) in col_types.iter_mut().enumerate() {
                 let value = row
                     .get_ref(i)
                     .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
                 if !matches!(value, ValueRef::Null) {
-                    col_types[i] = classify_sqlite_value(value);
+                    *col_type = classify_sqlite_value(value);
                 }
             }
             let cap = 1024usize;
@@ -386,6 +391,7 @@ pub fn execute_batch(conn: &Connection, sql: &str) -> Result<(), SakiError> {
     Ok(())
 }
 
+#[allow(clippy::type_complexity)]
 pub fn execute_export(
     conn: &Connection,
     sql: &str,

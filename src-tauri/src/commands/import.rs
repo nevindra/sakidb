@@ -34,8 +34,8 @@ pub async fn restore_from_sql(
     };
 
     let app_handle = app.clone();
-    let on_progress = Box::new(move |progress: RestoreProgress| {
-        let _ = app_handle.emit("restore-progress", &progress);
+    let on_progress = Box::new(move |progress: &RestoreProgress| {
+        let _ = app_handle.emit("restore-progress", progress);
     });
 
     state

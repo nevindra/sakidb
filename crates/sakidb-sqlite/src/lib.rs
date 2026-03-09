@@ -23,11 +23,17 @@ pub struct SqliteDriver {
     manager: ConnectionManager,
 }
 
-impl SqliteDriver {
-    pub fn new() -> Self {
+impl Default for SqliteDriver {
+    fn default() -> Self {
         Self {
             manager: ConnectionManager::new(),
         }
+    }
+}
+
+impl SqliteDriver {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Run VACUUM on a connected SQLite database.
@@ -396,7 +402,7 @@ impl Restorer for SqliteDriver {
         file_path: &str,
         options: &RestoreOptions,
         cancelled: &AtomicBool,
-        on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+        on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync>,
     ) -> Result<RestoreProgress> {
         let conn = self.manager.get_conn(conn_id)?;
         let continue_on_error = options.continue_on_error;

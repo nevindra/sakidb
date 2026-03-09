@@ -280,11 +280,11 @@ export async function dropDatabase(savedConnectionId: string, dbName: string) {
 
   const conn = activeConnections.get(savedConnectionId);
   if (conn) {
-    const anyDb = [...conn.activeDatabases.values()][0];
-    if (anyDb) {
+    const anyDb = conn.activeDatabases.values().next();
+    if (!anyDb.done) {
       try {
         const databases: DatabaseInfo[] = await invoke('list_databases', {
-          activeConnectionId: anyDb.runtimeConnectionId,
+          activeConnectionId: anyDb.value.runtimeConnectionId,
         });
         conn.databases = databases;
       } catch (e) {
@@ -329,12 +329,12 @@ export async function refreshDatabases(savedConnectionId: string) {
   const conn = activeConnections.get(savedConnectionId);
   if (!conn) return;
 
-  const anyDb = [...conn.activeDatabases.values()][0];
-  if (!anyDb) return;
+  const anyDb = conn.activeDatabases.values().next();
+  if (anyDb.done) return;
 
   try {
     const databases: DatabaseInfo[] = await invoke('list_databases', {
-      activeConnectionId: anyDb.runtimeConnectionId,
+      activeConnectionId: anyDb.value.runtimeConnectionId,
     });
     conn.databases = databases;
 
@@ -355,92 +355,52 @@ export async function refreshDatabases(savedConnectionId: string) {
 
 // ── Schema / Table / Column loading ──
 
-export async function loadTables(savedConnectionId: string, databaseName: string, schema: string): Promise<TableInfo[]> {
+async function loadSchemaObjects<T>(
+  savedConnectionId: string,
+  databaseName: string,
+  command: string,
+  extraParams: Record<string, string> = {},
+): Promise<T[]> {
   const rid = getRuntimeId(savedConnectionId, databaseName);
   if (!rid) return [];
   try {
-    return await invoke('list_tables', { activeConnectionId: rid, schema });
+    return await invoke(command, { activeConnectionId: rid, ...extraParams });
   } catch (e) {
     setError(String(e));
     return [];
   }
 }
 
-export async function loadColumns(savedConnectionId: string, databaseName: string, schema: string, table: string): Promise<ColumnInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_columns', { activeConnectionId: rid, schema, table });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadTables(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<TableInfo>(savedConnectionId, databaseName, 'list_tables', { schema });
 }
 
-export async function loadViews(savedConnectionId: string, databaseName: string, schema: string): Promise<ViewInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_views', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadColumns(savedConnectionId: string, databaseName: string, schema: string, table: string) {
+  return loadSchemaObjects<ColumnInfo>(savedConnectionId, databaseName, 'list_columns', { schema, table });
 }
 
-export async function loadMaterializedViews(savedConnectionId: string, databaseName: string, schema: string): Promise<MaterializedViewInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_materialized_views', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadViews(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<ViewInfo>(savedConnectionId, databaseName, 'list_views', { schema });
 }
 
-export async function loadFunctions(savedConnectionId: string, databaseName: string, schema: string): Promise<FunctionInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_functions', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadMaterializedViews(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<MaterializedViewInfo>(savedConnectionId, databaseName, 'list_materialized_views', { schema });
 }
 
-export async function loadSequences(savedConnectionId: string, databaseName: string, schema: string): Promise<SequenceInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_sequences', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadFunctions(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<FunctionInfo>(savedConnectionId, databaseName, 'list_functions', { schema });
 }
 
-export async function loadIndexes(savedConnectionId: string, databaseName: string, schema: string): Promise<IndexInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_indexes', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadSequences(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<SequenceInfo>(savedConnectionId, databaseName, 'list_sequences', { schema });
 }
 
-export async function loadForeignTables(savedConnectionId: string, databaseName: string, schema: string): Promise<ForeignTableInfo[]> {
-  const rid = getRuntimeId(savedConnectionId, databaseName);
-  if (!rid) return [];
-  try {
-    return await invoke('list_foreign_tables', { activeConnectionId: rid, schema });
-  } catch (e) {
-    setError(String(e));
-    return [];
-  }
+export function loadIndexes(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<IndexInfo>(savedConnectionId, databaseName, 'list_indexes', { schema });
+}
+
+export function loadForeignTables(savedConnectionId: string, databaseName: string, schema: string) {
+  return loadSchemaObjects<ForeignTableInfo>(savedConnectionId, databaseName, 'list_foreign_tables', { schema });
 }
 
 // ── UI state ──

@@ -18,7 +18,7 @@
     const connId = tab.runtimeConnectionId;
     const schema = tab.schema;
     const table = tab.table;
-    if (connId && schema && table) {
+    if (connId && table) {
       invoke<ColumnInfo[]>('list_columns', {
         activeConnectionId: connId,
         schema,
@@ -130,7 +130,7 @@
         filters={tab.filters}
         currentPage={tab.currentPage}
         pageSize={tab.pageSize}
-        totalRowEstimate={tab.queryResult.row_count}
+        totalRowEstimate={tab.totalRowEstimate}
         onreload={reloadData}
       />
     </div>

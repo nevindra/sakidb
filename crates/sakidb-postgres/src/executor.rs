@@ -594,6 +594,134 @@ pub async fn execute_paged(
     })
 }
 
+pub async fn execute_paged_columnar(
+    pool: &Pool,
+    sql: &str,
+    page: usize,
+    page_size: usize,
+    conn_id: &ConnectionId,
+    cancel_tokens: &Arc<DashMap<ConnectionId, CancelToken>>,
+) -> Result<PagedColumnarResult, SakiError> {
+    let start = Instant::now();
+    debug!(page, page_size, "executing paged columnar query");
+    let offset = page * page_size;
+
+    let paged_sql = format!(
+        "SELECT * FROM ({sql}) AS _paged_query LIMIT {page_size} OFFSET {offset}"
+    );
+
+    let data_client = pool
+        .get()
+        .await
+        .map_err(|e| SakiError::QueryFailed(format_pool_error(&e)))?;
+
+    let _cancel_guard = CancelTokenGuard::new(cancel_tokens, *conn_id, data_client.cancel_token());
+
+    let run_count = page == 0;
+
+    let data_future = async {
+        let params: Vec<&(dyn ToSql + Sync)> = vec![];
+        let stream = data_client
+            .query_raw(&paged_sql, params)
+            .await
+            .map_err(|e| SakiError::QueryFailed(format_pg_error(&e)))?;
+        futures_util::pin_mut!(stream);
+
+        let mut columns: Vec<ColumnDef> = vec![];
+        let mut col_types: Vec<u8> = vec![];
+        let mut col_storages: Vec<ColumnStorage> = vec![];
+        let mut row_count: u64 = 0;
+
+        while let Some(row) = stream
+            .try_next()
+            .await
+            .map_err(|e| SakiError::QueryFailed(format_pg_error(&e)))?
+        {
+            if row_count == 0 {
+                let cols = row.columns();
+                columns = cols
+                    .iter()
+                    .map(|c| ColumnDef {
+                        name: c.name().to_string(),
+                        data_type: c.type_().name().to_string(),
+                    })
+                    .collect();
+                col_types = cols.iter().map(|c| classify_pg_type(c.type_())).collect();
+
+                let cap = page_size;
+                col_storages = col_types
+                    .iter()
+                    .map(|&t| match t {
+                        0 => ColumnStorage::Number {
+                            nulls: Vec::with_capacity(cap),
+                            values: Vec::with_capacity(cap),
+                        },
+                        1 => ColumnStorage::Bool {
+                            nulls: Vec::with_capacity(cap),
+                            values: Vec::with_capacity(cap),
+                        },
+                        2 => ColumnStorage::Text {
+                            nulls: Vec::with_capacity(cap),
+                            offsets: vec![0],
+                            data: Vec::with_capacity(cap * 32),
+                        },
+                        3 => ColumnStorage::Bytes {
+                            nulls: Vec::with_capacity(cap),
+                            offsets: vec![0],
+                            data: Vec::with_capacity(cap * 64),
+                        },
+                        _ => unreachable!(),
+                    })
+                    .collect();
+            }
+
+            let cols_meta = row.columns();
+            for i in 0..cols_meta.len() {
+                push_columnar_value(&row, i, cols_meta[i].type_(), col_types[i], &mut col_storages[i]);
+            }
+            row_count += 1;
+        }
+
+        Ok::<_, SakiError>((columns, col_storages, row_count))
+    };
+
+    let (total, data_result) = if run_count {
+        let (est, data) = tokio::join!(
+            estimate_row_count(pool, sql),
+            data_future
+        );
+        (est, data)
+    } else {
+        let data = data_future.await;
+        (None, data)
+    };
+
+    let (columns, col_storages, row_count) = data_result?;
+    let execution_time_ms = start.elapsed().as_millis() as u64;
+
+    debug!(
+        page,
+        page_size,
+        rows = row_count,
+        total_estimate = ?total,
+        elapsed_ms = execution_time_ms,
+        "paged columnar query complete"
+    );
+
+    Ok(PagedColumnarResult {
+        result: ColumnarResult {
+            columns,
+            column_data: col_storages,
+            row_count,
+            execution_time_ms,
+            truncated: false,
+        },
+        page,
+        page_size,
+        total_rows_estimate: total,
+    })
+}
+
 pub async fn execute_batch(
     pool: &Pool,
     sql: &str,

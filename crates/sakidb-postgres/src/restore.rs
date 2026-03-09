@@ -22,7 +22,7 @@ pub async fn restore_from_sql(
     schema: Option<&str>,
     continue_on_error: bool,
     cancelled: &AtomicBool,
-    on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+    on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync>,
 ) -> Result<RestoreProgress, SakiError> {
     info!(file_path, continue_on_error, "starting SQL restore");
 
@@ -91,7 +91,7 @@ pub async fn restore_from_sql(
             );
             progress.phase = "Cancelled".to_string();
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(progress.clone());
+            on_progress(&progress);
             return Err(SakiError::Cancelled);
         }
 
@@ -145,7 +145,7 @@ pub async fn restore_from_sql(
                             if cancelled.load(Ordering::Relaxed) {
                                 progress.phase = "Cancelled".to_string();
                                 progress.elapsed_ms = start.elapsed().as_millis() as u64;
-                                on_progress(progress.clone());
+                                on_progress(&progress);
                                 return Err(SakiError::Cancelled);
                             }
 
@@ -165,7 +165,7 @@ pub async fn restore_from_sql(
                             // Progress update during COPY
                             if last_progress.elapsed().as_millis() > 100 {
                                 progress.elapsed_ms = start.elapsed().as_millis() as u64;
-                                on_progress(progress.clone());
+                                on_progress(&progress);
                                 last_progress = Instant::now();
                             }
                         }
@@ -230,7 +230,7 @@ pub async fn restore_from_sql(
         // Periodic progress
         if last_progress.elapsed().as_millis() > 100 {
             progress.elapsed_ms = start.elapsed().as_millis() as u64;
-            on_progress(progress.clone());
+            on_progress(&progress);
             last_progress = Instant::now();
         }
     }
@@ -242,7 +242,7 @@ pub async fn restore_from_sql(
 
     progress.phase = "Complete".to_string();
     progress.elapsed_ms = start.elapsed().as_millis() as u64;
-    on_progress(progress.clone());
+    on_progress(&progress);
 
     info!(
         statements = progress.statements_executed,

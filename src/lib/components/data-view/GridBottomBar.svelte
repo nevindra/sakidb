@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { QueryResult } from '$lib/types';
+  import type { AnyQueryResult } from '$lib/types';
   import { ChevronLeft, ChevronRight, Timer, LockKeyhole } from '@lucide/svelte';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
@@ -15,7 +15,7 @@
     pendingInsertCount,
     pendingDeleteCount,
   }: {
-    result: QueryResult;
+    result: AnyQueryResult;
     tabId: string;
     currentPage: number;
     pageSize: number;

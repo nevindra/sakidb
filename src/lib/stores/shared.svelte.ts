@@ -152,10 +152,42 @@ function decodeSingleColumnar(buffer: ArrayBuffer, baseOffset: number): Columnar
   return new ColumnarResultData(columns, columnData, rowCount, execTimeMs, truncated);
 }
 
+/**
+ * Decode a paged columnar binary buffer from Rust.
+ *
+ * Paging header (21 bytes): u32 page, u32 page_size, u8 has_estimate,
+ * i64 total_rows_estimate, 4 bytes padding.
+ * Then: encoded ColumnarResult bytes (same format as decodeSingleColumnar).
+ */
+export function decodePagedColumnar(buffer: ArrayBuffer): {
+  result: ColumnarResultData;
+  page: number;
+  page_size: number;
+  total_rows_estimate: number | null;
+} {
+  const t0 = performance.now();
+  const view = new DataView(buffer);
+  const page = view.getUint32(0, true);
+  const pageSize = view.getUint32(4, true);
+  const hasEstimate = new Uint8Array(buffer)[8] !== 0;
+  const totalEstimate = hasEstimate ? Number(view.getBigInt64(9, true)) : null;
+  // 4 bytes padding at offset 17
+  const dataOffset = 21;
+
+  if (DEBUG) console.log(`[paged-columnar] IPC buffer: ${(buffer.byteLength / 1024).toFixed(1)} KB, page=${page}, pageSize=${pageSize}`);
+
+  const result = decodeSingleColumnar(buffer, dataOffset);
+
+  if (DEBUG) console.log(`[paged-columnar] decode took ${(performance.now() - t0).toFixed(1)} ms`);
+  return { result, page, page_size: pageSize, total_rows_estimate: totalEstimate };
+}
+
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function isCancelError(msg: string): boolean {
-  return msg.includes('canceling statement due to user request');
+  return msg.includes('canceling statement due to user request')
+    || msg.includes('Cancelled')
+    || msg.includes('interrupted');
 }

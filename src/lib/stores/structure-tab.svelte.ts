@@ -9,14 +9,13 @@ import type {
   UniqueConstraintInfo,
   PartitionInfo,
   ColumnProfile,
-  ColumnInfo,
   CellValue,
   QueryResult,
 } from '$lib/types';
 import { decodeMsgpack, generateId, setError } from './shared.svelte';
 import { addTab, findTab, setActiveTabId } from './tabs.svelte';
 import { getRuntimeId, getSavedConnection, loadColumns, loadIndexes } from './connections.svelte';
-import { generateStatsQuery, generateHistogramQuery, generateUniqueCountQuery } from '$lib/utils/profiling-sql';
+import { generateBulkStatsQuery, generateBulkHistogramQuery, generateBulkUniqueCountQuery } from '$lib/utils/profiling-sql';
 
 // ── Structure-specific loaders ──
 
@@ -191,58 +190,6 @@ async function runQuery(runtimeConnectionId: string, sql: string): Promise<Query
   return decodeMsgpack<QueryResult>(bytes as ArrayBuffer | number[]);
 }
 
-async function profileColumn(runtimeConnectionId: string, schema: string, table: string, col: ColumnInfo): Promise<ColumnProfile> {
-  const statsSql = generateStatsQuery(schema, table, col);
-  const histSql = generateHistogramQuery(schema, table, col);
-  const uniqueSql = generateUniqueCountQuery(schema, table, col);
-
-  const [statsResult, histResult, uniqueResult] = await Promise.all([
-    runQuery(runtimeConnectionId, statsSql),
-    runQuery(runtimeConnectionId, histSql),
-    runQuery(runtimeConnectionId, uniqueSql),
-  ]);
-
-  const total = Number(extractCellValue(statsResult.cells[0]) ?? 0);
-  const nullCount = Number(extractCellValue(statsResult.cells[1]) ?? 0);
-  const notNull = Number(extractCellValue(statsResult.cells[2]) ?? 0);
-  const distinct = Number(extractCellValue(statsResult.cells[3]) ?? 0);
-  const zeroCount = Number(extractCellValue(statsResult.cells[4]) ?? 0);
-  const nanCount = Number(extractCellValue(statsResult.cells[5]) ?? 0);
-  const minVal = extractCellValue(statsResult.cells[6]);
-  const maxVal = extractCellValue(statsResult.cells[7]);
-  const avgVal = extractCellValue(statsResult.cells[8]);
-  const medianVal = extractCellValue(statsResult.cells[9]);
-
-  const uniqueCount = Number(extractCellValue(uniqueResult.cells[0]) ?? 0);
-
-  const histogram: { value: string; count: number }[] = [];
-  const histCols = histResult.columns.length;
-  for (let r = 0; r < histResult.row_count; r++) {
-    const val = extractCellValue(histResult.cells[r * histCols]);
-    const freq = extractCellValue(histResult.cells[r * histCols + 1]);
-    if (val !== null) {
-      histogram.push({ value: String(val), count: Number(freq) });
-    }
-  }
-
-  return {
-    column_name: col.name,
-    data_type: col.data_type,
-    total_count: total,
-    null_count: nullCount,
-    not_null_count: notNull,
-    distinct_count: distinct,
-    unique_count: uniqueCount,
-    zero_count: zeroCount,
-    nan_count: nanCount,
-    min: minVal !== null ? String(minVal) : null,
-    max: maxVal !== null ? String(maxVal) : null,
-    avg: avgVal !== null ? Number(avgVal) : null,
-    median: medianVal !== null ? String(medianVal) : null,
-    histogram,
-  };
-}
-
 export async function loadProfilingData(tabId: string) {
   const tab = findTab((t): t is StructureTab => t.type === 'structure' && t.id === tabId);
   if (!tab) return;
@@ -252,9 +199,83 @@ export async function loadProfilingData(tabId: string) {
   tab.profilingData = null;
 
   try {
-    const profiles = await Promise.all(
-      tab.columns.map(col => profileColumn(tab.runtimeConnectionId, tab.schema, tab.table, col))
-    );
+    const columns = tab.columns;
+    const statsSql = generateBulkStatsQuery(tab.schema, tab.table, columns);
+    const histSql = generateBulkHistogramQuery(tab.schema, tab.table, columns);
+    const uniqueSql = generateBulkUniqueCountQuery(tab.schema, tab.table, columns);
+
+    const [statsResult, histResult, uniqueResult] = await Promise.all([
+      runQuery(tab.runtimeConnectionId, statsSql),
+      runQuery(tab.runtimeConnectionId, histSql),
+      runQuery(tab.runtimeConnectionId, uniqueSql),
+    ]);
+
+    // Parse bulk stats: each row = one column (col_name, total, null, not_null, distinct, zero, nan, min, max, avg, median)
+    const statsCols = statsResult.columns.length;
+    const statsMap = new Map<string, number>();
+    for (let r = 0; r < statsResult.row_count; r++) {
+      const colName = String(extractCellValue(statsResult.cells[r * statsCols]) ?? '');
+      statsMap.set(colName, r);
+    }
+
+    // Parse bulk histogram: rows with (col_name, value, freq)
+    const histCols = histResult.columns.length;
+    const histMap = new Map<string, { value: string; count: number }[]>();
+    for (let r = 0; r < histResult.row_count; r++) {
+      const base = r * histCols;
+      const colName = String(extractCellValue(histResult.cells[base]) ?? '');
+      const val = extractCellValue(histResult.cells[base + 1]);
+      const freq = extractCellValue(histResult.cells[base + 2]);
+      if (val !== null) {
+        let arr = histMap.get(colName);
+        if (!arr) { arr = []; histMap.set(colName, arr); }
+        arr.push({ value: String(val), count: Number(freq) });
+      }
+    }
+
+    // Parse bulk unique counts: rows with (col_name, unique_count)
+    const uniqueCols = uniqueResult.columns.length;
+    const uniqueMap = new Map<string, number>();
+    for (let r = 0; r < uniqueResult.row_count; r++) {
+      const base = r * uniqueCols;
+      const colName = String(extractCellValue(uniqueResult.cells[base]) ?? '');
+      uniqueMap.set(colName, Number(extractCellValue(uniqueResult.cells[base + 1]) ?? 0));
+    }
+
+    // Assemble per-column profiles
+    const profiles: ColumnProfile[] = columns.map(col => {
+      const rowIdx = statsMap.get(col.name);
+      const hasStats = rowIdx !== undefined;
+      const base = hasStats ? rowIdx * statsCols : 0;
+
+      const total = hasStats ? Number(extractCellValue(statsResult.cells[base + 1]) ?? 0) : 0;
+      const nullCount = hasStats ? Number(extractCellValue(statsResult.cells[base + 2]) ?? 0) : 0;
+      const notNull = hasStats ? Number(extractCellValue(statsResult.cells[base + 3]) ?? 0) : 0;
+      const distinct = hasStats ? Number(extractCellValue(statsResult.cells[base + 4]) ?? 0) : 0;
+      const zeroCount = hasStats ? Number(extractCellValue(statsResult.cells[base + 5]) ?? 0) : 0;
+      const nanCount = hasStats ? Number(extractCellValue(statsResult.cells[base + 6]) ?? 0) : 0;
+      const minVal = hasStats ? extractCellValue(statsResult.cells[base + 7]) : null;
+      const maxVal = hasStats ? extractCellValue(statsResult.cells[base + 8]) : null;
+      const avgVal = hasStats ? extractCellValue(statsResult.cells[base + 9]) : null;
+      const medianVal = hasStats ? extractCellValue(statsResult.cells[base + 10]) : null;
+
+      return {
+        column_name: col.name,
+        data_type: col.data_type,
+        total_count: total,
+        null_count: nullCount,
+        not_null_count: notNull,
+        distinct_count: distinct,
+        unique_count: uniqueMap.get(col.name) ?? 0,
+        zero_count: zeroCount,
+        nan_count: nanCount,
+        min: minVal !== null ? String(minVal) : null,
+        max: maxVal !== null ? String(maxVal) : null,
+        avg: avgVal !== null ? Number(avgVal) : null,
+        median: medianVal !== null ? String(medianVal) : null,
+        histogram: histMap.get(col.name) ?? [],
+      };
+    });
 
     const updated = findTab((t): t is StructureTab => t.type === 'structure' && t.id === tabId);
     if (updated) {

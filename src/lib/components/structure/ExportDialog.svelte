@@ -134,7 +134,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-sm">
     <Dialog.Header>
-      <Dialog.Title>Export "{schema}"."{table}"</Dialog.Title>
+      <Dialog.Title>Export {schema ? `"${schema}"."${table}"` : `"${table}"`}</Dialog.Title>
     </Dialog.Header>
 
     <div class="space-y-4 py-2">

@@ -282,7 +282,8 @@ export interface DataTab {
   databaseName: string;
   schema: string;
   table: string;
-  queryResult: QueryResult | null;
+  queryResult: AnyQueryResult | null;
+  totalRowEstimate: number;
   isLoading: boolean;
   currentPage: number;
   pageSize: number;

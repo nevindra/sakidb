@@ -258,9 +258,9 @@ async fn stress_restore_50k_statements() {
     let progress_updates = Arc::new(std::sync::Mutex::new(Vec::new()));
     let progress_clone = progress_updates.clone();
 
-    let on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync> = Box::new(move |p| {
+    let on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync> = Box::new(move |p| {
         let mut updates = progress_clone.lock().unwrap();
-        updates.push(p);
+        updates.push(p.clone());
     });
 
     let options = RestoreOptions {

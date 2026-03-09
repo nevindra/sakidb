@@ -134,3 +134,28 @@ fn test_streaming_block_comment_across_chunks() {
     let s2 = sp.feed("ment; */ 1; SELECT 2;");
     assert_eq!(s2, vec!["SELECT /* comment; */ 1", "SELECT 2"]);
 }
+
+#[test]
+fn test_streaming_utf8_preserved() {
+    // Multi-byte UTF-8: é (U+00E9) = 0xC3 0xA9, ñ (U+00F1) = 0xC3 0xB1
+    let mut sp = StreamingSqlSplitter::new(SqlSplitOptions::default());
+    let s1 = sp.feed("SELECT 'café'; INSERT INTO t VALUES ('señor');");
+    assert_eq!(s1, vec!["SELECT 'café'", "INSERT INTO t VALUES ('señor')"]);
+}
+
+#[test]
+fn test_streaming_utf8_across_chunks() {
+    // Split a chunk in the middle of normal text containing multi-byte chars
+    let mut sp = StreamingSqlSplitter::new(SqlSplitOptions::default());
+    let s1 = sp.feed("SELECT 'caf");
+    assert!(s1.is_empty());
+    let s2 = sp.feed("é'; SELECT '日本語';");
+    assert_eq!(s2, vec!["SELECT 'café'", "SELECT '日本語'"]);
+}
+
+#[test]
+fn test_streaming_utf8_in_identifiers() {
+    let mut sp = StreamingSqlSplitter::new(SqlSplitOptions::default());
+    let s1 = sp.feed("SELECT * FROM \"таблица\"; SELECT 1;");
+    assert_eq!(s1, vec!["SELECT * FROM \"таблица\"", "SELECT 1"]);
+}

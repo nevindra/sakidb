@@ -11,6 +11,7 @@
   import DuplicateTableDialog from './DuplicateTableDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { qualifiedTable } from '$lib/sql-utils';
   import TableNode from './TableNode.svelte';
 
   let {
@@ -85,7 +86,7 @@
       if (!rid) return;
       await invoke('execute_batch', {
         activeConnectionId: rid,
-        sql: `DROP TABLE "${schema}"."${table.name}" CASCADE;`,
+        sql: `DROP TABLE ${qualifiedTable(schema, table.name)} CASCADE;`,
       });
       onRefreshTables?.();
     } catch {
@@ -102,7 +103,7 @@
       if (!rid) return;
       await invoke('execute_batch', {
         activeConnectionId: rid,
-        sql: `TRUNCATE TABLE "${schema}"."${table.name}";`,
+        sql: `TRUNCATE TABLE ${qualifiedTable(schema, table.name)};`,
       });
     } catch {
       // Error handled by store
@@ -188,7 +189,7 @@
       <ContextMenu.Item onclick={() => app.openErdTab(connectionId, databaseName, schema, table.name)}>View ERD</ContextMenu.Item>
     {/if}
     {#if capabilities?.sql !== false}
-      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM "${schema}"."${table.name}" LIMIT 100;`)}>New Query</ContextMenu.Item>
+      <ContextMenu.Item onclick={() => app.openQueryTab(connectionId, databaseName, `SELECT * FROM ${qualifiedTable(schema, table.name)} LIMIT 100;`)}>New Query</ContextMenu.Item>
     {/if}
     <ContextMenu.Separator />
     {#if capabilities?.export !== false}

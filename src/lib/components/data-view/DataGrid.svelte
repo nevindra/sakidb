@@ -179,13 +179,19 @@
   let detailPanelOpen = $state(false);
 
   // ── Edit mode state ──
+  // Collections are mutated in-place. Version counters trigger Svelte reactivity
+  // without O(n) cloning (new Map / new Set / [...spread]) on every edit.
   let editMode = $state(false);
-  let pendingUpdates = $state(new Map<number, CellValue>()); // cellKey(dataRow, colIdx) → newValue
-  let pendingInserts = $state<CellValue[][]>([]); // each is a full row
-  let pendingDeletes = $state(new Set<number>()); // dataRowIndex
+  const pendingUpdates = new Map<number, CellValue>(); // cellKey(dataRow, colIdx) → newValue
+  let pendingUpdatesVer = $state(0);
+  const pendingInserts: CellValue[][] = []; // each is a full row
+  let pendingInsertsVer = $state(0);
+  const pendingDeletes = new Set<number>(); // dataRowIndex
+  let pendingDeletesVer = $state(0);
   let focusedCell = $state<{ row: number; col: number } | null>(null);
   let editingCell = $state<{ row: number; col: number } | null>(null);
-  let selectedRows = $state(new Set<number>()); // displayRowIndex for bulk ops
+  const selectedRows = new Set<number>(); // displayRowIndex for bulk ops
+  let selectedRowsVer = $state(0);
   let isApplying = $state(false);
   let confirmApplyOpen = $state(false);
   let confirmDiscardOpen = $state(false);
@@ -196,7 +202,8 @@
     | { type: 'update'; key: number; oldValue: CellValue | undefined }
     | { type: 'insert' }
     | { type: 'delete'; dataRow: number };
-  let undoStack = $state<UndoAction[]>([]);
+  const undoStack: UndoAction[] = [];
+  let undoStackVer = $state(0);
 
   // ── Derived values ──
   const isDataTab = $derived(tabId !== '');
@@ -211,20 +218,35 @@
   const pkColumnNames = $derived(pkColIndices.map(i => result.columns[i].name));
   const canEdit = $derived(pkColIndices.length > 0 && schema !== '' && table !== '' && connectionId !== '');
 
-  const totalDisplayRows = $derived(rowCount + pendingInserts.length);
+  const totalDisplayRows = $derived((() => { pendingInsertsVer; return rowCount + pendingInserts.length; })());
   const totalChanges = $derived.by(() => {
+    pendingUpdatesVer; pendingInsertsVer; pendingDeletesVer; // subscribe to version changes
     const rows = new Set<number>();
     for (const key of pendingUpdates.keys()) rows.add(Math.floor(key / KEY_STRIDE));
     return rows.size + pendingInserts.length + pendingDeletes.size;
   });
   const updateCount = $derived.by(() => {
+    pendingUpdatesVer;
     const rows = new Set<number>();
     for (const key of pendingUpdates.keys()) rows.add(Math.floor(key / KEY_STRIDE));
     return rows.size;
   });
-  const insertCount = $derived(pendingInserts.length);
-  const deleteCount = $derived(pendingDeletes.size);
+  const insertCount = $derived((() => { pendingInsertsVer; return pendingInserts.length; })());
+  const deleteCount = $derived((() => { pendingDeletesVer; return pendingDeletes.size; })());
   const canExport = $derived(savedConnectionId !== '' && databaseName !== '' && schema !== '' && table !== '');
+  // Reactive accessors for plain collections (read version counter to subscribe)
+  const selectedRowCount = $derived((() => { selectedRowsVer; return selectedRows.size; })());
+  const hasUndoActions = $derived((() => { undoStackVer; return undoStack.length > 0; })());
+
+  function isRowSelected(displayIdx: number): boolean {
+    selectedRowsVer; // subscribe for reactivity
+    return selectedRows.has(displayIdx);
+  }
+
+  function getPendingCellValue(dataRow: number, colIdx: number): CellValue | undefined {
+    pendingUpdatesVer; // subscribe for reactivity
+    return pendingUpdates.size > 0 ? pendingUpdates.get(cellKey(dataRow, colIdx)) : undefined;
+  }
   const app = getAppState();
   const filterWhereClause = $derived.by(() => {
     if (filters.length === 0) return undefined;
@@ -305,6 +327,7 @@
   }
 
   function getDisplayCell(displayIdx: number, colIdx: number): CellValue {
+    pendingUpdatesVer; pendingInsertsVer; // subscribe for reactivity
     if (isInsertRow(displayIdx)) {
       const insertIdx = displayIdx - rowCount;
       return pendingInserts[insertIdx]?.[colIdx] ?? 'Null';
@@ -333,11 +356,13 @@
   }
 
   function isDeletedRow(displayIdx: number): boolean {
+    pendingDeletesVer; // subscribe for reactivity
     if (isInsertRow(displayIdx)) return false;
     return pendingDeletes.has(getDataRowIndex(displayIdx));
   }
 
   function isCellModified(displayIdx: number, colIdx: number): boolean {
+    pendingUpdatesVer; pendingInsertsVer; // subscribe for reactivity
     if (isInsertRow(displayIdx)) return true;
     if (pendingUpdates.size === 0) return false;
     const dataRow = getDataRowIndex(displayIdx);
@@ -444,20 +469,21 @@
     if (!editMode) editMode = true;
 
     if (e.ctrlKey || e.metaKey) {
-      const next = new Set(selectedRows);
-      if (next.has(displayIdx)) next.delete(displayIdx);
-      else next.add(displayIdx);
-      selectedRows = next;
+      if (selectedRows.has(displayIdx)) selectedRows.delete(displayIdx);
+      else selectedRows.add(displayIdx);
+      selectedRowsVer++;
     } else if (e.shiftKey && selectedRows.size > 0) {
-      const existing = [...selectedRows];
-      const anchor = existing[existing.length - 1];
+      // Find the last-added anchor — iterate to the end
+      let anchor = displayIdx;
+      for (const v of selectedRows) anchor = v;
       const start = Math.min(anchor, displayIdx);
       const end = Math.max(anchor, displayIdx);
-      const next = new Set(selectedRows);
-      for (let i = start; i <= end; i++) next.add(i);
-      selectedRows = next;
+      for (let i = start; i <= end; i++) selectedRows.add(i);
+      selectedRowsVer++;
     } else {
-      selectedRows = new Set([displayIdx]);
+      selectedRows.clear();
+      selectedRows.add(displayIdx);
+      selectedRowsVer++;
     }
   }
 
@@ -492,12 +518,14 @@
 
     if (isInsertRow(rowIndex)) {
       const insertIdx = rowIndex - rowCount;
-      pendingInserts = pendingInserts.filter((_, i) => i !== insertIdx);
+      pendingInserts.splice(insertIdx, 1);
+      pendingInsertsVer++;
     } else {
       const dataRow = getDataRowIndex(rowIndex);
       pendingDeletes.add(dataRow);
-      pendingDeletes = new Set(pendingDeletes);
-      undoStack = [...undoStack, { type: 'delete', dataRow }];
+      pendingDeletesVer++;
+      undoStack.push({ type: 'delete', dataRow });
+      undoStackVer++;
     }
   }
 
@@ -524,11 +552,10 @@
   function handleCellConfirm(displayIdx: number, colIdx: number, newValue: CellValue) {
     if (isInsertRow(displayIdx)) {
       const insertIdx = displayIdx - rowCount;
-      const row = [...pendingInserts[insertIdx]];
-      row[colIdx] = newValue;
-      pendingInserts[insertIdx] = row;
-      pendingInserts = [...pendingInserts];
-      undoStack = [...undoStack, { type: 'insert' }];
+      pendingInserts[insertIdx][colIdx] = newValue;
+      pendingInsertsVer++;
+      undoStack.push({ type: 'insert' });
+      undoStackVer++;
     } else {
       const dataRow = getDataRowIndex(displayIdx);
       const key = cellKey(dataRow, colIdx);
@@ -539,8 +566,9 @@
       } else {
         pendingUpdates.set(key, newValue);
       }
-      pendingUpdates = new Map(pendingUpdates);
-      undoStack = [...undoStack, { type: 'update', key, oldValue }];
+      pendingUpdatesVer++;
+      undoStack.push({ type: 'update', key, oldValue });
+      undoStackVer++;
     }
     editingCell = null;
   }
@@ -566,8 +594,10 @@
   function addRow() {
     if (!editMode) editMode = true;
     const newRow: CellValue[] = new Array(numCols).fill('Null');
-    pendingInserts = [...pendingInserts, newRow];
-    undoStack = [...undoStack, { type: 'insert' }];
+    pendingInserts.push(newRow);
+    pendingInsertsVer++;
+    undoStack.push({ type: 'insert' });
+    undoStackVer++;
     requestAnimationFrame(() => {
       if (scrollContainer) {
         scrollContainer.scrollTop = (rowCount + pendingInserts.length - 1) * ROW_HEIGHT;
@@ -581,24 +611,32 @@
   }
 
   function deleteSelectedRows() {
+    // Collect insert indices to splice in reverse order (avoids index shifting)
+    const insertIndicesToRemove: number[] = [];
     for (const displayIdx of selectedRows) {
       if (isInsertRow(displayIdx)) {
-        const insertIdx = displayIdx - rowCount;
-        pendingInserts = pendingInserts.filter((_, i) => i !== insertIdx);
+        insertIndicesToRemove.push(displayIdx - rowCount);
       } else {
         const dataRow = getDataRowIndex(displayIdx);
         pendingDeletes.add(dataRow);
-        pendingDeletes = new Set(pendingDeletes);
-        undoStack = [...undoStack, { type: 'delete', dataRow }];
+        undoStack.push({ type: 'delete', dataRow });
       }
     }
-    selectedRows = new Set();
+    insertIndicesToRemove.sort((a, b) => b - a); // reverse order
+    for (const idx of insertIndicesToRemove) {
+      pendingInserts.splice(idx, 1);
+    }
+    pendingDeletesVer++;
+    pendingInsertsVer++;
+    undoStackVer++;
+    selectedRows.clear();
+    selectedRowsVer++;
   }
 
   function handleUndo() {
     if (undoStack.length === 0) return;
-    const action = undoStack[undoStack.length - 1];
-    undoStack = undoStack.slice(0, -1);
+    const action = undoStack.pop()!;
+    undoStackVer++;
 
     if (action.type === 'update') {
       if (action.oldValue !== undefined) {
@@ -606,25 +644,31 @@
       } else {
         pendingUpdates.delete(action.key);
       }
-      pendingUpdates = new Map(pendingUpdates);
+      pendingUpdatesVer++;
     } else if (action.type === 'insert') {
       if (pendingInserts.length > 0) {
-        pendingInserts = pendingInserts.slice(0, -1);
+        pendingInserts.pop();
+        pendingInsertsVer++;
       }
     } else if (action.type === 'delete') {
       pendingDeletes.delete(action.dataRow);
-      pendingDeletes = new Set(pendingDeletes);
+      pendingDeletesVer++;
     }
   }
 
   function discardChanges() {
-    pendingUpdates = new Map();
-    pendingInserts = [];
-    pendingDeletes = new Set();
-    undoStack = [];
+    pendingUpdates.clear();
+    pendingUpdatesVer++;
+    pendingInserts.length = 0;
+    pendingInsertsVer++;
+    pendingDeletes.clear();
+    pendingDeletesVer++;
+    undoStack.length = 0;
+    undoStackVer++;
     editingCell = null;
     focusedCell = null;
-    selectedRows = new Set();
+    selectedRows.clear();
+    selectedRowsVer++;
   }
 
   // ── Apply changes ──
@@ -684,7 +728,8 @@
     if (editMode && gridElement && !gridElement.contains(e.target as Node)) {
       if (!editingCell) {
         focusedCell = null;
-        selectedRows = new Set();
+        selectedRows.clear();
+        selectedRowsVer++;
       }
     }
   }
@@ -795,7 +840,7 @@
             <Plus class="h-3.5 w-3.5" />
           </button>
 
-          {#if selectedRows.size > 0}
+          {#if selectedRowCount > 0}
             <button
               class="p-1 rounded text-destructive hover:bg-destructive/10 transition-colors shrink-0"
               onclick={deleteSelectedRows}
@@ -886,7 +931,7 @@
               {@const displayIdx = visibleRange.start + i}
               {@const isInsert = isInsertRow(displayIdx)}
               {@const isDeleted = isDeletedRow(displayIdx)}
-              {@const isSelected = selectedRows.has(displayIdx)}
+              {@const isSelected = isRowSelected(displayIdx)}
               <tr
                 class="transition-colors
                   {isDeleted ? 'opacity-40 line-through' : ''}
@@ -937,10 +982,15 @@
                         oncancel={handleCellCancel}
                         ontab={(shift) => handleCellTab(displayIdx, colIdx, shift)}
                       />
-                    {:else if isColumnar && !isInsert && pendingUpdates.size === 0}
+                    {:else if isColumnar && !isInsert}
                       {@const dataRow = getDataRowIndex(displayIdx)}
-                      {@const display = (result as ColumnarResultData).getCellDisplay(dataRow, colIdx)}
-                      <span class={display.cls}>{display.text}</span>
+                      {@const pendingVal = getPendingCellValue(dataRow, colIdx)}
+                      {#if pendingVal !== undefined}
+                        <CellDisplay value={pendingVal} dataType={col.data_type} />
+                      {:else}
+                        {@const display = (result as ColumnarResultData).getCellDisplay(dataRow, colIdx)}
+                        <span class={display.cls}>{display.text}</span>
+                      {/if}
                     {:else}
                       <CellDisplay value={getDisplayCell(displayIdx, colIdx)} dataType={col.data_type} />
                     {/if}
@@ -970,7 +1020,7 @@
     <!-- ═══ Bottom bar (DataTab only) ═══ -->
     {#if isDataTab}
       <GridBottomBar
-        result={result as QueryResult}
+        {result}
         {tabId}
         {currentPage}
         {pageSize}

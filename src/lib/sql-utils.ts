@@ -1,5 +1,15 @@
 import type { CellValue, ColumnDef, ColumnInfo } from '$lib/types';
 
+/** Escape a SQL identifier (column/table/schema name) by doubling embedded quotes. */
+export function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** Build a quoted table reference, omitting schema when empty (e.g. SQLite). */
+export function qualifiedTable(schema: string, table: string): string {
+  return schema ? `${quoteIdent(schema)}.${quoteIdent(table)}` : quoteIdent(table);
+}
+
 // Types that need explicit SQL casts when used as literals
 const SQL_CAST_MAP: Record<string, string> = {
   uuid: 'uuid', inet: 'inet', cidr: 'cidr',
@@ -17,7 +27,7 @@ export function cellValueToSqlLiteral(cell: CellValue, dataType?: string): strin
   if (cell === 'Null') return 'NULL';
   if ('Bool' in cell) return cell.Bool ? 'TRUE' : 'FALSE';
   if ('Int' in cell) return String(cell.Int);
-  if ('Float' in cell) return String(cell.Float);
+  if ('Float' in cell) return Number.isFinite(cell.Float) ? String(cell.Float) : 'NULL';
   if ('Text' in cell) {
     const escaped = `'${cell.Text.replace(/'/g, "''")}'`;
     if (dataType) {
@@ -52,7 +62,7 @@ function buildWhereClause(
   pkDataTypes?: string[],
 ): string {
   return pkColumns
-    .map((col, i) => `"${col}" = ${cellValueToSqlLiteral(pkValues[i], pkDataTypes?.[i])}`)
+    .map((col, i) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(pkValues[i], pkDataTypes?.[i])}`)
     .join(' AND ');
 }
 
@@ -65,9 +75,9 @@ export function generateUpdateSql(
   pkDataTypes?: string[],
 ): string {
   const setClauses = changes.map(
-    ([col, val, dt]) => `"${col}" = ${cellValueToSqlLiteral(val, dt)}`
+    ([col, val, dt]) => `${quoteIdent(col)} = ${cellValueToSqlLiteral(val, dt)}`
   );
-  return `UPDATE "${schema}"."${table}" SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
+  return `UPDATE ${qualifiedTable(schema, table)} SET ${setClauses.join(', ')} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
 }
 
 export function generateInsertSql(
@@ -81,11 +91,11 @@ export function generateInsertSql(
     .map((col, i) => ({ col, val: values[i], dt: dataTypes?.[i] }))
     .filter(p => p.val !== 'Null');
   if (nonNullPairs.length === 0) {
-    return `INSERT INTO "${schema}"."${table}" DEFAULT VALUES`;
+    return `INSERT INTO ${qualifiedTable(schema, table)} DEFAULT VALUES`;
   }
-  const colList = nonNullPairs.map(p => `"${p.col}"`).join(', ');
+  const colList = nonNullPairs.map(p => quoteIdent(p.col)).join(', ');
   const valList = nonNullPairs.map(p => cellValueToSqlLiteral(p.val, p.dt)).join(', ');
-  return `INSERT INTO "${schema}"."${table}" (${colList}) VALUES (${valList})`;
+  return `INSERT INTO ${qualifiedTable(schema, table)} (${colList}) VALUES (${valList})`;
 }
 
 export function generateDeleteSql(
@@ -95,7 +105,7 @@ export function generateDeleteSql(
   pkValues: CellValue[],
   pkDataTypes?: string[],
 ): string {
-  return `DELETE FROM "${schema}"."${table}" WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
+  return `DELETE FROM ${qualifiedTable(schema, table)} WHERE ${buildWhereClause(pkColumns, pkValues, pkDataTypes)}`;
 }
 
 export function wrapInTransaction(statements: string[]): string {

@@ -13,17 +13,18 @@ import {
 // ── State ──
 
 let tabs = $state<Tab[]>([]);
+const tabIndex = new Map<string, Tab>();
 
 // ── Read access ──
 
 export function getTabs(): Tab[] { return tabs; }
-export function getTabById(id: string): Tab | undefined { return tabs.find(t => t.id === id); }
+export function getTabById(id: string): Tab | undefined { return tabIndex.get(id); }
 
 /** The globally active tab — determined by the active group's active tab. */
 export function getActiveTab(): Tab | undefined {
   const group = getActiveGroup();
   if (!group?.activeTabId) return undefined;
-  return tabs.find(t => t.id === group.activeTabId);
+  return tabIndex.get(group.activeTabId);
 }
 
 export function getActiveTabId(): string | null {
@@ -54,7 +55,7 @@ export function setActiveTabId(id: string | null) {
   if (group) {
     setActiveTabInGroup(group.id, id);
     // Reload if evicted
-    const tab = tabs.find(t => t.id === id);
+    const tab = tabIndex.get(id);
     if (tab && evictedTabs.has(id)) {
       evictedTabs.delete(id);
       onTabFocus?.(tab);
@@ -64,6 +65,9 @@ export function setActiveTabId(id: string | null) {
 
 export function addTab(tab: Tab) {
   tabs = [...tabs, tab];
+  // Store the reactive proxy from the $state array, not the original object.
+  // This ensures getTabById() returns a reactive reference that triggers re-renders.
+  tabIndex.set(tab.id, tabs[tabs.length - 1]);
   addTabToActiveGroup(tab.id);
 }
 
@@ -84,7 +88,7 @@ export function registerTabFocusHandler(handler: (tab: Tab) => void) {
 
 // Listen for layout operations that activate tabs (moveTab, splitGroup, etc.)
 registerLayoutTabHandler((tabId: string) => {
-  const tab = tabs.find(t => t.id === tabId);
+  const tab = tabIndex.get(tabId);
   if (tab && evictedTabs.has(tabId)) {
     evictedTabs.delete(tabId);
     onTabFocus?.(tab);
@@ -115,7 +119,7 @@ export function setActiveTab(tabId: string, groupId?: string) {
   }
 
   // Reload if the newly focused tab was evicted
-  const next = tabs.find(t => t.id === tabId);
+  const next = tabIndex.get(tabId);
   if (next && evictedTabs.has(tabId)) {
     evictedTabs.delete(tabId);
     onTabFocus?.(next);
@@ -123,7 +127,7 @@ export function setActiveTab(tabId: string, groupId?: string) {
 }
 
 function evictTab(tabId: string) {
-  const tab = tabs.find(t => t.id === tabId);
+  const tab = tabIndex.get(tabId);
   if (!tab) return;
   if (tab.type === 'data' && (tab as DataTab).queryResult) {
     (tab as DataTab).queryResult = null;
@@ -148,7 +152,7 @@ function evictTab(tabId: string) {
 }
 
 export function closeTab(tabId: string) {
-  const tab = tabs.find(t => t.id === tabId);
+  const tab = tabIndex.get(tabId);
   // Release heavy data
   if (tab && tab.type === 'query') {
     (tab as QueryTab).queryResults = [];
@@ -159,7 +163,8 @@ export function closeTab(tabId: string) {
   // Remove from layout tree
   removeTabFromGroup(tabId);
 
-  // Remove from flat array
+  // Remove from index and flat array
+  tabIndex.delete(tabId);
   tabs = tabs.filter(t => t.id !== tabId);
 }
 
@@ -179,6 +184,7 @@ export function closeTabsByConnection(savedConnectionId: string) {
     if (tab.savedConnectionId === savedConnectionId) {
       releaseTabData(tab);
       removedIds.add(tab.id);
+      tabIndex.delete(tab.id);
     }
   }
   tabs = tabs.filter(t => t.savedConnectionId !== savedConnectionId);
@@ -193,6 +199,7 @@ export function closeTabsByRuntimeId(runtimeConnectionId: string) {
     if (tab.runtimeConnectionId === runtimeConnectionId) {
       releaseTabData(tab);
       removedIds.add(tab.id);
+      tabIndex.delete(tab.id);
     }
   }
   tabs = tabs.filter(t => t.runtimeConnectionId !== runtimeConnectionId);

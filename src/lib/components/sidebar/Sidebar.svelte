@@ -11,20 +11,34 @@
 
   let activeTab = $state<'connections' | 'queries'>('connections');
   let searchQuery = $state('');
+  let debouncedQuery = $state('');
   let showSearch = $state(false);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    const query = searchQuery;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (!query) {
+      debouncedQuery = '';
+      return;
+    }
+    debounceTimer = setTimeout(() => { debouncedQuery = query; }, 150);
+    return () => { if (debounceTimer) clearTimeout(debounceTimer); };
+  });
 
   function switchTab(tab: 'connections' | 'queries') {
     activeTab = tab;
     searchQuery = '';
+    debouncedQuery = '';
     showSearch = false;
   }
 
   const searchResults = $derived<Map<string, FuzzyResult>>(
-    searchQuery ? app.searchTree(searchQuery) : new Map()
+    debouncedQuery ? app.searchTree(debouncedQuery) : new Map()
   );
 
   const filteredConnections = $derived(
-    searchQuery
+    debouncedQuery
       ? app.savedConnections.filter(c =>
           searchResults.has(c.id) || app.hasDescendantMatch(c.id, searchResults)
         )

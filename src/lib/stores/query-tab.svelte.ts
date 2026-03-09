@@ -45,6 +45,12 @@ export function invalidateSchemaCacheForConnection(connId: string) {
 const completionBundleCache = new Map<string, CompletionBundle>();
 const completionColumnCache = new Map<string, CompletionColumn[]>();
 
+const MAX_CACHE_ENTRIES = 200;
+
+function guardCacheSize(cache: Map<string, unknown>) {
+  if (cache.size > MAX_CACHE_ENTRIES) cache.clear();
+}
+
 function columnCacheKey(connId: string, db: string, schema: string, table: string): string {
   return `${connId}:${db}:${schema}:${table}`;
 }
@@ -227,6 +233,7 @@ export async function getSchemaCompletionData(
       schema: schemaName,
     });
 
+    guardCacheSize(schemaCompletionCache);
     schemaCompletionCache.set(key, result);
     return result;
   } catch (e) {
@@ -254,6 +261,7 @@ export async function getCompletionBundle(
       activeConnectionId: rid,
       schema: schemaName,
     });
+    guardCacheSize(completionBundleCache);
     completionBundleCache.set(key, result);
     return result;
   } catch {
@@ -280,6 +288,7 @@ export async function getTableColumnsForCompletion(
       schema: schemaName,
       table: tableName,
     });
+    guardCacheSize(completionColumnCache);
     completionColumnCache.set(key, result);
     return result;
   } catch {

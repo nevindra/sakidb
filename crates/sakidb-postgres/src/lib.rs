@@ -135,6 +135,18 @@ impl SqlDriver for PostgresDriver {
         let pool = self.manager.get_pool(conn_id).await?;
         executor::execute_multi_columnar(&pool, sql, conn_id, &self.cancel_tokens).await
     }
+
+    async fn execute_paged_columnar(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+        page: usize,
+        page_size: usize,
+    ) -> Result<PagedColumnarResult> {
+        let pool = self.manager.get_pool(conn_id).await?;
+        executor::execute_paged_columnar(&pool, sql, page, page_size, conn_id, &self.cancel_tokens)
+            .await
+    }
 }
 
 #[async_trait]
@@ -329,7 +341,7 @@ impl Restorer for PostgresDriver {
         file_path: &str,
         options: &RestoreOptions,
         cancelled: &AtomicBool,
-        on_progress: Box<dyn Fn(RestoreProgress) + Send + Sync>,
+        on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync>,
     ) -> Result<RestoreProgress> {
         let pool = self.manager.get_pool(conn_id).await?;
         restore::restore_from_sql(

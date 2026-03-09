@@ -13,6 +13,13 @@ All notable changes to SakiDB will be documented in this file.
 - Engine label badge (`PG`, `SL`, `RD`, etc.) next to each connection name in the sidebar.
 - `ConnectResult` bundles `runtime_id` + `EngineCapabilities` in a single IPC round-trip — no separate capabilities call needed.
 
+### Performance
+
+- **Paged columnar IPC** — new `execute_query_paged` command with columnar format for memory-efficient paginated queries.
+- **DataGrid fast path** — optimized rendering for large result sets, avoiding unnecessary re-renders.
+- **Store optimizations** — cached engine capabilities, bulk profiling SQL generation, debounced sidebar search, reactive tab index.
+- **SQLite allocations** — reduced allocations in query execution and restore path (transaction batching).
+
 ### Changed
 
 - **Comprehensive test coverage** — 260+ unit tests across all crates and frontend, feature-gated integration tests (postgres, sqlite), stress tests (1M rows, concurrency, cancellation), criterion benchmarks, and CI workflow with benchmark regression detection.
@@ -31,6 +38,12 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Fixed
 
+- **SQLite data tab not loading** — `tabIndex` stored plain objects instead of Svelte 5 `$state` proxies, so property mutations (`isLoading`, `queryResult`) never triggered UI re-renders. This affected all tab types but was most visible on SQLite where schema-related timing differences made it consistently reproducible.
+- **SQLite schema-qualified queries failing** — All SQL generation (`SELECT`, `UPDATE`, `INSERT`, `DELETE`, `DROP`, `TRUNCATE`, export, profiling) used `"schema"."table"` format unconditionally. SQLite has no schemas (empty string), producing `""."table"` which SQLite misinterprets. Added `qualifiedTable()` helpers (frontend + Rust) that omit the schema prefix when empty.
+- **Cancel not recognized for SQLite** — `isCancelError()` only matched PostgreSQL's cancel message. Now also matches SQLite's `"interrupted"` and core's `"Cancelled"`.
+- **UTF-8 corruption in StreamingSqlSplitter** — byte-level splitting could break multi-byte characters during SQL restore; now splits on valid character boundaries.
+- **SQL escaping hardened** — improved identifier and value escaping in generated SQL to prevent injection in edge cases.
+- **tokio rt-multi-thread** — added missing feature flag for `block_in_place` support.
 - ERD view rendering as blank canvas with 0% zoom — root cause was `flex-1` instead of `h-full` on ErdTabView, causing container height to collapse to 0.
 - ERD minimap producing Infinity/NaN SVG attributes when zoom is 0.
 - ERD fitToScreen not guarding against zero viewport dimensions.
