@@ -86,6 +86,20 @@ export interface SqlDialect {
   addPartition(schema: string, parentTable: string, part: PartitionDraft): string | null;
   detachPartition(schema: string, parentTable: string, partitionName: string): string | null;
 
+  // Table creation
+  createTable(schema: string, name: string, columns: ColumnDraft[]): string;
+
+  // View / materialized view creation & editing
+  createView(schema: string, name: string, sql: string, orReplace: boolean): string;
+  createMaterializedView(schema: string, name: string, sql: string): string;
+
+  // Function creation
+  createFunction(schema: string, name: string, params: string, returnType: string, language: string, body: string, orReplace: boolean): string;
+
+  // Sequence creation & editing
+  createSequence(schema: string, name: string, opts: { increment?: number; start?: number; min?: number; max?: number; cache?: number; cycle?: boolean }): string;
+  alterSequence(schema: string, name: string, opts: { increment?: number; min?: number; max?: number; cache?: number; cycle?: boolean; restart?: number }): string;
+
   // Schema & object lifecycle
   createSchema(schemaName: string): string;
   renameSchema(oldName: string, newName: string): string;

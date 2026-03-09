@@ -8,7 +8,8 @@ All notable changes to SakiDB will be documented in this file.
 
 - **Full object lifecycle menus** — Right-click any database object to create, drop, or manage it. Includes schema CRUD (create, rename, drop), "Create..." on every category folder (Tables, Views, Functions, Sequences, Indexes), and drop/reindex/reset actions on individual objects.
 - **CASCADE option on drop** — Destructive actions now show an optional CASCADE checkbox (PostgreSQL) to also drop dependent objects.
-- **DDL templates** — "Create..." actions open a query tab with an engine-aware SQL template pre-filled with the current schema name.
+- **Form-based object creation** — "Create..." actions now open dedicated form dialogs instead of raw SQL templates. Create tables, views, materialized views, functions, sequences, and indexes through an intuitive UI with live DDL preview.
+- **Edit database objects** — Right-click views, materialized views, functions, or sequences to edit them in place. Each opens a dialog pre-filled with the object name for quick modifications.
 - **Query result export** — Export query results to CSV or JSON files directly from the query editor, without going through the Data tab.
 - **Copy results to clipboard** — One-click copy of query results as tab-separated values, ready to paste into Excel or Google Sheets.
 - **Result comparison** — Compare two results from a multi-statement query side by side. Highlights added, removed, and changed cells. Match rows by position or by a key column of your choice.

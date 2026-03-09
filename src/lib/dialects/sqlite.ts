@@ -14,6 +14,54 @@ export const sqliteDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
 
+  // -- Table creation --
+
+  createTable(schema, name, columns) {
+    if (columns.length === 0) return `CREATE TABLE ${qualified(schema, name)} ();`;
+    const pks = columns.filter(c => c.primaryKey).map(c => q(c.name));
+    const colDefs = columns.map(col => {
+      let typeSql = col.type;
+      if (col.precision) typeSql += `(${col.precision})`;
+      let line = `    ${q(col.name)} ${typeSql}`;
+      // For single PK integer columns, use AUTOINCREMENT
+      if (col.primaryKey && pks.length === 1 && /^integer$/i.test(col.type)) {
+        line += ' PRIMARY KEY AUTOINCREMENT';
+      } else {
+        if (col.unique && !col.primaryKey) line += ' UNIQUE';
+        if (!col.nullable && !col.primaryKey) line += ' NOT NULL';
+      }
+      if (col.defaultValue) line += ` DEFAULT ${col.defaultValue}`;
+      if (col.check) line += ` CHECK (${col.check})`;
+      return line;
+    });
+    // Add composite PK if not single-column integer PK
+    const singleIntPk = pks.length === 1 && columns.find(c => c.primaryKey && /^integer$/i.test(c.type));
+    if (pks.length > 0 && !singleIntPk) colDefs.push(`    PRIMARY KEY (${pks.join(', ')})`);
+    return `CREATE TABLE ${qualified(schema, name)} (\n${colDefs.join(',\n')}\n);`;
+  },
+
+  // -- View creation --
+
+  createView(_schema, name, sql) {
+    return `CREATE VIEW ${q(name)} AS\n${sql};`;
+  },
+
+  createMaterializedView() {
+    return '-- SQLite does not support materialized views.';
+  },
+
+  createFunction() {
+    return '-- SQLite does not support user-defined functions.';
+  },
+
+  createSequence() {
+    return '-- SQLite does not support sequences.';
+  },
+
+  alterSequence() {
+    return '-- SQLite does not support sequences.';
+  },
+
   // -- Schema & object lifecycle -- SQLite has limited support --
 
   createSchema() {

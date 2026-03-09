@@ -7,6 +7,7 @@
   import { ContextMenuRenderer, sequenceMenuItems } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import EditSequenceDialog from './EditSequenceDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { getDialect } from '$lib/dialects';
   import { invoke } from '@tauri-apps/api/core';
@@ -34,6 +35,7 @@
   let expanded = $state(false);
   let dropConfirmOpen = $state(false);
   let dropLoading = $state(false);
+  let editOpen = $state(false);
 
   const app = getAppState();
   const capabilities = $derived(connectionId ? app.getCapabilities(connectionId) : null);
@@ -82,6 +84,7 @@
 
   function handleMenuAction(id: string) {
     switch (id) {
+      case 'edit': editOpen = true; return;
       case 'copy-name': return navigator.clipboard.writeText(
         dialect?.qualifiedTable(schema, sequence.name) ?? `"${schema}"."${sequence.name}"`);
       case 'reset': return handleReset();
@@ -124,6 +127,17 @@
   {showCascade}
   onconfirm={handleDrop}
 />
+
+{#if connectionId && databaseName}
+  <EditSequenceDialog
+    bind:open={editOpen}
+    {schema}
+    sequenceName={sequence.name}
+    connectionId={connectionId}
+    databaseName={databaseName}
+    onedited={onRefresh}
+  />
+{/if}
 
 {#if expanded}
   <div

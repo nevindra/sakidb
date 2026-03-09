@@ -29,6 +29,11 @@
   } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import { getDialect } from '$lib/dialects';
+  import CreateTableDialog from './CreateTableDialog.svelte';
+  import CreateViewDialog from './CreateViewDialog.svelte';
+  import CreateFunctionDialog from './CreateFunctionDialog.svelte';
+  import CreateSequenceDialog from './CreateSequenceDialog.svelte';
+  import CreateIndexDialog from './CreateIndexDialog.svelte';
 
   let {
     schemaName,
@@ -134,10 +139,23 @@
 
   const folderMenuCtx: MenuContext = $derived({ capabilities });
 
+  // Create dialog state
+  let showCreateTable = $state(false);
+  let showCreateView = $state(false);
+  let showCreateMatView = $state(false);
+  let showCreateFunction = $state(false);
+  let showCreateSequence = $state(false);
+  let showCreateIndex = $state(false);
+
   function handleFolderCreate(objectType: 'table' | 'view' | 'materialized_view' | 'function' | 'sequence' | 'index') {
-    if (!dialect) return;
-    const template = dialect.generateTemplate(objectType, schemaName);
-    app.openQueryTab(connectionId, databaseName, template);
+    switch (objectType) {
+      case 'table': showCreateTable = true; return;
+      case 'view': showCreateView = true; return;
+      case 'materialized_view': showCreateMatView = true; return;
+      case 'function': showCreateFunction = true; return;
+      case 'sequence': showCreateSequence = true; return;
+      case 'index': showCreateIndex = true; return;
+    }
   }
 </script>
 
@@ -212,3 +230,10 @@
     </CategoryFolder>
   {/if}
 </div>
+
+<CreateTableDialog bind:open={showCreateTable} schema={schemaName} {connectionId} {databaseName} oncreated={loadTables} />
+<CreateViewDialog bind:open={showCreateView} schema={schemaName} {connectionId} {databaseName} oncreated={loadViews} />
+<CreateViewDialog bind:open={showCreateMatView} schema={schemaName} {connectionId} {databaseName} materialized oncreated={loadMaterializedViews} />
+<CreateFunctionDialog bind:open={showCreateFunction} schema={schemaName} {connectionId} {databaseName} oncreated={loadFunctions} />
+<CreateSequenceDialog bind:open={showCreateSequence} schema={schemaName} {connectionId} {databaseName} oncreated={loadSequences} />
+<CreateIndexDialog bind:open={showCreateIndex} schema={schemaName} {connectionId} {databaseName} oncreated={loadIndexes} />

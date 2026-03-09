@@ -44,6 +44,73 @@ export const postgresDialect: SqlDialect = {
   quoteIdent: q,
   qualifiedTable: qualified,
 
+  // -- Table creation --
+
+  createTable(schema, name, columns) {
+    if (columns.length === 0) return `CREATE TABLE ${qualified(schema, name)} ();`;
+    const pks = columns.filter(c => c.primaryKey).map(c => q(c.name));
+    const colDefs = columns.map(col => {
+      let typeSql = col.type;
+      if (col.precision) typeSql += `(${col.precision})`;
+      if (col.isArray) typeSql += '[]';
+      let line = `    ${q(col.name)} ${typeSql}`;
+      if (col.unique && !col.primaryKey) line += ' UNIQUE';
+      if (!col.nullable && !col.primaryKey) line += ' NOT NULL';
+      if (col.defaultValue) line += ` DEFAULT ${col.defaultValue}`;
+      if (col.check) line += ` CHECK (${col.check})`;
+      return line;
+    });
+    if (pks.length > 0) colDefs.push(`    PRIMARY KEY (${pks.join(', ')})`);
+    const commentStmts = columns
+      .filter(c => c.comment)
+      .map(c => `COMMENT ON COLUMN ${qualified(schema, name)}.${q(c.name)} IS '${c.comment!.replace(/'/g, "''")}';`);
+    let sql = `CREATE TABLE ${qualified(schema, name)} (\n${colDefs.join(',\n')}\n);`;
+    if (commentStmts.length > 0) sql += '\n' + commentStmts.join('\n');
+    return sql;
+  },
+
+  // -- View / materialized view creation --
+
+  createView(schema, name, sql, orReplace) {
+    const prefix = orReplace ? 'CREATE OR REPLACE VIEW' : 'CREATE VIEW';
+    return `${prefix} ${qualified(schema, name)} AS\n${sql};`;
+  },
+
+  createMaterializedView(schema, name, sql) {
+    return `CREATE MATERIALIZED VIEW ${qualified(schema, name)} AS\n${sql};`;
+  },
+
+  // -- Function creation --
+
+  createFunction(schema, name, params, returnType, language, body, orReplace) {
+    const prefix = orReplace ? 'CREATE OR REPLACE FUNCTION' : 'CREATE FUNCTION';
+    return `${prefix} ${qualified(schema, name)}(${params})\nRETURNS ${returnType}\nLANGUAGE ${language}\nAS $$\n${body}\n$$;`;
+  },
+
+  // -- Sequence creation & editing --
+
+  createSequence(schema, name, opts) {
+    const parts = [`CREATE SEQUENCE ${qualified(schema, name)}`];
+    if (opts.increment != null) parts.push(`INCREMENT ${opts.increment}`);
+    if (opts.start != null) parts.push(`START ${opts.start}`);
+    if (opts.min != null) parts.push(`MINVALUE ${opts.min}`);
+    if (opts.max != null) parts.push(`MAXVALUE ${opts.max}`);
+    if (opts.cache != null) parts.push(`CACHE ${opts.cache}`);
+    if (opts.cycle) parts.push('CYCLE');
+    return parts.join('\n    ') + ';';
+  },
+
+  alterSequence(schema, name, opts) {
+    const parts = [`ALTER SEQUENCE ${qualified(schema, name)}`];
+    if (opts.increment != null) parts.push(`INCREMENT ${opts.increment}`);
+    if (opts.min != null) parts.push(`MINVALUE ${opts.min}`);
+    if (opts.max != null) parts.push(`MAXVALUE ${opts.max}`);
+    if (opts.cache != null) parts.push(`CACHE ${opts.cache}`);
+    if (opts.cycle !== undefined) parts.push(opts.cycle ? 'CYCLE' : 'NO CYCLE');
+    if (opts.restart != null) parts.push(`RESTART WITH ${opts.restart}`);
+    return parts.join('\n    ') + ';';
+  },
+
   // -- Schema & object lifecycle --
 
   createSchema(schemaName) {

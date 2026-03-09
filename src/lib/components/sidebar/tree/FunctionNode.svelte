@@ -7,6 +7,7 @@
   import { ContextMenuRenderer, functionMenuItems } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import EditFunctionDialog from './EditFunctionDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { getDialect } from '$lib/dialects';
   import { invoke } from '@tauri-apps/api/core';
@@ -46,6 +47,7 @@
   let expanded = $state(false);
   let dropConfirmOpen = $state(false);
   let dropLoading = $state(false);
+  let editOpen = $state(false);
 
   const displayName = $derived(
     func.argument_types
@@ -76,6 +78,7 @@
       case 'view-structure':
         if (connectionId && databaseName) app.openStructureTab(connectionId, databaseName, schema, func.name);
         return;
+      case 'edit': editOpen = true; return;
       case 'copy-name': return navigator.clipboard.writeText(
         dialect?.qualifiedTable(schema, func.name) ?? `"${schema}"."${func.name}"`);
       case 'drop': dropConfirmOpen = true; return;
@@ -117,6 +120,18 @@
   {showCascade}
   onconfirm={handleDrop}
 />
+
+{#if connectionId && databaseName}
+  <EditFunctionDialog
+    bind:open={editOpen}
+    {schema}
+    funcName={func.name}
+    funcArgTypes={func.argument_types ?? ''}
+    connectionId={connectionId}
+    databaseName={databaseName}
+    onedited={onRefresh}
+  />
+{/if}
 
 {#if expanded}
   <div

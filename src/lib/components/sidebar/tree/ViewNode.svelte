@@ -7,6 +7,7 @@
   import { ContextMenuRenderer, viewMenuItems } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import EditViewDialog from './EditViewDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { getDialect } from '$lib/dialects';
   import { invoke } from '@tauri-apps/api/core';
@@ -41,6 +42,7 @@
 
   let dropConfirmOpen = $state(false);
   let dropLoading = $state(false);
+  let editOpen = $state(false);
 
   function handleClick() {
     app.openDataTab(connectionId, databaseName, schema, view.name);
@@ -69,6 +71,7 @@
       case 'view-structure': return app.openStructureTab(connectionId, databaseName, schema, view.name);
       case 'new-query': return app.openQueryTab(connectionId, databaseName,
         `SELECT * FROM ${dialect?.qualifiedTable(schema, view.name) ?? '"' + view.name + '"'} LIMIT 100;`);
+      case 'edit': editOpen = true; return;
       case 'copy-name': return navigator.clipboard.writeText(
         dialect?.qualifiedTable(schema, view.name) ?? `"${schema}"."${view.name}"`);
       case 'drop': dropConfirmOpen = true; return;
@@ -103,4 +106,13 @@
   loading={dropLoading}
   {showCascade}
   onconfirm={handleDrop}
+/>
+
+<EditViewDialog
+  bind:open={editOpen}
+  {schema}
+  viewName={view.name}
+  {connectionId}
+  {databaseName}
+  onedited={onRefresh}
 />

@@ -63,6 +63,7 @@ export function viewMenuItems(): MenuEntry[] {
     { id: 'view-structure', label: 'View Structure', when: c => c.capabilities?.introspection !== false },
     { id: 'new-query', label: 'New Query', when: c => c.capabilities?.sql !== false },
     { kind: 'separator' },
+    { id: 'edit', label: 'Edit View...', when: c => c.capabilities?.sql !== false },
     { id: 'copy-name', label: 'Copy Qualified Name' },
     { kind: 'separator', when: c => c.capabilities?.sql !== false },
     { id: 'drop', label: 'Drop View...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
@@ -76,6 +77,7 @@ export function materializedViewMenuItems(): MenuEntry[] {
     { id: 'refresh', label: 'Refresh' },
     { id: 'new-query', label: 'New Query', when: c => c.capabilities?.sql !== false },
     { kind: 'separator' },
+    { id: 'edit', label: 'Edit Materialized View...', when: c => c.capabilities?.sql !== false },
     { id: 'copy-name', label: 'Copy Qualified Name' },
     { kind: 'separator', when: c => c.capabilities?.sql !== false },
     { id: 'drop', label: 'Drop Materialized View...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
@@ -85,6 +87,7 @@ export function materializedViewMenuItems(): MenuEntry[] {
 export function functionMenuItems(): MenuEntry[] {
   return [
     { id: 'view-structure', label: 'View Definition', when: c => c.capabilities?.introspection !== false },
+    { id: 'edit', label: 'Edit Function...', when: c => c.capabilities?.sql !== false },
     { id: 'copy-name', label: 'Copy Name' },
     { kind: 'separator', when: c => c.capabilities?.sql !== false },
     { id: 'drop', label: 'Drop Function...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
@@ -93,6 +96,7 @@ export function functionMenuItems(): MenuEntry[] {
 
 export function sequenceMenuItems(): MenuEntry[] {
   return [
+    { id: 'edit', label: 'Edit Sequence...', when: c => c.capabilities?.sql !== false },
     { id: 'copy-name', label: 'Copy Name' },
     { kind: 'separator', when: c => c.capabilities?.sql !== false },
     { id: 'reset', label: 'Reset Sequence', when: c => c.capabilities?.sql !== false },
