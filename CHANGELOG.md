@@ -4,6 +4,15 @@ All notable changes to SakiDB will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **Binary data preview** — Bytea columns now render inline thumbnails for images (PNG, JPEG, GIF, WebP, BMP, AVIF), embedded PDF viewer, and archive cards (ZIP, GZIP, BZ2, XZ, 7Z) with download buttons. Works in the data grid, cell expand popover, and row detail panel.
+- **Create connection from Edit dialog** — The connection edit dialog now supports creating new connections (previously only editing existing ones).
+
+### Fixed
+
+- Connection test no longer fails when testing an unsaved connection from the edit dialog.
+
 ## v1.2.0 (2026-03-10)
 
 ### Added

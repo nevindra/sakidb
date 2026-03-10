@@ -51,6 +51,7 @@
   let confirmDelete = $state(false);
 
   const isOpen = $derived(app.editDialogConnectionId !== null);
+  const isCreateMode = $derived(app.editDialogConnectionId === '');
   const connection = $derived(
     app.editDialogConnectionId
       ? app.savedConnections.find(c => c.id === app.editDialogConnectionId)
@@ -69,12 +70,23 @@
         password: '',
         ssl_mode: connection.ssl_mode,
       };
-      connectionUrl = '';
-      urlError = null;
-      showPassword = false;
-      testResult = null;
-      confirmDelete = false;
+    } else if (isCreateMode) {
+      form = {
+        name: '',
+        engine: 'postgres',
+        host: 'localhost',
+        port: 5432,
+        database: 'postgres',
+        username: 'postgres',
+        password: '',
+        ssl_mode: 'prefer',
+      };
     }
+    connectionUrl = '';
+    urlError = null;
+    showPassword = false;
+    testResult = null;
+    confirmDelete = false;
   });
 
   const isFileBased = $derived(form.engine === 'sqlite' || form.engine === 'duckdb');
@@ -83,6 +95,7 @@
       ? !!(form.name.trim() && form.database.trim())
       : !!(form.name.trim() && form.host.trim() && form.username.trim())
   );
+
 
   function parseConnectionUrl(raw: string) {
     const s = raw.trim();
@@ -114,15 +127,18 @@
   async function handleTest() {
     testing = true;
     testResult = null;
-    const ok = await app.testConnection(form, app.editDialogConnectionId ?? undefined);
+    const ok = await app.testConnection(form, app.editDialogConnectionId || undefined);
     testResult = ok ? 'success' : 'fail';
     testing = false;
   }
 
   async function handleSave() {
-    if (!app.editDialogConnectionId) return;
-    saving = true;
-    await app.updateConnection(app.editDialogConnectionId, form);
+      saving = true;
+    if (app.editDialogConnectionId) {
+      await app.updateConnection(app.editDialogConnectionId, form);
+    } else {
+      await app.saveConnection(form);
+    }
     saving = false;
     app.closeEditDialog();
   }
@@ -145,7 +161,7 @@
   <Dialog.Content class="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
     <!-- Header -->
     <div class="px-6 pt-5 pb-4">
-      <Dialog.Title class="text-[15px] font-semibold text-foreground">{connection?.name ?? 'Edit Connection'}</Dialog.Title>
+      <Dialog.Title class="text-[15px] font-semibold text-foreground">{isCreateMode ? 'New Connection' : connection?.name ?? 'Edit Connection'}</Dialog.Title>
       <Dialog.Description class="text-[11px] text-muted-foreground font-mono mt-0.5">
         {isFileBased ? form.database || 'No file selected' : `${form.host}:${form.port}/${form.database}`}
       </Dialog.Description>
@@ -330,12 +346,14 @@
         Test
       </button>
 
-      <button
-        class="h-[30px] px-3 text-[12px] font-medium rounded-md text-destructive/80 hover:text-destructive hover:bg-destructive/10 transition-all duration-100"
-        onclick={handleDelete}
-      >
-        {confirmDelete ? 'Confirm Delete' : 'Delete'}
-      </button>
+      {#if !isCreateMode}
+        <button
+          class="h-[30px] px-3 text-[12px] font-medium rounded-md text-destructive/80 hover:text-destructive hover:bg-destructive/10 transition-all duration-100"
+          onclick={handleDelete}
+        >
+          {confirmDelete ? 'Confirm Delete' : 'Delete'}
+        </button>
+      {/if}
 
       <div class="flex-1"></div>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import type { CellValue } from '$lib/types';
-  import { cellToImageSrc } from '$lib/image-utils';
+  import { detectBinaryFormat, formatBinaryLabel, getMimeType, bytesToObjectUrl } from '$lib/binary-utils';
   import { getCategoryCss } from '$lib/type-utils';
 
   const MAX_CELL_LEN = 200;
@@ -17,6 +17,10 @@
     if ('Json' in v) return { text: truncate(v.Json), cls: 'font-mono text-primary' };
     if ('Timestamp' in v) return { text: v.Timestamp, cls: 'text-success' };
     if ('Bytes' in v) {
+      const format = detectBinaryFormat(v.Bytes);
+      if (format.kind !== 'unknown') {
+        return { text: formatBinaryLabel(format, v.Bytes.length), cls: 'text-text-dim text-[10px]' };
+      }
       const hex = v.Bytes.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join(' ');
       return { text: `\\x${hex}${v.Bytes.length > 16 ? '...' : ''}`, cls: 'font-mono text-text-dim' };
     }
@@ -27,9 +31,17 @@
     return s.length > MAX_CELL_LEN ? s.slice(0, MAX_CELL_LEN) + '…' : s;
   }
 
+  const isBytes = $derived(value !== 'Null' && typeof value === 'object' && 'Bytes' in value);
+  const bytesFormat = $derived(isBytes ? detectBinaryFormat((value as { Bytes: number[] }).Bytes) : null);
+  const isImage = $derived(bytesFormat?.kind === 'image');
+
   let currentObjectUrl: string | null = null;
-  const imageSrc = $derived(cellToImageSrc(value));
-  const display = $derived(getDisplay(value));
+
+  const imageSrc = $derived.by(() => {
+    if (!isImage || !bytesFormat || bytesFormat.kind !== 'image') return null;
+    const bytes = (value as { Bytes: number[] }).Bytes;
+    return bytesToObjectUrl(bytes, getMimeType(bytesFormat));
+  });
 
   $effect(() => {
     if (currentObjectUrl && currentObjectUrl !== imageSrc) {
@@ -39,16 +51,26 @@
   });
 
   onDestroy(() => {
-    if (currentObjectUrl) {
-      URL.revokeObjectURL(currentObjectUrl);
-    }
+    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
   });
+
+  const display = $derived(getDisplay(value));
 </script>
 
-{#if imageSrc}
+{#if isImage && imageSrc}
   <span class="inline-flex items-center gap-1.5">
     <img src={imageSrc} alt="" class="h-5 w-5 object-cover rounded-sm shrink-0" />
-    <span class="text-text-dim text-[10px]">image</span>
+    <span class="text-text-dim text-[10px]">{display.text}</span>
+  </span>
+{:else if isBytes && bytesFormat && bytesFormat.kind === 'pdf'}
+  <span class="inline-flex items-center gap-1.5">
+    <span class="text-red-400/80 text-[10px] shrink-0">PDF</span>
+    <span class="text-text-dim text-[10px]">{display.text}</span>
+  </span>
+{:else if isBytes && bytesFormat && bytesFormat.kind === 'archive'}
+  <span class="inline-flex items-center gap-1.5">
+    <span class="text-amber-400/80 text-[10px] shrink-0">📦</span>
+    <span class="text-text-dim text-[10px]">{display.text}</span>
   </span>
 {:else}
   <span class={display.cls}>{display.text}</span>

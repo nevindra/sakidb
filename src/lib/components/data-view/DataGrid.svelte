@@ -992,7 +992,11 @@
                         <CellDisplay value={pendingVal} dataType={col.data_type} />
                       {:else}
                         {@const display = (result as ColumnarResultData).getCellDisplay(dataRow, colIdx)}
-                        <span class={display.cls}>{display.text}</span>
+                        {#if display.isBinaryPreview}
+                          <CellDisplay value={(result as ColumnarResultData).toCellValue(dataRow, colIdx)} dataType={col.data_type} />
+                        {:else}
+                          <span class={display.cls}>{display.text}</span>
+                        {/if}
                       {/if}
                     {:else}
                       <CellDisplay value={getDisplayCell(displayIdx, colIdx)} dataType={col.data_type} />
