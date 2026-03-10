@@ -103,7 +103,8 @@ impl SqlFormatter for PostgresDriver {
 
         let _ = writeln!(out, "{}\n);\n", col_defs.join(",\n"));
 
-        for idx in ctx.indexes
+        for idx in ctx
+            .indexes
             .iter()
             .filter(|i| i.table_name == ctx.table_name && !i.is_primary)
         {
@@ -141,11 +142,7 @@ impl SqlFormatter for PostgresDriver {
         Some(out)
     }
 
-    fn format_data_header(
-        &self,
-        columns: &[ColumnDef],
-        qualified_table: &str,
-    ) -> Option<String> {
+    fn format_data_header(&self, columns: &[ColumnDef], qualified_table: &str) -> Option<String> {
         let col_names: Vec<String> = columns.iter().map(|c| quote_ident(&c.name)).collect();
         Some(format!(
             "COPY {qualified_table} ({}) FROM stdin;\n",
@@ -161,11 +158,11 @@ impl SqlFormatter for PostgresDriver {
         buf: &mut String,
     ) {
         let num_cols = columns.len();
-        for col_idx in 0..num_cols {
+        for (col_idx, cell) in cells.iter().enumerate().take(num_cols) {
             if col_idx > 0 {
                 buf.push('\t');
             }
-            write_copy_cell(buf, &cells[col_idx]);
+            write_copy_cell(buf, cell);
         }
         buf.push('\n');
     }

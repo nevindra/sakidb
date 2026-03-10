@@ -89,6 +89,7 @@ async fn count_estimate(state: &AppState, conn_id: &ConnectionId, sql: &str) -> 
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn export_table_csv(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -117,8 +118,8 @@ pub async fn export_table_csv(
         .export_cancel_flags
         .insert(conn_id, cancel_flag.clone());
 
-    let file = std::fs::File::create(&file_path)
-        .map_err(|e| format!("Failed to create file: {e}"))?;
+    let file =
+        std::fs::File::create(&file_path).map_err(|e| format!("Failed to create file: {e}"))?;
     let writer = std::io::BufWriter::new(file);
 
     // Wrap mutable state in Arc<Mutex> so callback can move a clone
@@ -126,7 +127,10 @@ pub async fn export_table_csv(
     let export_state_cb = export_state.clone();
     let app_clone = app_handle.clone();
 
-    let on_batch = move |columns: &[ColumnDef], cells: &[CellValue], total_rows: u64| -> sakidb_core::error::Result<()> {
+    let on_batch = move |columns: &[ColumnDef],
+                         cells: &[CellValue],
+                         total_rows: u64|
+          -> sakidb_core::error::Result<()> {
         let mut guard = export_state_cb.lock().unwrap();
         let (ref mut writer, ref mut line_buf, ref mut header_written) = *guard;
 
@@ -147,7 +151,11 @@ pub async fn export_table_csv(
         }
 
         let num_cols = columns.len();
-        let row_count = if num_cols > 0 { cells.len() / num_cols } else { 0 };
+        let row_count = if num_cols > 0 {
+            cells.len() / num_cols
+        } else {
+            0
+        };
 
         for row_idx in 0..row_count {
             line_buf.clear();
@@ -176,7 +184,10 @@ pub async fn export_table_csv(
         Ok(())
     };
 
-    let exporter = state.registry.exporter_for(&conn_id).map_err(|e| e.to_string())?;
+    let exporter = state
+        .registry
+        .exporter_for(&conn_id)
+        .map_err(|e| e.to_string())?;
     let result = exporter
         .export_stream(&conn_id, &base_sql, 1_000, &cancel_flag, &on_batch)
         .await;
@@ -228,6 +239,7 @@ pub async fn export_table_csv(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn export_table_sql(
     app_handle: AppHandle,
     state: State<'_, AppState>,
@@ -241,25 +253,46 @@ pub async fn export_table_sql(
     let conn_id = parse_conn_id(&active_connection_id)?;
     info!(schema = %schema, table = %table, file_path = %file_path, include_ddl, include_data, "starting SQL export");
 
-    let file = std::fs::File::create(&file_path)
-        .map_err(|e| format!("Failed to create file: {e}"))?;
+    let file =
+        std::fs::File::create(&file_path).map_err(|e| format!("Failed to create file: {e}"))?;
     let writer = Arc::new(Mutex::new(std::io::BufWriter::new(file)));
 
     let qualified = qualified_table(&schema, &table);
 
     // Phase 1: DDL — use SqlFormatter if available, else fall back to get_create_table_sql
     if include_ddl {
-        let introspector = state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?;
+        let introspector = state
+            .registry
+            .introspector_for(&conn_id)
+            .map_err(|e| e.to_string())?;
         let formatter = state.registry.formatter_for(&conn_id).ok();
 
         // Try formatter-generated DDL first (uses introspected metadata)
         let ddl_text = if let Some(fmt) = formatter {
-            let columns = introspector.list_columns(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
-            let indexes = introspector.list_indexes(&conn_id, &schema).await.map_err(|e| e.to_string())?;
-            let constraints = introspector.list_unique_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
-            let foreign_keys = introspector.list_foreign_keys(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
-            let check_constraints = introspector.list_check_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
-            let triggers = introspector.list_triggers(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
+            let columns = introspector
+                .list_columns(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?;
+            let indexes = introspector
+                .list_indexes(&conn_id, &schema)
+                .await
+                .map_err(|e| e.to_string())?;
+            let constraints = introspector
+                .list_unique_constraints(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?;
+            let foreign_keys = introspector
+                .list_foreign_keys(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?;
+            let check_constraints = introspector
+                .list_check_constraints(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?;
+            let triggers = introspector
+                .list_triggers(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?;
 
             fmt.format_ddl(&DdlContext {
                 columns: &columns,
@@ -278,7 +311,10 @@ pub async fn export_table_sql(
         // Fall back to engine's native CREATE TABLE SQL (e.g. SQLite's sqlite_master)
         let ddl_text = match ddl_text {
             Some(ddl) => ddl,
-            None => introspector.get_create_table_sql(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?,
+            None => introspector
+                .get_create_table_sql(&conn_id, &schema, &table)
+                .await
+                .map_err(|e| e.to_string())?,
         };
 
         {
@@ -302,7 +338,10 @@ pub async fn export_table_sql(
             .export_cancel_flags
             .insert(conn_id, cancel_flag.clone());
 
-        let formatter = state.registry.formatter_arc_for(&conn_id).map_err(|e| e.to_string())?;
+        let formatter = state
+            .registry
+            .formatter_arc_for(&conn_id)
+            .map_err(|e| e.to_string())?;
 
         let data_state = Arc::new(Mutex::new((String::with_capacity(4096), false))); // (line_buf, header_written)
         let data_state_cb = data_state.clone();
@@ -311,7 +350,10 @@ pub async fn export_table_sql(
         let qualified_clone = qualified.clone();
         let formatter_cb = formatter.clone();
 
-        let on_batch = move |columns: &[ColumnDef], cells: &[CellValue], rows_so_far: u64| -> sakidb_core::error::Result<()> {
+        let on_batch = move |columns: &[ColumnDef],
+                             cells: &[CellValue],
+                             rows_so_far: u64|
+              -> sakidb_core::error::Result<()> {
             let mut ds = data_state_cb.lock().unwrap();
             let (ref mut line_buf, ref mut header_written) = *ds;
             let mut w = writer_cb.lock().unwrap();
@@ -326,7 +368,11 @@ pub async fn export_table_sql(
             }
 
             let num_cols = columns.len();
-            let row_count = if num_cols > 0 { cells.len() / num_cols } else { 0 };
+            let row_count = if num_cols > 0 {
+                cells.len() / num_cols
+            } else {
+                0
+            };
 
             for row_idx in 0..row_count {
                 line_buf.clear();
@@ -348,7 +394,10 @@ pub async fn export_table_sql(
             Ok(())
         };
 
-        let exporter = state.registry.exporter_for(&conn_id).map_err(|e| e.to_string())?;
+        let exporter = state
+            .registry
+            .exporter_for(&conn_id)
+            .map_err(|e| e.to_string())?;
         let result = exporter
             .export_stream(&conn_id, &sql, 1_000, &cancel_flag, &on_batch)
             .await;
@@ -402,7 +451,11 @@ pub async fn export_table_sql(
         }
     }
 
-    writer.lock().unwrap().flush().map_err(|e| format!("Flush error: {e}"))?;
+    writer
+        .lock()
+        .unwrap()
+        .flush()
+        .map_err(|e| format!("Flush error: {e}"))?;
     info!(rows = total_rows, file_path = %file_path, "SQL export complete");
     Ok(total_rows)
 }

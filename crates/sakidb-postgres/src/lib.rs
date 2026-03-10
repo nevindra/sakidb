@@ -30,6 +30,12 @@ pub struct PostgresDriver {
     cancel_tokens: Arc<DashMap<ConnectionId, CancelToken>>,
 }
 
+impl Default for PostgresDriver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PostgresDriver {
     pub fn new() -> Self {
         Self {

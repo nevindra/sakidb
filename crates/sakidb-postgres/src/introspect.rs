@@ -209,13 +209,21 @@ pub async fn get_completion_bundle(
         .map(|r| FunctionInfo {
             name: r.get("func_name"),
             kind: r.get("func_kind"),
-            return_type: r.get::<_, Option<String>>("return_type").unwrap_or_default(),
-            argument_types: r.get::<_, Option<String>>("argument_types").unwrap_or_default(),
+            return_type: r
+                .get::<_, Option<String>>("return_type")
+                .unwrap_or_default(),
+            argument_types: r
+                .get::<_, Option<String>>("argument_types")
+                .unwrap_or_default(),
             language: r.get("language"),
         })
         .collect();
 
-    debug!(tables = tables.len(), functions = functions.len(), "completion bundle loaded");
+    debug!(
+        tables = tables.len(),
+        functions = functions.len(),
+        "completion bundle loaded"
+    );
     Ok(CompletionBundle { tables, functions })
 }
 
@@ -365,8 +373,12 @@ pub async fn list_functions(pool: &Pool, schema: &str) -> Result<Vec<FunctionInf
         .map(|r| FunctionInfo {
             name: r.get("func_name"),
             kind: r.get("func_kind"),
-            return_type: r.get::<_, Option<String>>("return_type").unwrap_or_default(),
-            argument_types: r.get::<_, Option<String>>("argument_types").unwrap_or_default(),
+            return_type: r
+                .get::<_, Option<String>>("return_type")
+                .unwrap_or_default(),
+            argument_types: r
+                .get::<_, Option<String>>("argument_types")
+                .unwrap_or_default(),
             language: r.get("language"),
         })
         .collect())
@@ -439,7 +451,9 @@ pub async fn list_indexes(pool: &Pool, schema: &str) -> Result<Vec<IndexInfo>, S
         .map(|r| IndexInfo {
             name: r.get("index_name"),
             table_name: r.get("table_name"),
-            columns: r.get::<_, Option<String>>("column_names").unwrap_or_default(),
+            columns: r
+                .get::<_, Option<String>>("column_names")
+                .unwrap_or_default(),
             is_unique: r.get("is_unique"),
             is_primary: r.get("is_primary"),
             index_type: r.get::<_, Option<String>>("index_type").unwrap_or_default(),
@@ -577,14 +591,13 @@ pub async fn list_triggers(
     Ok(rows
         .iter()
         .map(|r| {
-            let trigger_def: String = r.get::<_, Option<String>>("trigger_def").unwrap_or_default();
-            let condition = trigger_def
-                .find(" WHEN (")
-                .map(|start| {
-                    let after = &trigger_def[start + 7..];
-                    after.find(") EXECUTE").map(|end| after[..end].to_string())
-                })
-                .flatten();
+            let trigger_def: String = r
+                .get::<_, Option<String>>("trigger_def")
+                .unwrap_or_default();
+            let condition = trigger_def.find(" WHEN (").and_then(|start| {
+                let after = &trigger_def[start + 7..];
+                after.find(") EXECUTE").map(|end| after[..end].to_string())
+            });
 
             TriggerInfo {
                 name: r.get("trigger_name"),
@@ -783,7 +796,12 @@ pub async fn get_create_table_sql(
         )));
     }
 
-    let _ = writeln!(ddl, "CREATE TABLE {}.{} (", quote_ident(schema), quote_ident(table));
+    let _ = writeln!(
+        ddl,
+        "CREATE TABLE {}.{} (",
+        quote_ident(schema),
+        quote_ident(table)
+    );
 
     let mut col_defs: Vec<String> = Vec::new();
     for row in &col_rows {
@@ -866,11 +884,12 @@ pub async fn get_create_table_sql(
         .collect();
     ddl.push_str(&all_defs.join(",\n"));
     ddl.push('\n');
-    ddl.push_str(")");
+    ddl.push(')');
 
     if let Some(part_row) = part_rows.first() {
-        let partition_key: String =
-            part_row.get::<_, Option<String>>("partition_key").unwrap_or_default();
+        let partition_key: String = part_row
+            .get::<_, Option<String>>("partition_key")
+            .unwrap_or_default();
         if !partition_key.is_empty() {
             let _ = write!(ddl, "\nPARTITION BY {partition_key}");
         }
@@ -954,7 +973,9 @@ pub async fn get_partition_info(
     }
     .to_string();
 
-    let partition_key: String = row.get::<_, Option<String>>("partition_key").unwrap_or_default();
+    let partition_key: String = row
+        .get::<_, Option<String>>("partition_key")
+        .unwrap_or_default();
 
     // Get partitions
     let part_rows = client

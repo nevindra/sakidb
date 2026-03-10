@@ -11,7 +11,7 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::CancelToken;
 use tracing::{debug, info};
 
-use sakidb_core::sql::{SqlSplitOptions, split_sql_statements_with};
+use sakidb_core::sql::{split_sql_statements_with, SqlSplitOptions};
 use sakidb_core::types::*;
 use sakidb_core::SakiError;
 
@@ -21,8 +21,7 @@ fn classify_pg_type(pg_type: &Type) -> u8 {
     match *pg_type {
         Type::BOOL => 1,
         Type::BYTEA => 3,
-        Type::INT2 | Type::INT4 | Type::INT8 | Type::OID
-        | Type::FLOAT4 | Type::FLOAT8 => 0,
+        Type::INT2 | Type::INT4 | Type::INT8 | Type::OID | Type::FLOAT4 | Type::FLOAT8 => 0,
         // NUMERIC is arbitrary-precision — store as Text to preserve exact values
         _ => 2, // everything else as text
     }
@@ -96,8 +95,11 @@ impl<'a> FromSql<'a> for FallbackText {
             for i in 0..max_show {
                 let off = 4 + i * 4;
                 if off + 4 <= raw.len() {
-                    if i > 0 { buf.push(','); }
-                    let f = f32::from_be_bytes([raw[off], raw[off + 1], raw[off + 2], raw[off + 3]]);
+                    if i > 0 {
+                        buf.push(',');
+                    }
+                    let f =
+                        f32::from_be_bytes([raw[off], raw[off + 1], raw[off + 2], raw[off + 3]]);
                     let _ = write!(buf, "{f}");
                 }
             }
@@ -175,19 +177,24 @@ fn push_columnar_value(
                 }
             }
         }
-        (1, ColumnStorage::Bool { nulls, values }) => {
-            match row.get::<_, Option<bool>>(col_idx) {
-                Some(v) => {
-                    nulls.push(0);
-                    values.push(if v { 1 } else { 0 });
-                }
-                None => {
-                    nulls.push(1);
-                    values.push(0);
-                }
+        (1, ColumnStorage::Bool { nulls, values }) => match row.get::<_, Option<bool>>(col_idx) {
+            Some(v) => {
+                nulls.push(0);
+                values.push(if v { 1 } else { 0 });
             }
-        }
-        (2, ColumnStorage::Text { nulls, offsets, data }) => {
+            None => {
+                nulls.push(1);
+                values.push(0);
+            }
+        },
+        (
+            2,
+            ColumnStorage::Text {
+                nulls,
+                offsets,
+                data,
+            },
+        ) => {
             let text = pg_value_to_text(row, col_idx, pg_type);
             match text {
                 Some(s) => {
@@ -201,53 +208,50 @@ fn push_columnar_value(
                 }
             }
         }
-        (3, ColumnStorage::Bytes { nulls, offsets, data }) => {
-            match row.get::<_, Option<Vec<u8>>>(col_idx) {
-                Some(v) => {
-                    nulls.push(0);
-                    data.extend_from_slice(&v);
-                    offsets.push(data.len() as u32);
-                }
-                None => {
-                    nulls.push(1);
-                    offsets.push(data.len() as u32);
-                }
+        (
+            3,
+            ColumnStorage::Bytes {
+                nulls,
+                offsets,
+                data,
+            },
+        ) => match row.get::<_, Option<Vec<u8>>>(col_idx) {
+            Some(v) => {
+                nulls.push(0);
+                data.extend_from_slice(&v);
+                offsets.push(data.len() as u32);
             }
-        }
+            None => {
+                nulls.push(1);
+                offsets.push(data.len() as u32);
+            }
+        },
         _ => unreachable!(),
     }
 }
 
 /// Extract a PostgreSQL value as a UTF-8 string for the Text column storage.
-fn pg_value_to_text(
-    row: &tokio_postgres::Row,
-    col_idx: usize,
-    pg_type: &Type,
-) -> Option<String> {
+fn pg_value_to_text(row: &tokio_postgres::Row, col_idx: usize, pg_type: &Type) -> Option<String> {
     match *pg_type {
         Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME => {
             row.get::<_, Option<String>>(col_idx)
         }
-        Type::JSON | Type::JSONB => {
-            row.get::<_, Option<RawJsonString>>(col_idx).map(|r| r.0)
-        }
-        Type::TIMESTAMP => {
-            row.get::<_, Option<chrono::NaiveDateTime>>(col_idx)
-                .map(|t| t.to_string())
-        }
-        Type::TIMESTAMPTZ => {
-            row.get::<_, Option<chrono::DateTime<chrono::Utc>>>(col_idx)
-                .map(|t| t.to_rfc3339())
-        }
-        Type::DATE => {
-            row.get::<_, Option<chrono::NaiveDate>>(col_idx).map(|d| d.to_string())
-        }
-        Type::TIME | Type::TIMETZ => {
-            row.get::<_, Option<chrono::NaiveTime>>(col_idx).map(|t| t.to_string())
-        }
-        Type::UUID => {
-            row.get::<_, Option<uuid::Uuid>>(col_idx).map(|u| u.to_string())
-        }
+        Type::JSON | Type::JSONB => row.get::<_, Option<RawJsonString>>(col_idx).map(|r| r.0),
+        Type::TIMESTAMP => row
+            .get::<_, Option<chrono::NaiveDateTime>>(col_idx)
+            .map(|t| t.to_string()),
+        Type::TIMESTAMPTZ => row
+            .get::<_, Option<chrono::DateTime<chrono::Utc>>>(col_idx)
+            .map(|t| t.to_rfc3339()),
+        Type::DATE => row
+            .get::<_, Option<chrono::NaiveDate>>(col_idx)
+            .map(|d| d.to_string()),
+        Type::TIME | Type::TIMETZ => row
+            .get::<_, Option<chrono::NaiveTime>>(col_idx)
+            .map(|t| t.to_string()),
+        Type::UUID => row
+            .get::<_, Option<uuid::Uuid>>(col_idx)
+            .map(|u| u.to_string()),
         _ => {
             // Fallback: try String, then FallbackText for extension types
             row.try_get::<_, Option<String>>(col_idx)
@@ -336,7 +340,13 @@ pub async fn execute_query_columnar(
 
         let cols_meta = row.columns();
         for i in 0..cols_meta.len() {
-            push_columnar_value(&row, i, cols_meta[i].type_(), col_types[i], &mut col_storages[i]);
+            push_columnar_value(
+                &row,
+                i,
+                cols_meta[i].type_(),
+                col_types[i],
+                &mut col_storages[i],
+            );
         }
         row_count += 1;
 
@@ -381,13 +391,15 @@ pub async fn execute_multi_columnar(
         if trimmed.is_empty() {
             continue;
         }
-        results.push(
-            execute_query_columnar(pool, trimmed, conn_id, cancel_tokens).await?,
-        );
+        results.push(execute_query_columnar(pool, trimmed, conn_id, cancel_tokens).await?);
     }
 
     let elapsed = start.elapsed().as_millis() as u64;
-    info!(statements = results.len(), elapsed_ms = elapsed, "multi columnar complete");
+    info!(
+        statements = results.len(),
+        elapsed_ms = elapsed,
+        "multi columnar complete"
+    );
 
     Ok(MultiColumnarResult {
         total_execution_time_ms: elapsed,
@@ -444,8 +456,8 @@ pub async fn execute_query(
             cells.reserve(columns.len() * 128);
         }
         let cols = row.columns();
-        for i in 0..cols.len() {
-            cells.push(pg_value_to_cell(&row, i, cols[i].type_()));
+        for (i, col) in cols.iter().enumerate() {
+            cells.push(pg_value_to_cell(&row, i, col.type_()));
         }
         row_count += 1;
 
@@ -476,17 +488,15 @@ pub async fn execute_query(
 
 /// Fast row-count estimate using EXPLAIN's planner output.
 /// Returns None if the estimate cannot be obtained.
-async fn estimate_row_count(
-    pool: &Pool,
-    sql: &str,
-) -> Option<i64> {
+async fn estimate_row_count(pool: &Pool, sql: &str) -> Option<i64> {
     let t0 = Instant::now();
     let client = pool.get().await.ok()?;
     let explain_sql = format!("EXPLAIN (FORMAT JSON) {sql}");
     let row = client.query_opt(&explain_sql, &[]).await.ok()??;
     let json: serde_json::Value = row.try_get(0).ok()?;
     // EXPLAIN JSON returns [{"Plan": {"Plan Rows": N, ...}}]
-    let estimate = json.get(0)?
+    let estimate = json
+        .get(0)?
         .get("Plan")?
         .get("Plan Rows")?
         .as_f64()
@@ -507,9 +517,8 @@ pub async fn execute_paged(
     debug!(page, page_size, "executing paged query");
     let offset = page * page_size;
 
-    let paged_sql = format!(
-        "SELECT * FROM ({sql}) AS _paged_query LIMIT {page_size} OFFSET {offset}"
-    );
+    let paged_sql =
+        format!("SELECT * FROM ({sql}) AS _paged_query LIMIT {page_size} OFFSET {offset}");
 
     let data_client = pool
         .get()
@@ -551,8 +560,8 @@ pub async fn execute_paged(
                 cells.reserve(columns.len() * page_size);
             }
             let cols = row.columns();
-            for i in 0..cols.len() {
-                cells.push(pg_value_to_cell(&row, i, cols[i].type_()));
+            for (i, col) in cols.iter().enumerate() {
+                cells.push(pg_value_to_cell(&row, i, col.type_()));
             }
             row_count += 1;
         }
@@ -561,10 +570,7 @@ pub async fn execute_paged(
     };
 
     let (total, data_result) = if run_count {
-        let (est, data) = tokio::join!(
-            estimate_row_count(pool, sql),
-            data_future
-        );
+        let (est, data) = tokio::join!(estimate_row_count(pool, sql), data_future);
         (est, data)
     } else {
         let data = data_future.await;
@@ -606,9 +612,8 @@ pub async fn execute_paged_columnar(
     debug!(page, page_size, "executing paged columnar query");
     let offset = page * page_size;
 
-    let paged_sql = format!(
-        "SELECT * FROM ({sql}) AS _paged_query LIMIT {page_size} OFFSET {offset}"
-    );
+    let paged_sql =
+        format!("SELECT * FROM ({sql}) AS _paged_query LIMIT {page_size} OFFSET {offset}");
 
     let data_client = pool
         .get()
@@ -677,7 +682,13 @@ pub async fn execute_paged_columnar(
 
             let cols_meta = row.columns();
             for i in 0..cols_meta.len() {
-                push_columnar_value(&row, i, cols_meta[i].type_(), col_types[i], &mut col_storages[i]);
+                push_columnar_value(
+                    &row,
+                    i,
+                    cols_meta[i].type_(),
+                    col_types[i],
+                    &mut col_storages[i],
+                );
             }
             row_count += 1;
         }
@@ -686,10 +697,7 @@ pub async fn execute_paged_columnar(
     };
 
     let (total, data_result) = if run_count {
-        let (est, data) = tokio::join!(
-            estimate_row_count(pool, sql),
-            data_future
-        );
+        let (est, data) = tokio::join!(estimate_row_count(pool, sql), data_future);
         (est, data)
     } else {
         let data = data_future.await;
@@ -722,10 +730,7 @@ pub async fn execute_paged_columnar(
     })
 }
 
-pub async fn execute_batch(
-    pool: &Pool,
-    sql: &str,
-) -> Result<(), SakiError> {
+pub async fn execute_batch(pool: &Pool, sql: &str) -> Result<(), SakiError> {
     let t0 = Instant::now();
     debug!("executing batch");
     let client = pool
@@ -736,7 +741,10 @@ pub async fn execute_batch(
         .batch_execute(sql)
         .await
         .map_err(|e| SakiError::QueryFailed(format_pg_error(&e)))?;
-    debug!(elapsed_ms = t0.elapsed().as_millis() as u64, "batch complete");
+    debug!(
+        elapsed_ms = t0.elapsed().as_millis() as u64,
+        "batch complete"
+    );
     Ok(())
 }
 
@@ -848,7 +856,9 @@ fn pg_value_to_cell(row: &tokio_postgres::Row, index: usize, pg_type: &Type) -> 
 /// PostgreSQL-aware SQL statement splitter. Delegates to the shared
 /// implementation in `sakidb_core::sql` with dollar-quoting enabled.
 pub fn split_sql_statements(sql: &str) -> Vec<&str> {
-    static PG_OPTS: SqlSplitOptions = SqlSplitOptions { dollar_quoting: true };
+    static PG_OPTS: SqlSplitOptions = SqlSplitOptions {
+        dollar_quoting: true,
+    };
     split_sql_statements_with(sql, &PG_OPTS)
 }
 
@@ -879,7 +889,11 @@ pub async fn execute_multi(
 
     let total_execution_time_ms = total_start.elapsed().as_millis() as u64;
 
-    info!(statements = results.len(), elapsed_ms = total_execution_time_ms, "multi query complete");
+    info!(
+        statements = results.len(),
+        elapsed_ms = total_execution_time_ms,
+        "multi query complete"
+    );
 
     Ok(MultiQueryResult {
         results,
@@ -887,11 +901,13 @@ pub async fn execute_multi(
     })
 }
 
+#[allow(clippy::type_complexity)]
 pub async fn execute_export_cursor(
     pool: &Pool,
     sql: &str,
     batch_size: usize,
-    on_batch: &mut (dyn FnMut(&[ColumnDef], &[CellValue], u64) -> std::result::Result<(), SakiError> + Send),
+    on_batch: &mut (dyn FnMut(&[ColumnDef], &[CellValue], u64) -> std::result::Result<(), SakiError>
+              + Send),
     cancel_flag: &AtomicBool,
 ) -> std::result::Result<u64, SakiError> {
     debug!(batch_size, "opening export cursor");
@@ -907,9 +923,7 @@ pub async fn execute_export_cursor(
         .map_err(|e| SakiError::QueryFailed(format_pg_error(&e)))?;
 
     // Declare cursor
-    let declare_sql = format!(
-        "DECLARE _export_cursor NO SCROLL CURSOR FOR {sql}"
-    );
+    let declare_sql = format!("DECLARE _export_cursor NO SCROLL CURSOR FOR {sql}");
     if let Err(e) = client.batch_execute(&declare_sql).await {
         // Rollback the BEGIN transaction on declare failure
         let _ = client.batch_execute("ROLLBACK").await;
@@ -956,8 +970,8 @@ pub async fn execute_export_cursor(
                 cells.reserve(columns.len() * batch_size);
             }
             let cols = row.columns();
-            for i in 0..cols.len() {
-                cells.push(pg_value_to_cell(&row, i, cols[i].type_()));
+            for (i, col) in cols.iter().enumerate() {
+                cells.push(pg_value_to_cell(&row, i, col.type_()));
             }
             batch_row_count += 1;
         }
@@ -981,4 +995,3 @@ pub async fn execute_export_cursor(
 
     Ok(total_rows)
 }
-

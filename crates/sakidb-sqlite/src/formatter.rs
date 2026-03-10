@@ -51,11 +51,7 @@ impl SqlFormatter for SqliteDriver {
         None
     }
 
-    fn format_data_header(
-        &self,
-        _columns: &[ColumnDef],
-        _qualified_table: &str,
-    ) -> Option<String> {
+    fn format_data_header(&self, _columns: &[ColumnDef], _qualified_table: &str) -> Option<String> {
         None
     }
 
@@ -69,12 +65,16 @@ impl SqlFormatter for SqliteDriver {
         let num_cols = columns.len();
         let col_names: Vec<String> = columns.iter().map(|c| quote_ident(&c.name)).collect();
 
-        let _ = write!(buf, "INSERT INTO {qualified_table} ({}) VALUES (", col_names.join(", "));
-        for col_idx in 0..num_cols {
+        let _ = write!(
+            buf,
+            "INSERT INTO {qualified_table} ({}) VALUES (",
+            col_names.join(", ")
+        );
+        for (col_idx, cell) in cells.iter().enumerate().take(num_cols) {
             if col_idx > 0 {
                 buf.push_str(", ");
             }
-            write_sqlite_literal(buf, &cells[col_idx]);
+            write_sqlite_literal(buf, cell);
         }
         buf.push_str(");\n");
     }
