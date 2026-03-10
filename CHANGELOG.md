@@ -4,6 +4,8 @@ All notable changes to SakiDB will be documented in this file.
 
 ## Unreleased
 
+## v1.2.0 (2026-03-10)
+
 ### Added
 
 - **Full object lifecycle menus** — Right-click any database object to create, drop, or manage it. Includes schema CRUD (create, rename, drop), "Create..." on every category folder (Tables, Views, Functions, Sequences, Indexes), and drop/reindex/reset actions on individual objects.

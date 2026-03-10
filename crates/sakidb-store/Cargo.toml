@@ -1,6 +1,6 @@
 [package]
 name = "sakidb-store"
-version = "1.0.0"
+version = "1.2.0"
 description = "Credential and query storage for SakiDB"
 license = "MIT"
 edition = "2021"

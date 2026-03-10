@@ -1,6 +1,6 @@
 [package]
 name = "sakidb-sqlite"
-version = "1.0.0"
+version = "1.2.0"
 description = "SQLite driver for SakiDB using rusqlite with bundled SQLite"
 license = "MIT"
 edition = "2021"
