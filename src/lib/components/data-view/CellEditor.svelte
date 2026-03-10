@@ -42,7 +42,9 @@
   const isTemporal = $derived(isDate || isTimestamp || isTime);
 
   // ── Bool state ──
+  // svelte-ignore state_referenced_locally
   let boolChecked = $state(value !== 'Null' && 'Bool' in value ? value.Bool : false);
+  // svelte-ignore state_referenced_locally
   let boolIsNull = $state(value === 'Null');
 
   // ── Date/time state ──

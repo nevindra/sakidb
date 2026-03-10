@@ -201,6 +201,7 @@
       </div>
       <div class="grid grid-cols-3 gap-2">
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Timing</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addTiming}>
@@ -216,6 +217,7 @@
           </div>
         </div>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Event</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addEvent}>
@@ -231,6 +233,7 @@
           </div>
         </div>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">For Each</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addForEach}>
@@ -248,6 +251,7 @@
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Function Schema</label>
           <div class="mt-1">
             <Select.Root type="single" value={addFuncSchema} onValueChange={(v) => { if (v) handleFuncSchemaChange(v); }}>
@@ -263,6 +267,7 @@
           </div>
         </div>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Function Name</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addFuncName}>

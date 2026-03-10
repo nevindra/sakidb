@@ -197,17 +197,7 @@ pub trait Restorer: Send + Sync {
 
 pub trait SqlFormatter: Send + Sync {
     /// Generate DDL for a table export (CREATE TABLE, indexes, triggers, constraints).
-    fn format_ddl(
-        &self,
-        columns: &[ColumnInfo],
-        indexes: &[IndexInfo],
-        constraints: &[UniqueConstraintInfo],
-        foreign_keys: &[ForeignKeyInfo],
-        check_constraints: &[CheckConstraintInfo],
-        triggers: &[TriggerInfo],
-        qualified_table: &str,
-        table_name: &str,
-    ) -> Option<String>;
+    fn format_ddl(&self, ctx: &DdlContext<'_>) -> Option<String>;
 
     /// Data section header. PG: "COPY ... FROM stdin;", SQLite: None.
     fn format_data_header(

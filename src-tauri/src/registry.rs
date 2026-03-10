@@ -16,7 +16,9 @@ pub struct DriverEntry {
     pub exporter: Option<Arc<dyn Exporter>>,
     pub restorer: Option<Arc<dyn Restorer>>,
     pub formatter: Option<Arc<dyn SqlFormatter>>,
+    #[allow(dead_code)]
     pub key_value: Option<Arc<dyn KeyValueDriver>>,
+    #[allow(dead_code)]
     pub document: Option<Arc<dyn DocumentDriver>>,
 }
 

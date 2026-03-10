@@ -245,6 +245,7 @@
       <!-- Type + Precision row -->
       <div class="grid gap-2" class:grid-cols-2={addPrecisionHint !== null} class:grid-cols-1={addPrecisionHint === null}>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Type</label>
           <div class="relative mt-1">
             <Combobox.Root type="single" bind:value={addType} onOpenChangeComplete={(o) => { if (!o) addTypeSearch = ''; }}>
@@ -336,6 +337,7 @@
         <Input id="edit-col-name" class="mt-1" bind:value={editName} />
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Type</label>
         <div class="relative mt-1">
           <Combobox.Root type="single" bind:value={editType} onOpenChangeComplete={(o) => { if (!o) editTypeSearch = ''; }}>

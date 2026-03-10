@@ -175,7 +175,8 @@ For engine-specific SQL export formatting (DDL generation, data row serializatio
 use sakidb_core::SqlFormatter;
 
 impl SqlFormatter for YourDriver {
-    fn format_ddl(&self, columns, indexes, constraints, foreign_keys, check_constraints, triggers, qualified_table, table_name) -> Option<String> {
+    fn format_ddl(&self, ctx: &DdlContext<'_>) -> Option<String> {
+        // Access fields via ctx.columns, ctx.indexes, ctx.qualified_table, etc.
         // Return None to fall back to get_create_table_sql()
         // Return Some(ddl) to use custom DDL generation
     }

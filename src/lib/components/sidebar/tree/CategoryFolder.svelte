@@ -95,19 +95,17 @@
   </button>
 {/snippet}
 
-{#if count > 0 || !loaded}
-  {#if menuItems}
-    <ContextMenu.Root>
-      <ContextMenu.Trigger class="block w-full">
-        {@render folderButton()}
-      </ContextMenu.Trigger>
-      <ContextMenuRenderer items={menuItems} ctx={menuCtx} onaction={(id) => onmenuaction?.(id)} />
-    </ContextMenu.Root>
-  {:else}
-    {@render folderButton()}
-  {/if}
+{#if menuItems}
+  <ContextMenu.Root>
+    <ContextMenu.Trigger class="block w-full">
+      {@render folderButton()}
+    </ContextMenu.Trigger>
+    <ContextMenuRenderer items={menuItems} ctx={menuCtx} onaction={(id) => onmenuaction?.(id)} />
+  </ContextMenu.Root>
+{:else}
+  {@render folderButton()}
+{/if}
 
-  {#if isExpanded && loaded}
-    {@render children()}
-  {/if}
+{#if isExpanded && loaded}
+  {@render children()}
 {/if}

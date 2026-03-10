@@ -93,7 +93,10 @@ fn format_ddl_simple_table() {
         col_info("name", "text", true, Some("'unnamed'")),
     ];
     let ddl = d
-        .format_ddl(&cols, &[], &[], &[], &[], &[], "\"public\".\"users\"", "users")
+        .format_ddl(&DdlContext {
+            columns: &cols, indexes: &[], constraints: &[], foreign_keys: &[],
+            check_constraints: &[], triggers: &[], qualified_table: "\"public\".\"users\"", table_name: "users",
+        })
         .unwrap();
     assert!(ddl.contains("CREATE TABLE \"public\".\"users\""));
     assert!(ddl.contains("\"id\" integer NOT NULL"));
@@ -110,7 +113,10 @@ fn format_ddl_with_primary_key() {
         is_primary: true,
     }];
     let ddl = d
-        .format_ddl(&cols, &[], &constraints, &[], &[], &[], "\"users\"", "users")
+        .format_ddl(&DdlContext {
+            columns: &cols, indexes: &[], constraints: &constraints, foreign_keys: &[],
+            check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+        })
         .unwrap();
     assert!(ddl.contains("CONSTRAINT \"users_pkey\" PRIMARY KEY (\"id\")"));
 }
@@ -128,7 +134,10 @@ fn format_ddl_with_index_using() {
         index_type: "btree".to_string(),
     }];
     let ddl = d
-        .format_ddl(&cols, &indexes, &[], &[], &[], &[], "\"users\"", "users")
+        .format_ddl(&DdlContext {
+            columns: &cols, indexes: &indexes, constraints: &[], foreign_keys: &[],
+            check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+        })
         .unwrap();
     assert!(ddl.contains("CREATE INDEX \"idx_name\" ON \"users\" USING btree (name)"));
 }

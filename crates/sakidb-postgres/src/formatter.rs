@@ -43,23 +43,13 @@ fn write_copy_cell(buf: &mut String, cell: &CellValue) {
 }
 
 impl SqlFormatter for PostgresDriver {
-    fn format_ddl(
-        &self,
-        columns: &[ColumnInfo],
-        indexes: &[IndexInfo],
-        constraints: &[UniqueConstraintInfo],
-        foreign_keys: &[ForeignKeyInfo],
-        check_constraints: &[CheckConstraintInfo],
-        triggers: &[TriggerInfo],
-        qualified_table: &str,
-        table_name: &str,
-    ) -> Option<String> {
+    fn format_ddl(&self, ctx: &DdlContext<'_>) -> Option<String> {
         let mut out = String::new();
 
-        let _ = writeln!(out, "CREATE TABLE {qualified_table} (");
+        let _ = writeln!(out, "CREATE TABLE {} (", ctx.qualified_table);
 
         let mut col_defs: Vec<String> = Vec::new();
-        for col in columns {
+        for col in ctx.columns {
             let mut def = format!("    {} {}", quote_ident(&col.name), col.data_type);
             if !col.is_nullable {
                 def.push_str(" NOT NULL");
@@ -70,7 +60,7 @@ impl SqlFormatter for PostgresDriver {
             col_defs.push(def);
         }
 
-        for uc in constraints {
+        for uc in ctx.constraints {
             let cols: Vec<String> = uc.columns.iter().map(|c| quote_ident(c)).collect();
             if uc.is_primary {
                 col_defs.push(format!(
@@ -87,7 +77,7 @@ impl SqlFormatter for PostgresDriver {
             }
         }
 
-        for fk in foreign_keys {
+        for fk in ctx.foreign_keys {
             let local_cols: Vec<String> = fk.columns.iter().map(|c| quote_ident(c)).collect();
             let foreign_cols: Vec<String> =
                 fk.foreign_columns.iter().map(|c| quote_ident(c)).collect();
@@ -103,7 +93,7 @@ impl SqlFormatter for PostgresDriver {
             ));
         }
 
-        for cc in check_constraints {
+        for cc in ctx.check_constraints {
             col_defs.push(format!(
                 "    CONSTRAINT {} {}",
                 quote_ident(&cc.constraint_name),
@@ -113,21 +103,22 @@ impl SqlFormatter for PostgresDriver {
 
         let _ = writeln!(out, "{}\n);\n", col_defs.join(",\n"));
 
-        for idx in indexes
+        for idx in ctx.indexes
             .iter()
-            .filter(|i| i.table_name == table_name && !i.is_primary)
+            .filter(|i| i.table_name == ctx.table_name && !i.is_primary)
         {
             let unique = if idx.is_unique { "UNIQUE " } else { "" };
             let _ = writeln!(
                 out,
-                "CREATE {unique}INDEX {} ON {qualified_table} USING {} ({});\n",
+                "CREATE {unique}INDEX {} ON {} USING {} ({});\n",
                 quote_ident(&idx.name),
+                ctx.qualified_table,
                 idx.index_type,
                 idx.columns
             );
         }
 
-        for trig in triggers {
+        for trig in ctx.triggers {
             let condition = trig
                 .condition
                 .as_ref()
@@ -135,10 +126,11 @@ impl SqlFormatter for PostgresDriver {
                 .unwrap_or_default();
             let _ = writeln!(
                 out,
-                "CREATE TRIGGER {} {} {} ON {qualified_table}\n    FOR EACH {}{}\n    EXECUTE FUNCTION {}.{}();\n",
+                "CREATE TRIGGER {} {} {} ON {}\n    FOR EACH {}{}\n    EXECUTE FUNCTION {}.{}();\n",
                 quote_ident(&trig.name),
                 trig.timing,
                 trig.event,
+                ctx.qualified_table,
                 trig.for_each,
                 condition,
                 quote_ident(&trig.function_schema),

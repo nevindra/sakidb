@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tracing::info;
 
 use sakidb_core::types::*;
-use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver, SqlFormatter};
+use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver};
 
 use crate::connection::ConnectionManager;
 

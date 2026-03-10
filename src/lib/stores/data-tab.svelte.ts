@@ -14,7 +14,7 @@ export function openDataTab(savedConnectionId: string, databaseName: string, sch
 
   const existing = findTab(
     (t): t is DataTab => t.type === 'data' && t.savedConnectionId === savedConnectionId
-      && t.schema === schema && t.table === table
+      && t.databaseName === databaseName && t.schema === schema && t.table === table
   );
 
   if (existing) {

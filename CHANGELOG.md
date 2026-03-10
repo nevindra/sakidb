@@ -35,13 +35,11 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Fixed
 
-- **Create Table dialog** — Fixed infinite loop crash, broken constraint toggles, and unusable type picker. Redesigned with a Popover-based type selector and clean layout.
-- Data tab not loading on SQLite connections.
-- Schema-qualified queries failing on SQLite (which has no schemas).
-- Query cancellation not working on SQLite.
 - UTF-8 corruption when restoring SQL files with multi-byte characters.
 - SQL escaping hardened to prevent edge-case injection.
 - ERD view rendering as blank canvas at 0% zoom.
+- Empty category folders (Tables, Views, Functions, etc.) disappearing from the sidebar after loading instead of showing a zero count.
+- Opening the same table name from different databases reusing an existing tab instead of opening a new one.
 - ERD minimap and fit-to-screen errors with zero dimensions.
 
 ## v1.1.0 (2026-03-06)

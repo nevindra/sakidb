@@ -21,7 +21,7 @@ use tokio_postgres::{CancelToken, NoTls};
 use tracing::{info, warn};
 
 use sakidb_core::types::*;
-use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver, SqlFormatter};
+use sakidb_core::{Driver, Exporter, Introspector, Restorer, Result, SqlDriver};
 
 use crate::connection::ConnectionManager;
 

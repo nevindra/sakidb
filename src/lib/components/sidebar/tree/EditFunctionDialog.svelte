@@ -95,6 +95,7 @@
         <Input id="edit-fn-return" class="mt-1" bind:value={returnType} placeholder="void" />
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Language</label>
         <div class="mt-1">
           <Select.Root type="single" bind:value={language}>

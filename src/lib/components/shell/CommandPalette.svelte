@@ -123,12 +123,14 @@
 {#if open}
   <!-- Backdrop -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="fixed inset-0 z-50 bg-black/50"
     onclick={() => (open = false)}
   >
     <!-- Panel -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="mx-auto mt-[15vh] w-full max-w-[560px] rounded-lg border border-border/50 bg-popover shadow-2xl overflow-hidden"
       onclick={(e) => e.stopPropagation()}

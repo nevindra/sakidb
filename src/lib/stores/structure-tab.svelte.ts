@@ -99,7 +99,7 @@ export function openStructureTab(savedConnectionId: string, databaseName: string
 
   const existing = findTab(
     (t): t is StructureTab => t.type === 'structure' && t.savedConnectionId === savedConnectionId
-      && t.schema === schema && t.table === table
+      && t.databaseName === databaseName && t.schema === schema && t.table === table
   );
 
   if (existing) {

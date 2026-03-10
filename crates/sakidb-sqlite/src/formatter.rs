@@ -44,17 +44,7 @@ fn write_sqlite_literal(buf: &mut String, cell: &CellValue) {
 }
 
 impl SqlFormatter for SqliteDriver {
-    fn format_ddl(
-        &self,
-        _columns: &[ColumnInfo],
-        _indexes: &[IndexInfo],
-        _constraints: &[UniqueConstraintInfo],
-        _foreign_keys: &[ForeignKeyInfo],
-        _check_constraints: &[CheckConstraintInfo],
-        _triggers: &[TriggerInfo],
-        _qualified_table: &str,
-        _table_name: &str,
-    ) -> Option<String> {
+    fn format_ddl(&self, _ctx: &DdlContext<'_>) -> Option<String> {
         // SQLite DDL is best retrieved from sqlite_master (via get_create_table_sql)
         // rather than reconstructed from metadata. Return None — export.rs will
         // use the introspector's get_create_table_sql instead.

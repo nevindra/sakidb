@@ -128,6 +128,7 @@
         <Input id="idx-name" class="mt-1" bind:value={name} placeholder="idx_table_column" />
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Table</label>
         <div class="mt-1">
           <Select.Root type="single" value={selectedTable} onValueChange={onTableChange}>
@@ -143,12 +144,14 @@
         </div>
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Columns</label>
         <div class="mt-1">
           <MultiSelect options={tableColumns} bind:selected={addColumns} placeholder="Select columns..." />
         </div>
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Index Type</label>
         <div class="mt-1">
           <Select.Root type="single" bind:value={indexType}>

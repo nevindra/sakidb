@@ -477,6 +477,18 @@ pub struct UniqueConstraintInfo {
     pub is_primary: bool,
 }
 
+/// Bundled context for `SqlFormatter::format_ddl`.
+pub struct DdlContext<'a> {
+    pub columns: &'a [ColumnInfo],
+    pub indexes: &'a [IndexInfo],
+    pub constraints: &'a [UniqueConstraintInfo],
+    pub foreign_keys: &'a [ForeignKeyInfo],
+    pub check_constraints: &'a [CheckConstraintInfo],
+    pub triggers: &'a [TriggerInfo],
+    pub qualified_table: &'a str,
+    pub table_name: &'a str,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartitionInfo {
     pub strategy: String,

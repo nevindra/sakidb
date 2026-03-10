@@ -261,7 +261,16 @@ pub async fn export_table_sql(
             let check_constraints = introspector.list_check_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
             let triggers = introspector.list_triggers(&conn_id, &schema, &table).await.map_err(|e| e.to_string())?;
 
-            fmt.format_ddl(&columns, &indexes, &constraints, &foreign_keys, &check_constraints, &triggers, &qualified, &table)
+            fmt.format_ddl(&DdlContext {
+                columns: &columns,
+                indexes: &indexes,
+                constraints: &constraints,
+                foreign_keys: &foreign_keys,
+                check_constraints: &check_constraints,
+                triggers: &triggers,
+                qualified_table: &qualified,
+                table_name: &table,
+            })
         } else {
             None
         };

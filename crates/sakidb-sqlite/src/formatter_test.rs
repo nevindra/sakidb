@@ -17,7 +17,10 @@ fn col_def(name: &str) -> ColumnDef {
 #[test]
 fn format_ddl_returns_none() {
     let d = driver();
-    let result = d.format_ddl(&[], &[], &[], &[], &[], &[], "\"users\"", "users");
+    let result = d.format_ddl(&DdlContext {
+        columns: &[], indexes: &[], constraints: &[], foreign_keys: &[],
+        check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+    });
     assert!(result.is_none(), "SQLite DDL should return None (use sqlite_master)");
 }
 

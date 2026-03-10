@@ -183,6 +183,7 @@
         <Input id="fk-name" class="mt-1" bind:value={addName} placeholder="fk_table_column" />
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Local Columns</label>
         <div class="mt-1">
           <MultiSelect options={localColumnNames} bind:selected={addColumns} placeholder="Select columns..." />
@@ -190,6 +191,7 @@
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Ref Schema</label>
           <div class="mt-1">
             <Select.Root type="single" value={addRefSchema} onValueChange={(v) => { if (v) handleRefSchemaChange(v); }}>
@@ -205,6 +207,7 @@
           </div>
         </div>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">Ref Table</label>
           <div class="mt-1">
             <Select.Root type="single" value={addRefTable} onValueChange={(v) => { if (v) handleRefTableChange(v); }}>
@@ -221,6 +224,7 @@
         </div>
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="text-xs font-medium text-muted-foreground">Ref Columns</label>
         <div class="mt-1">
           <MultiSelect options={refColumnNames} bind:selected={addRefColumns} placeholder="Select ref columns..." />
@@ -228,6 +232,7 @@
       </div>
       <div class="grid grid-cols-2 gap-2">
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">On Update</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addOnUpdate}>
@@ -243,6 +248,7 @@
           </div>
         </div>
         <div>
+          <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs font-medium text-muted-foreground">On Delete</label>
           <div class="mt-1">
             <Select.Root type="single" bind:value={addOnDelete}>
