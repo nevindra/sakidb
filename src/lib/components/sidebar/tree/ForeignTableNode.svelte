@@ -98,16 +98,18 @@
   <ContextMenuRenderer items={foreignTableMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Foreign Table"
-  description={`This will permanently drop the foreign table ${schema ? `"${schema}".` : ''}"${foreignTable.name}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Foreign Table"
+    description={`This will permanently drop the foreign table ${schema ? `"${schema}".` : ''}"${foreignTable.name}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
 {#if expanded}
   <div

@@ -12,6 +12,7 @@
   import type { FuzzyResult } from '$lib/utils/fuzzy';
   import { Table2, Eye, Layers, FunctionSquare, Hash, ListTree, ExternalLink } from '@lucide/svelte';
   import CategoryFolder from './CategoryFolder.svelte';
+  import VirtualTreeList from './VirtualTreeList.svelte';
   import TableNode from './TableNode.svelte';
   import ViewNode from './ViewNode.svelte';
   import MaterializedViewNode from './MaterializedViewNode.svelte';
@@ -163,9 +164,11 @@
   {#if capabilities?.tables !== false}
     <CategoryFolder label="Tables" count={tables.length} icon={Table2} iconClass="text-primary" load={loadTables} autoExpand={isSearching && categoryHasMatch(displayTables)} reveal={revealTablesExpand} menuItems={tablesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('table')}>
       {#snippet children()}
-        {#each filteredTables as table (table.name)}
-          <TableNode {table} schema={schemaName} {connectionId} {databaseName} partitions={partitionChildren.get(table.name)} onRefreshTables={loadTables} {searchResults} {schemaPrefix} />
-        {/each}
+        <VirtualTreeList items={filteredTables} getKey={(t) => t.name}>
+          {#snippet children(table)}
+            <TableNode {table} schema={schemaName} {connectionId} {databaseName} partitions={partitionChildren.get(table.name)} onRefreshTables={loadTables} {searchResults} {schemaPrefix} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -173,9 +176,11 @@
   {#if capabilities?.views !== false}
     <CategoryFolder label="Views" count={views.length} icon={Eye} iconClass="text-sky-400" load={loadViews} autoExpand={isSearching && categoryHasMatch(views)} menuItems={viewsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('view')}>
       {#snippet children()}
-        {#each filteredViews as view (view.name)}
-          <ViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadViews} />
-        {/each}
+        <VirtualTreeList items={filteredViews} getKey={(v) => v.name}>
+          {#snippet children(view)}
+            <ViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadViews} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -183,9 +188,11 @@
   {#if capabilities?.materialized_views}
     <CategoryFolder label="Materialized Views" count={materializedViews.length} icon={Layers} iconClass="text-violet-400" load={loadMaterializedViews} autoExpand={isSearching && categoryHasMatch(materializedViews)} menuItems={materializedViewsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('materialized_view')}>
       {#snippet children()}
-        {#each filteredMatViews as view (view.name)}
-          <MaterializedViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadMaterializedViews} />
-        {/each}
+        <VirtualTreeList items={filteredMatViews} getKey={(v) => v.name}>
+          {#snippet children(view)}
+            <MaterializedViewNode {view} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadMaterializedViews} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -193,9 +200,11 @@
   {#if capabilities?.functions}
     <CategoryFolder label="Functions" count={functions.length} icon={FunctionSquare} iconClass="text-emerald-400" load={loadFunctions} autoExpand={isSearching && categoryHasMatch(functions)} menuItems={functionsFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('function')}>
       {#snippet children()}
-        {#each filteredFunctions as func (func.name + '(' + func.argument_types + ')')}
-          <FunctionNode {func} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadFunctions} />
-        {/each}
+        <VirtualTreeList items={filteredFunctions} getKey={(f) => f.name + '(' + f.argument_types + ')'}>
+          {#snippet children(func)}
+            <FunctionNode {func} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadFunctions} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -203,9 +212,11 @@
   {#if capabilities?.sequences}
     <CategoryFolder label="Sequences" count={sequences.length} icon={Hash} iconClass="text-orange-400" load={loadSequences} menuItems={sequencesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('sequence')}>
       {#snippet children()}
-        {#each sequences as seq (seq.name)}
-          <SequenceNode sequence={seq} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadSequences} />
-        {/each}
+        <VirtualTreeList items={sequences} getKey={(s) => s.name}>
+          {#snippet children(seq)}
+            <SequenceNode sequence={seq} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadSequences} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -213,9 +224,11 @@
   {#if capabilities?.indexes}
     <CategoryFolder label="Indexes" count={indexes.length} icon={ListTree} iconClass="text-teal-400" load={loadIndexes} menuItems={indexesFolderMenuItems()} menuCtx={folderMenuCtx} onmenuaction={() => handleFolderCreate('index')}>
       {#snippet children()}
-        {#each indexes as idx (idx.name)}
-          <IndexNode index={idx} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadIndexes} />
-        {/each}
+        <VirtualTreeList items={indexes} getKey={(i) => i.name}>
+          {#snippet children(idx)}
+            <IndexNode index={idx} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadIndexes} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}
@@ -223,9 +236,11 @@
   {#if capabilities?.foreign_tables}
     <CategoryFolder label="Foreign Tables" count={foreignTables.length} icon={ExternalLink} iconClass="text-rose-400" load={loadForeignTables}>
       {#snippet children()}
-        {#each foreignTables as ft (ft.name)}
-          <ForeignTableNode foreignTable={ft} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadForeignTables} />
-        {/each}
+        <VirtualTreeList items={foreignTables} getKey={(ft) => ft.name}>
+          {#snippet children(ft)}
+            <ForeignTableNode foreignTable={ft} schema={schemaName} {connectionId} {databaseName} {searchResults} {schemaPrefix} onRefresh={loadForeignTables} />
+          {/snippet}
+        </VirtualTreeList>
       {/snippet}
     </CategoryFolder>
   {/if}

@@ -97,22 +97,26 @@
   <ContextMenuRenderer items={viewMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop View"
-  description={`This will permanently drop the view ${schema ? `"${schema}".` : ''}"${view.name}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop View"
+    description={`This will permanently drop the view ${schema ? `"${schema}".` : ''}"${view.name}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
-<EditViewDialog
-  bind:open={editOpen}
-  {schema}
-  viewName={view.name}
-  {connectionId}
-  {databaseName}
-  onedited={onRefresh}
-/>
+{#if editOpen}
+  <EditViewDialog
+    bind:open={editOpen}
+    {schema}
+    viewName={view.name}
+    {connectionId}
+    {databaseName}
+    onedited={onRefresh}
+  />
+{/if}

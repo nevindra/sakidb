@@ -23,6 +23,7 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Performance
 
+- **Instant sidebar expansion** — Opening large lists (1000+ functions, indexes, etc.) is now near-instant. Virtualized rendering only draws visible rows; dialogs are lazy-mounted on demand.
 - Paginated queries for large result sets with lower memory usage.
 - Faster DataGrid rendering, avoiding unnecessary re-renders.
 - Optimized SQLite query execution and restore performance.
@@ -34,6 +35,7 @@ All notable changes to SakiDB will be documented in this file.
 
 ### Fixed
 
+- **Create Table dialog** — Fixed infinite loop crash, broken constraint toggles, and unusable type picker. Redesigned with a Popover-based type selector and clean layout.
 - Data tab not loading on SQLite connections.
 - Schema-qualified queries failing on SQLite (which has no schemas).
 - Query cancellation not working on SQLite.

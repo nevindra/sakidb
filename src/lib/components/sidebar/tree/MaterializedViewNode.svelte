@@ -116,23 +116,27 @@
   <ContextMenuRenderer items={materializedViewMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Materialized View"
-  description={`This will permanently drop the materialized view ${schema ? `"${schema}".` : ''}"${view.name}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Materialized View"
+    description={`This will permanently drop the materialized view ${schema ? `"${schema}".` : ''}"${view.name}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
-<EditViewDialog
-  bind:open={editOpen}
-  {schema}
-  viewName={view.name}
-  {connectionId}
-  {databaseName}
-  materialized
-  onedited={onRefresh}
-/>
+{#if editOpen}
+  <EditViewDialog
+    bind:open={editOpen}
+    {schema}
+    viewName={view.name}
+    {connectionId}
+    {databaseName}
+    materialized
+    onedited={onRefresh}
+  />
+{/if}

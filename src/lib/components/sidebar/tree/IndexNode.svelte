@@ -113,16 +113,18 @@
   <ContextMenuRenderer items={indexMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Index"
-  description={`This will permanently drop the index ${schema ? `"${schema}".` : ''}"${index.name}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Index"
+    description={`This will permanently drop the index ${schema ? `"${schema}".` : ''}"${index.name}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
 {#if expanded}
   <div

@@ -117,18 +117,20 @@
   <ContextMenuRenderer items={sequenceMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Sequence"
-  description={`This will permanently drop the sequence ${schema ? `"${schema}".` : ''}"${sequence.name}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Sequence"
+    description={`This will permanently drop the sequence ${schema ? `"${schema}".` : ''}"${sequence.name}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
-{#if connectionId && databaseName}
+{#if editOpen && connectionId && databaseName}
   <EditSequenceDialog
     bind:open={editOpen}
     {schema}

@@ -217,47 +217,57 @@
   {/if}
 {/if}
 
-<ExportDialog
-  bind:open={exportOpen}
-  savedConnectionId={connectionId}
-  {databaseName}
-  {schema}
-  table={table.name}
-/>
+{#if exportOpen}
+  <ExportDialog
+    bind:open={exportOpen}
+    savedConnectionId={connectionId}
+    {databaseName}
+    {schema}
+    table={table.name}
+  />
+{/if}
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Table"
-  description={`This will permanently drop ${schema ? `"${schema}".` : ''}"${table.name}". This action cannot be undone.`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Table"
+    description={`This will permanently drop ${schema ? `"${schema}".` : ''}"${table.name}". This action cannot be undone.`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    onconfirm={handleDrop}
+  />
+{/if}
 
-<ConfirmDialog
-  bind:open={truncateConfirmOpen}
-  title="Truncate Table"
-  description={`This will delete all rows from ${schema ? `"${schema}".` : ''}"${table.name}".`}
-  confirmLabel="Truncate"
-  variant="destructive"
-  loading={truncateLoading}
-  onconfirm={handleTruncate}
-/>
+{#if truncateConfirmOpen}
+  <ConfirmDialog
+    bind:open={truncateConfirmOpen}
+    title="Truncate Table"
+    description={`This will delete all rows from ${schema ? `"${schema}".` : ''}"${table.name}".`}
+    confirmLabel="Truncate"
+    variant="destructive"
+    loading={truncateLoading}
+    onconfirm={handleTruncate}
+  />
+{/if}
 
-<DuplicateTableDialog
-  bind:open={duplicateOpen}
-  {schema}
-  tableName={table.name}
-  {connectionId}
-  {databaseName}
-  onDuplicated={onRefreshTables}
-/>
+{#if duplicateOpen}
+  <DuplicateTableDialog
+    bind:open={duplicateOpen}
+    {schema}
+    tableName={table.name}
+    {connectionId}
+    {databaseName}
+    onDuplicated={onRefreshTables}
+  />
+{/if}
 
-<RestoreDialog
-  bind:open={restoreOpen}
-  savedConnectionId={connectionId}
-  {databaseName}
-  {schema}
-  table={table.name}
-/>
+{#if restoreOpen}
+  <RestoreDialog
+    bind:open={restoreOpen}
+    savedConnectionId={connectionId}
+    {databaseName}
+    {schema}
+    table={table.name}
+  />
+{/if}

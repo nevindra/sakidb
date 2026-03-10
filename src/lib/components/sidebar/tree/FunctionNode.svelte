@@ -110,18 +110,20 @@
   <ContextMenuRenderer items={functionMenuItems()} ctx={menuCtx} onaction={handleMenuAction} />
 </ContextMenu.Root>
 
-<ConfirmDialog
-  bind:open={dropConfirmOpen}
-  title="Drop Function"
-  description={`This will permanently drop the function "${displayName}".`}
-  confirmLabel="Drop"
-  variant="destructive"
-  loading={dropLoading}
-  {showCascade}
-  onconfirm={handleDrop}
-/>
+{#if dropConfirmOpen}
+  <ConfirmDialog
+    bind:open={dropConfirmOpen}
+    title="Drop Function"
+    description={`This will permanently drop the function "${displayName}".`}
+    confirmLabel="Drop"
+    variant="destructive"
+    loading={dropLoading}
+    {showCascade}
+    onconfirm={handleDrop}
+  />
+{/if}
 
-{#if connectionId && databaseName}
+{#if editOpen && connectionId && databaseName}
   <EditFunctionDialog
     bind:open={editOpen}
     {schema}
