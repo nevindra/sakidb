@@ -14,6 +14,7 @@
   const ENGINE_LABELS: Record<EngineType, string> = {
     postgres: 'PostgreSQL',
     sqlite: 'SQLite',
+    oracle: 'Oracle',
     redis: 'Redis',
     mongodb: 'MongoDB',
     duckdb: 'DuckDB',
@@ -23,6 +24,7 @@
   const ENGINE_DEFAULTS: Record<EngineType, { port: number; database: string; username: string }> = {
     postgres: { port: 5432, database: 'postgres', username: 'postgres' },
     sqlite: { port: 0, database: '', username: '' },
+    oracle: { port: 1521, database: 'ORCL', username: '' },
     redis: { port: 6379, database: '', username: '' },
     mongodb: { port: 27017, database: '', username: '' },
     duckdb: { port: 0, database: '', username: '' },

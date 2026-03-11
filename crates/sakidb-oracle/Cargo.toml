@@ -1,0 +1,34 @@
+[package]
+name = "sakidb-oracle"
+version = "1.0.0"
+description = "Oracle driver for SakiDB using rust-oracle (ODPI-C)"
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+sakidb-core = { path = "../sakidb-core" }
+oracle = { version = "0.6", features = ["chrono"] }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "fs", "process"] }
+uuid = { version = "1", features = ["v4"] }
+dashmap = "6"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+bytes = "1"
+reqwest = { version = "0.11", features = ["json"] }
+flate2 = "1.0"
+tar = "0.4"
+zip = "0.6"
+hex = "0.4"
+dirs = "6"
+
+[features]
+integration = []
+stress = []
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"

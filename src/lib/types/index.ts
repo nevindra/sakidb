@@ -2,7 +2,7 @@ import type { ColumnarResultData } from '$lib/types/query-result-data';
 
 // ── Engine types ──
 
-export type EngineType = 'postgres' | 'sqlite' | 'redis' | 'mongodb' | 'duckdb' | 'clickhouse';
+export type EngineType = 'postgres' | 'sqlite' | 'oracle' | 'redis' | 'mongodb' | 'duckdb' | 'clickhouse';
 
 export interface EngineCapabilities {
   sql: boolean;
