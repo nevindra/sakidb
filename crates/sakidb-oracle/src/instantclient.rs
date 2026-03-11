@@ -2,53 +2,84 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
-use tracing::{info, warn};
-use dirs::data_dir;
+use tracing::{info, error};
+use dirs::{data_dir, home_dir};
 use sakidb_core::error::{Result, SakiError};
 
-const INSTANTCLIENT_VERSION: &str = "21.13.0.0.0";
-const INSTANTCLIENT_BASE_URL: &str = "https://download.oracle.com/otn_software/mac/instantclient";
+// We use Oracle's permanent links ("latest") where available.
+// For ARM64 macOS, Oracle only provides DMG packages.
+const VERSION_LABEL: &str = "latest";
 
-/// Ensures Oracle Instant Client is available for the current platform
-/// Downloads and configures it automatically if not found
+const BASE_URL_MACOS: &str = "https://download.oracle.com/otn_software/mac/instantclient";
+const BASE_URL_LINUX: &str = "https://download.oracle.com/otn_software/linux/instantclient";
+const BASE_URL_WINDOWS: &str = "https://download.oracle.com/otn_software/nt/instantclient";
+
+/// Ensures Oracle Instant Client is available for the current platform.
+/// Downloads and configures it automatically if not found.
 pub async fn ensure_instantclient() -> Result<()> {
-    // First check if OCI_LIB_DIR is already set
-    if env::var("OCI_LIB_DIR").is_ok() {
-        info!("OCI_LIB_DIR already set, skipping instantclient setup");
-        return Ok(());
+    // 1. Check if OCI_LIB_DIR is already set (explicit manual override)
+    if let Ok(dir) = env::var("OCI_LIB_DIR") {
+        if Path::new(&dir).exists() {
+            info!("Using manual OCI_LIB_DIR: {}", dir);
+            return Ok(());
+        }
     }
 
-    // Check if instantclient is already available in system paths
+    // 2. Check for Conventional Manual Install
     if is_instantclient_available() {
-        info!("InstantClient already available in system paths");
+        info!("InstantClient detected in conventional system paths");
         return Ok(());
     }
 
-    // Determine platform and download appropriate version
+    // 3. Setup Automatic Download (Application Support / Data Dir)
     let platform = determine_platform()?;
     let instantclient_dir = get_local_instantclient_dir(&platform)?;
     
     if !instantclient_dir.exists() {
         info!("Downloading Oracle InstantClient for platform: {}", platform);
-        download_instantclient(&platform, &instantclient_dir).await?;
+        if let Err(e) = download_instantclient(&platform, &instantclient_dir).await {
+            error!("Automatic InstantClient download failed: {}", e);
+            
+            let manual_guide = match platform.as_str() {
+                "macos-arm64" | "macos-x64" => format!(
+                    "1. Follow the official ODPI-C guide: https://odpi-c.readthedocs.io/en/latest/user_guide/installation.html#macos\n\
+                     2. OR download and manually copy contents to: {}",
+                    instantclient_dir.display()
+                ),
+                "linux-x64" => format!(
+                    "1. Follow the official ODPI-C guide: https://odpi-c.readthedocs.io/en/latest/user_guide/installation.html#linux\n\
+                     2. Extract contents to: {}\n\
+                     3. OR install via your package manager (e.g., yum install oracle-instantclient-basic)",
+                    instantclient_dir.display()
+                ),
+                "windows-x64" => format!(
+                    "1. Follow the official ODPI-C guide: https://odpi-c.readthedocs.io/en/latest/user_guide/installation.html#windows\n\
+                     2. Extract contents to: {}\n\
+                     3. Add that directory to your system PATH.",
+                    instantclient_dir.display()
+                ),
+                _ => "Please install Oracle Instant Client manually for your platform.".to_string(),
+            };
+
+            return Err(SakiError::ConnectionFailed(format!(
+                "Failed to automatically setup Oracle Instant Client.\n\n\
+                MANUAL INSTALLATION GUIDE:\n\
+                {}\n\n\
+                Original error: {}", 
+                manual_guide, e
+            )));
+        }
     }
 
-    // Set OCI_LIB_DIR environment variable
+    // Set OCI_LIB_DIR environment variable to point to our internal download
     // Safety: env::set_var is unsafe in multi-threaded environments (Rust 1.81+)
-    // In sakidb, this is called during connection setup.
     unsafe {
         env::set_var("OCI_LIB_DIR", &instantclient_dir);
     }
-    info!("Set OCI_LIB_DIR to: {}", instantclient_dir.display());
+    info!("Set OCI_LIB_DIR to internal path: {}", instantclient_dir.display());
     
-    // Add to library path if needed
+    // Update platform-specific library search paths where possible
     update_library_path(&instantclient_dir, &platform)?;
-    
-    if platform.starts_with("macos") {
-        warn!("On macOS, DYLD_LIBRARY_PATH cannot be set at runtime after process start.");
-        warn!("If connection fails, please set DYLD_LIBRARY_PATH manually and restart SakiDB:");
-        warn!("export DYLD_LIBRARY_PATH={}:$DYLD_LIBRARY_PATH", instantclient_dir.display());
-    }
     
     Ok(())
 }
@@ -63,7 +94,7 @@ fn determine_platform() -> Result<String> {
         ("linux", "x86_64") => Ok("linux-x64".to_string()),
         ("windows", "x86_64") => Ok("windows-x64".to_string()),
         _ => Err(SakiError::ConnectionFailed(format!(
-            "Unsupported platform: {}-{}", os, arch
+            "Unsupported platform for automatic Oracle setup: {}-{}", os, arch
         ))),
     }
 }
@@ -76,40 +107,75 @@ fn get_local_instantclient_dir(platform: &str) -> Result<PathBuf> {
         .join("sakidb")
         .join("instantclient")
         .join(platform)
-        .join(format!("instantclient_{}", INSTANTCLIENT_VERSION));
+        .join(format!("instantclient_{}", VERSION_LABEL));
     
     Ok(instantclient_dir)
 }
 
 fn is_instantclient_available() -> bool {
-    Command::new("ldconfig").arg("-p").output().is_ok_and(|output| {
-        String::from_utf8_lossy(&output.stdout).contains("libclntsh")
-    })
+    // macOS
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = home_dir() {
+            if home.join("lib").join("libclntsh.dylib").exists() { return true; }
+        }
+        if Path::new("/usr/local/lib/libclntsh.dylib").exists() { return true; }
+    }
+
+    // Linux
+    #[cfg(target_os = "linux")]
+    {
+        if Command::new("sh").arg("-c").arg("ldconfig -p | grep libclntsh").output().is_ok_and(|o| o.status.success()) {
+            return true;
+        }
+        for path in ["/usr/lib/libclntsh.so", "/usr/local/lib/libclntsh.so"] {
+            if Path::new(path).exists() { return true; }
+        }
+    }
+
+    // Windows
+    #[cfg(target_os = "windows")]
+    {
+        if Command::new("where").arg("oci.dll").output().is_ok_and(|o| o.status.success()) {
+            return true;
+        }
+    }
+
+    false
 }
 
 async fn download_instantclient(platform: &str, target_dir: &PathBuf) -> Result<()> {
-    // Create target directory
     fs::create_dir_all(target_dir).await
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to create directory: {}", e)))?;
 
-    let filename = match platform {
-        "macos-arm64" => "instantclient-basic-macos.arm64.dmg",
-        "macos-x64" => "instantclient-basic-macos.x64.dmg",
-        "linux-x64" => "instantclient-basic-linux.x64-21.13.0.0.0dbru.zip",
-        "windows-x64" => "instantclient-basic-windows.x64-21.13.0.0.0dbru.zip",
+    let (download_url, filename) = match platform {
+        "macos-arm64" => (
+            format!("{}/instantclient-basic-macos-arm64.dmg", BASE_URL_MACOS),
+            "instantclient-basic-macos-arm64.dmg"
+        ),
+        "macos-x64" => (
+            format!("{}/instantclient-basic-macos.x64-latest.zip", BASE_URL_MACOS),
+            "instantclient-basic-macos.x64.zip"
+        ),
+        "linux-x64" => (
+            format!("{}/instantclient-basic-linux.x64-latest.zip", BASE_URL_LINUX),
+            "instantclient-basic-linux.x64-latest.zip"
+        ),
+        "windows-x64" => (
+            format!("{}/instantclient-basic-windows.x64-latest.zip", BASE_URL_WINDOWS),
+            "instantclient-basic-windows.x64-latest.zip"
+        ),
         _ => return Err(SakiError::ConnectionFailed(format!("Unsupported platform: {}", platform))),
     };
 
-    let download_url = format!("{}/{}", INSTANTCLIENT_BASE_URL, filename);
     info!("Downloading InstantClient from: {}", download_url);
 
-    // Download file
     let response = reqwest::get(&download_url).await
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to download InstantClient: {}", e)))?;
     
     if !response.status().is_success() {
         return Err(SakiError::ConnectionFailed(
-            format!("Failed to download InstantClient: HTTP {}", response.status())
+            format!("Failed to download InstantClient: HTTP {} from {}", response.status(), download_url)
         ));
     }
 
@@ -120,38 +186,43 @@ async fn download_instantclient(platform: &str, target_dir: &PathBuf) -> Result<
     fs::write(&temp_file, &bytes).await
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to write download: {}", e)))?;
 
-    // Extract based on file type
     if filename.ends_with(".zip") {
         extract_zip(&temp_file, target_dir).await?;
     } else if filename.ends_with(".dmg") {
-        extract_dmg(&temp_file, target_dir).await?;
+        extract_dmg(&temp_file, target_dir, platform).await?;
     }
 
-    // Clean up downloaded file (ignore errors)
     let _ = fs::remove_file(temp_file).await;
-
-    info!("InstantClient extracted successfully to: {}", target_dir.display());
+    info!("InstantClient setup successfully in: {}", target_dir.display());
     Ok(())
 }
 
 async fn extract_zip(zip_file: &Path, target_dir: &Path) -> Result<()> {
     let zip_path = zip_file.to_path_buf();
     let target = target_dir.to_path_buf();
+    
     tokio::task::spawn_blocking(move || {
         let file = std::fs::File::open(&zip_path)
             .map_err(|e| SakiError::ConnectionFailed(format!("Failed to open zip file: {}", e)))?;
         let mut archive = zip::ZipArchive::new(file)
             .map_err(|e| SakiError::ConnectionFailed(format!("Failed to read zip archive: {}", e)))?;
+        
+        let temp_extract_dir = target.join("temp_extract");
+        if temp_extract_dir.exists() {
+            let _ = std::fs::remove_dir_all(&temp_extract_dir);
+        }
+        std::fs::create_dir_all(&temp_extract_dir)
+            .map_err(|e| SakiError::ConnectionFailed(format!("Failed to create temp extract dir: {}", e)))?;
+
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i)
                 .map_err(|e| SakiError::ConnectionFailed(format!("Failed to get file from zip: {}", e)))?;
             
             let ename = entry.name();
-            // Sanitize path to prevent Zip Slip
-            let outpath = target.join(ename);
+            let outpath = temp_extract_dir.join(ename);
             
-            if !outpath.starts_with(&target) {
-                return Err(SakiError::ConnectionFailed(format!("Invalid zip entry path (possible Zip Slip): {}", ename)));
+            if !outpath.starts_with(&temp_extract_dir) {
+                return Err(SakiError::ConnectionFailed(format!("Invalid zip entry path: {}", ename)));
             }
 
             if entry.name().ends_with('/') {
@@ -168,45 +239,108 @@ async fn extract_zip(zip_file: &Path, target_dir: &Path) -> Result<()> {
                     .map_err(|e| SakiError::ConnectionFailed(format!("Failed to write file: {}", e)))?;
             }
         }
+
+        // Find the folder containing the actual libs (usually one level down)
+        let mut root_dir = temp_extract_dir.clone();
+        if let Ok(entries) = std::fs::read_dir(&temp_extract_dir) {
+            let items: Vec<_> = entries.flatten().collect();
+            if items.len() == 1 && items[0].path().is_dir() {
+                root_dir = items[0].path();
+            }
+        }
+
+        // Move contents to target
+        if let Ok(entries) = std::fs::read_dir(&root_dir) {
+            for entry in entries.flatten() {
+                let from = entry.path();
+                let to = target.join(from.file_name().unwrap());
+                let _ = std::fs::rename(from, to);
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_extract_dir);
         Ok::<(), SakiError>(())
     }).await.map_err(|e| SakiError::ConnectionFailed(format!("Zip extraction task failed: {}", e)))??;
+    
     Ok(())
 }
 
-async fn extract_dmg(dmg_file: &Path, target_dir: &Path) -> Result<()> {
-    // For macOS, we need to mount the DMG and copy files
-    // This is a simplified approach - in production, you'd want more robust handling
+async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Result<()> {
+    info!("Mounting DMG: {}", dmg_file.display());
     
+    // Use -plist for more robust parsing of the mount point
     let mount_output = Command::new("hdiutil")
-        .args(["attach", "-quiet", "-nobrowse", dmg_file.to_str().unwrap()])
+        .args(["attach", "-plist", "-nobrowse", "-readonly", dmg_file.to_str().unwrap()])
         .output()
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to mount DMG: {}", e)))?;
 
     if !mount_output.status.success() {
-        return Err(SakiError::ConnectionFailed(
-            format!("Failed to mount DMG: {}", String::from_utf8_lossy(&mount_output.stderr))
-        ));
+        let stderr = String::from_utf8_lossy(&mount_output.stderr);
+        error!("hdiutil attach failed: {}", stderr);
+        return Err(SakiError::ConnectionFailed(format!("Failed to mount DMG: {}", stderr)));
     }
 
-    // Parse mount point from output
     let output_str = String::from_utf8_lossy(&mount_output.stdout);
-    let mount_point = output_str
-        .lines()
-        .find(|line| line.contains("/Volumes/"))
-        .and_then(|line| line.split_whitespace().last())
-        .ok_or_else(|| SakiError::ConnectionFailed("Failed to find mount point".to_string()))?;
+    
+    // Improved parsing using XML markers in -plist output
+    let mount_point = if let Some(start) = output_str.find("<key>mount-point</key>") {
+        let remaining = &output_str[start..];
+        if let Some(s_start) = remaining.find("<string>") {
+            let s_rem = &remaining[s_start + 8..];
+            if let Some(s_end) = s_rem.find("</string>") {
+                Some(s_rem[..s_end].trim().to_string())
+            } else { None }
+        } else { None }
+    } else {
+        // Fallback to searching for /Volumes/ in case -plist is weird
+        output_str.lines()
+            .find(|line| line.contains("/Volumes/"))
+            .and_then(|line| {
+                line.split("/Volumes/").last().map(|s| format!("/Volumes/{}", s.trim()))
+            })
+    };
 
-    // Copy InstantClient files
-    let source_dir = PathBuf::from(mount_point).join("instantclient_21");
-    if source_dir.exists() {
-        copy_dir_all(source_dir, target_dir.to_path_buf()).await?;
+    let mount_point = mount_point.ok_or_else(|| {
+        error!("Failed to find mount point in hdiutil output: {}", output_str);
+        SakiError::ConnectionFailed("Failed to find mount point for DMG. See logs for details.".to_string())
+    })?;
+
+    info!("DMG mounted at: {}", mount_point);
+
+    // Find the instantclient folder in the volume
+    let mut source_dir = None;
+    
+    // Check for folder starting with instantclient_
+    if let Ok(mut entries) = std::fs::read_dir(&mount_point) {
+        while let Some(Ok(entry)) = entries.next() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("instantclient_") && entry.path().is_dir() {
+                source_dir = Some(entry.path());
+                break;
+            }
+        }
     }
 
-    // Unmount (ignore errors)
-    let _ = Command::new("hdiutil")
-        .args(["detach", "-quiet", mount_point])
-        .status();
+    // If not found, check if libraries are in the root of mount_point (common in newer ARM64 DMGs)
+    if source_dir.is_none() {
+        let test_lib = PathBuf::from(&mount_point).join("libclntsh.dylib");
+        if test_lib.exists() {
+            info!("Detected libraries directly in DMG root: {}", mount_point);
+            source_dir = Some(PathBuf::from(&mount_point));
+        }
+    }
 
+    let source_dir = source_dir.ok_or_else(|| {
+        let _ = Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
+        SakiError::ConnectionFailed(format!("Failed to find instantclient folder or libclntsh.dylib in DMG mount: {}", mount_point))
+    })?;
+
+    info!("Copying from DMG mount {} to {}", source_dir.display(), target_dir.display());
+    copy_dir_all(source_dir, target_dir.to_path_buf()).await?;
+
+    // Always attempt unmount
+    let _ = Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
+    
     Ok(())
 }
 
@@ -223,7 +357,6 @@ fn copy_dir_all(source: PathBuf, target: PathBuf) -> std::pin::Pin<Box<dyn std::
         {
             let path = entry.path();
             let target_path = target.join(path.file_name().unwrap());
-
             if path.is_dir() {
                 copy_dir_all(path, target_path).await?;
             } else {
@@ -231,7 +364,6 @@ fn copy_dir_all(source: PathBuf, target: PathBuf) -> std::pin::Pin<Box<dyn std::
                     .map_err(|e| SakiError::ConnectionFailed(format!("Failed to copy file: {}", e)))?;
             }
         }
-
         Ok(())
     })
 }
@@ -244,14 +376,6 @@ fn update_library_path(instantclient_dir: &PathBuf, platform: &str) -> Result<()
                 unsafe { env::set_var("LD_LIBRARY_PATH", new_path); }
             } else {
                 unsafe { env::set_var("LD_LIBRARY_PATH", instantclient_dir); }
-            }
-        }
-        "macos-arm64" | "macos-x64" => {
-            if let Ok(dyld_path) = env::var("DYLD_LIBRARY_PATH") {
-                let new_path = format!("{}:{}", instantclient_dir.display(), dyld_path);
-                unsafe { env::set_var("DYLD_LIBRARY_PATH", new_path); }
-            } else {
-                unsafe { env::set_var("DYLD_LIBRARY_PATH", instantclient_dir); }
             }
         }
         "windows-x64" => {

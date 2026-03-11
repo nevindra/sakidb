@@ -1,11 +1,35 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
-  import type { ConnectionInput } from '$lib/types';
+  import type { ConnectionInput, EngineType } from '$lib/types';
   import { Input } from '$lib/components/ui/input';
   import * as Select from '$lib/components/ui/select';
   import { Eye, EyeOff, CheckCircle, XCircle, Loader2, Database } from '@lucide/svelte';
+    import { invoke } from '@tauri-apps/api/core';
 
   const app = getAppState();
+
+    const ENGINE_LABELS: Record<EngineType, string> = {
+    postgres: 'PostgreSQL',
+    sqlite: 'SQLite',
+    oracle: 'Oracle',
+    redis: 'Redis',
+    mongodb: 'MongoDB',
+    duckdb: 'DuckDB',
+    clickhouse: 'ClickHouse',
+  };
+
+  const ENGINE_DEFAULTS: Record<EngineType, { port: number; database: string; username: string }> = {
+    postgres: { port: 5432, database: 'postgres', username: 'postgres' },
+    sqlite: { port: 0, database: '', username: '' },
+    oracle: { port: 1521, database: 'ORCL', username: '' },
+    redis: { port: 6379, database: '', username: '' },
+    mongodb: { port: 27017, database: '', username: '' },
+    duckdb: { port: 0, database: '', username: '' },
+    clickhouse: { port: 9000, database: 'default', username: 'default' },
+  };
+
+  let availableEngines = $state<EngineType[]>([]);
+  invoke<EngineType[]>('available_engines').then(e => availableEngines = e);
 
   let form = $state<ConnectionInput>({
     name: '',
@@ -87,6 +111,34 @@
       <Database class="h-4 w-4 text-text-dim/50" />
       <h1 class="text-[15px] font-semibold text-foreground">New Connection</h1>
     </div>
+
+    <!-- Engine (above URL so it controls which fields show) -->
+    {#if availableEngines.length > 0}
+      <div class="flex items-center gap-3 mb-5">
+        <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">Engine</span>
+        <Select.Root type="single" value={form.engine} onValueChange={(v) => {
+          if (v && v !== form.engine) {
+            form.engine = v;
+            const defaults = ENGINE_DEFAULTS[v as EngineType];
+            if (defaults) {
+              form.port = defaults.port;
+              form.database = defaults.database;
+              form.username = defaults.username;
+            }
+            testResult = null;
+          }
+        }}>
+          <Select.Trigger class="flex-1 h-9 bg-transparent">
+            <span class="text-foreground text-sm">{ENGINE_LABELS[form.engine as EngineType] ?? form.engine}</span>
+          </Select.Trigger>
+          <Select.Content>
+            {#each availableEngines as engine (engine)}
+              <Select.Item value={engine} label={ENGINE_LABELS[engine]} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+    {/if}
 
     <!-- URL input -->
     <div class="mb-5">

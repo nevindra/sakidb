@@ -37,7 +37,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 [features]
-default = ["postgres", "sqlite"]
+default = ["postgres", "sqlite", "oracle"]
 postgres = ["dep:sakidb-postgres"]
 sqlite = ["dep:sakidb-sqlite"]
 oracle = ["dep:sakidb-oracle"]

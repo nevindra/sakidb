@@ -532,7 +532,7 @@
         {/if}
 
         <!-- SSL (only for engines that support it) -->
-        {#if form.engine === 'postgres' || form.engine === 'clickhouse' || form.engine === 'mongodb'}
+        {#if form.engine === 'postgres' || form.engine === 'oracle' || form.engine === 'clickhouse' || form.engine === 'mongodb'}
           <div class="flex items-center gap-3">
             <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
             <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>

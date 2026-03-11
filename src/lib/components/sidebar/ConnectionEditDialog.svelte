@@ -289,19 +289,21 @@
           </div>
 
           <!-- SSL -->
-          <div class="flex items-center gap-3">
-            <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
-            <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-              <Select.Trigger class="flex-1 h-9 bg-transparent">
-                <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="prefer" label="Prefer" />
-                <Select.Item value="require" label="Require" />
-                <Select.Item value="disable" label="Disable" />
-              </Select.Content>
-            </Select.Root>
-          </div>
+          {#if form.engine === 'postgres' || form.engine === 'oracle'}
+            <div class="flex items-center gap-3">
+              <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
+              <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
+                <Select.Trigger class="flex-1 h-9 bg-transparent">
+                  <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="prefer" label="Prefer" />
+                  <Select.Item value="require" label="Require" />
+                  <Select.Item value="disable" label="Disable" />
+                </Select.Content>
+              </Select.Root>
+            </div>
+          {/if}
         {/if}
       </div>
 
