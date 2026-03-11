@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs;
-use tracing::info;
+use tracing::{info, warn};
 use dirs::data_dir;
 use sakidb_core::error::{Result, SakiError};
 
@@ -34,11 +34,21 @@ pub async fn ensure_instantclient() -> Result<()> {
     }
 
     // Set OCI_LIB_DIR environment variable
-    env::set_var("OCI_LIB_DIR", &instantclient_dir);
+    // Safety: env::set_var is unsafe in multi-threaded environments (Rust 1.81+)
+    // In sakidb, this is called during connection setup.
+    unsafe {
+        env::set_var("OCI_LIB_DIR", &instantclient_dir);
+    }
     info!("Set OCI_LIB_DIR to: {}", instantclient_dir.display());
     
     // Add to library path if needed
     update_library_path(&instantclient_dir, &platform)?;
+    
+    if platform.starts_with("macos") {
+        warn!("On macOS, DYLD_LIBRARY_PATH cannot be set at runtime after process start.");
+        warn!("If connection fails, please set DYLD_LIBRARY_PATH manually and restart SakiDB:");
+        warn!("export DYLD_LIBRARY_PATH={}:$DYLD_LIBRARY_PATH", instantclient_dir.display());
+    }
     
     Ok(())
 }
@@ -135,7 +145,15 @@ async fn extract_zip(zip_file: &Path, target_dir: &Path) -> Result<()> {
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i)
                 .map_err(|e| SakiError::ConnectionFailed(format!("Failed to get file from zip: {}", e)))?;
-            let outpath = target.join(entry.name());
+            
+            let ename = entry.name();
+            // Sanitize path to prevent Zip Slip
+            let outpath = target.join(ename);
+            
+            if !outpath.starts_with(&target) {
+                return Err(SakiError::ConnectionFailed(format!("Invalid zip entry path (possible Zip Slip): {}", ename)));
+            }
+
             if entry.name().ends_with('/') {
                 std::fs::create_dir_all(&outpath)
                     .map_err(|e| SakiError::ConnectionFailed(format!("Failed to create directory: {}", e)))?;
@@ -223,25 +241,25 @@ fn update_library_path(instantclient_dir: &PathBuf, platform: &str) -> Result<()
         "linux-x64" => {
             if let Ok(ld_path) = env::var("LD_LIBRARY_PATH") {
                 let new_path = format!("{}:{}", instantclient_dir.display(), ld_path);
-                env::set_var("LD_LIBRARY_PATH", new_path);
+                unsafe { env::set_var("LD_LIBRARY_PATH", new_path); }
             } else {
-                env::set_var("LD_LIBRARY_PATH", instantclient_dir);
+                unsafe { env::set_var("LD_LIBRARY_PATH", instantclient_dir); }
             }
         }
         "macos-arm64" | "macos-x64" => {
             if let Ok(dyld_path) = env::var("DYLD_LIBRARY_PATH") {
                 let new_path = format!("{}:{}", instantclient_dir.display(), dyld_path);
-                env::set_var("DYLD_LIBRARY_PATH", new_path);
+                unsafe { env::set_var("DYLD_LIBRARY_PATH", new_path); }
             } else {
-                env::set_var("DYLD_LIBRARY_PATH", instantclient_dir);
+                unsafe { env::set_var("DYLD_LIBRARY_PATH", instantclient_dir); }
             }
         }
         "windows-x64" => {
             if let Ok(path) = env::var("PATH") {
                 let new_path = format!("{};{}", instantclient_dir.display(), path);
-                env::set_var("PATH", new_path);
+                unsafe { env::set_var("PATH", new_path); }
             } else {
-                env::set_var("PATH", instantclient_dir);
+                unsafe { env::set_var("PATH", instantclient_dir); }
             }
         }
         _ => {}

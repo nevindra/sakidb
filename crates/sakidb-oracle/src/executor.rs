@@ -12,7 +12,8 @@ use sakidb_core::{
         PagedResult, PagedColumnarResult, ColumnDef, CellValue, ExportBatchFn,
     },
 };
-use tracing::{info, warn, debug};
+use tracing::{info, debug};
+use crate::sql_split::split_sql_statements;
 
 pub struct OracleExecutor {
     pub(crate) connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -133,8 +134,14 @@ impl OracleExecutor {
                 let conn = conn.blocking_read();
                 let stmt = conn.execute(&sql, &[])
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle execute failed: {}", e)))?;
+                
                 let affected = stmt.row_count()
                     .map_err(|e| SakiError::QueryFailed(format!("Failed to get row count: {}", e)))?;
+                
+                // Oracle requires explicit commit for DML
+                conn.commit()
+                    .map_err(|e| SakiError::QueryFailed(format!("Oracle commit failed: {}", e)))?;
+                
                 Ok::<u64, SakiError>(affected)
             })
             .await
@@ -160,16 +167,12 @@ impl OracleExecutor {
     pub async fn execute_multi(&self, conn_id: &ConnectionId, sql: &str) -> Result<MultiQueryResult> {
         let conn = self.get_connection(conn_id)?;
         let start = std::time::Instant::now();
-        // Split by semicolons (simple split; respects basic quoting not handled here)
-        let statements: Vec<&str> = sql
-            .split(';')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .collect();
+        
+        let statements = split_sql_statements(sql);
 
         let mut results = Vec::new();
         for stmt in statements {
-            let result = self.execute_single(conn.clone(), stmt.to_string()).await?;
+            let result = self.execute_single(conn.clone(), stmt).await?;
             results.push(result);
         }
 
@@ -237,11 +240,7 @@ impl OracleExecutor {
 
     pub async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()> {
         let conn = self.get_connection(conn_id)?;
-        let statements: Vec<String> = sql
-            .split(';')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let statements = split_sql_statements(sql);
 
         for stmt in statements {
             tokio::task::spawn_blocking({
@@ -251,6 +250,13 @@ impl OracleExecutor {
                     let conn = conn.blocking_read();
                     conn.execute(&stmt, &[])
                         .map_err(|e| SakiError::QueryFailed(format!("Batch execute failed: {}", e)))?;
+                    
+                    // Commit each statement in batch if it was DML
+                    // For simplicity, we commit all. execute() returns a Statement, we don't check if it's DML here
+                    // but usually batch is for DML/DDL.
+                    conn.commit()
+                        .map_err(|e| SakiError::QueryFailed(format!("Batch commit failed: {}", e)))?;
+                    
                     Ok::<(), SakiError>(())
                 }
             })
@@ -261,8 +267,21 @@ impl OracleExecutor {
         Ok(())
     }
 
-    pub async fn cancel_query(&self, _conn_id: &ConnectionId) -> Result<()> {
-        warn!("Oracle query cancellation not implemented");
+    pub async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()> {
+        info!("Cancelling Oracle query for connection: {}", conn_id.0);
+        let conn = self.get_connection(conn_id)?;
+        
+        // Oracle's break_execution() can be called from another thread to interrupt the current operation.
+        // We use spawn_blocking because we don't want to block the async executor, 
+        // though break_execution is generally fast.
+        tokio::task::spawn_blocking(move || {
+            let conn = conn.blocking_read();
+            conn.break_execution()
+                .map_err(|e| SakiError::QueryFailed(format!("Failed to cancel Oracle query: {}", e)))
+        })
+        .await
+        .map_err(|e| SakiError::QueryFailed(format!("Cancel task failed: {}", e)))??;
+        
         Ok(())
     }
 

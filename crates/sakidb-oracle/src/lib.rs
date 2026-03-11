@@ -4,6 +4,7 @@ mod introspect;
 mod instantclient;
 mod restore;
 mod formatter;
+pub(crate) mod sql_split;
 
 pub use connection::OracleDriver;
 pub use executor::OracleExecutor;

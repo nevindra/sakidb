@@ -8,6 +8,7 @@ use sakidb_core::{
     types::{ConnectionId, RestoreOptions, RestoreProgress},
 };
 use tracing::{info, debug, error};
+use crate::sql_split::split_sql_statements;
 
 pub struct OracleRestorer {
     connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -23,74 +24,6 @@ impl OracleRestorer {
             .get(conn_id)
             .map(|entry| entry.clone())
             .ok_or_else(|| SakiError::ConnectionNotFound(conn_id.0.to_string()))
-    }
-
-    fn split_sql_statements(sql_content: &str) -> Vec<String> {
-        let mut statements = Vec::new();
-        let mut current = String::new();
-        let mut in_string = false;
-        let mut string_delim = '\0';
-        let mut line_comment = false;
-        let mut block_comment = false;
-
-        for ch in sql_content.chars() {
-            match ch {
-                '\'' | '"' if !line_comment && !block_comment => {
-                    if !in_string {
-                        in_string = true;
-                        string_delim = ch;
-                    } else if ch == string_delim {
-                        in_string = false;
-                        string_delim = '\0';
-                    }
-                    current.push(ch);
-                }
-                '-' if !in_string && !line_comment && !block_comment => {
-                    current.push(ch);
-                    if current.ends_with("--") {
-                        line_comment = true;
-                    }
-                }
-                '\n' => {
-                    if line_comment {
-                        line_comment = false;
-                    }
-                    current.push(ch);
-                }
-                '/' if !in_string && !line_comment && !block_comment => {
-                    current.push(ch);
-                    if current.ends_with("/*") {
-                        block_comment = true;
-                    }
-                }
-                '*' if !in_string && !line_comment && block_comment => {
-                    current.push(ch);
-                    if current.ends_with("*/") {
-                        block_comment = false;
-                    }
-                }
-                ';' if !in_string && !line_comment && !block_comment => {
-                    current.push(ch);
-                    let stmt = current.trim().to_string();
-                    if !stmt.is_empty() && stmt != ";" {
-                        statements.push(stmt);
-                    }
-                    current.clear();
-                }
-                _ => {
-                    if !line_comment {
-                        current.push(ch);
-                    }
-                }
-            }
-        }
-
-        let last = current.trim().to_string();
-        if !last.is_empty() && !last.ends_with(';') {
-            statements.push(last);
-        }
-
-        statements
     }
 
     async fn execute_statement(conn: Arc<RwLock<OracleConnection>>, statement: String) -> Result<()> {
@@ -114,6 +47,9 @@ impl OracleRestorer {
             } else {
                 conn.execute(&statement, &[])
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle statement failed: {}", e)))?;
+                // Ensure commit for DML in restore
+                conn.commit()
+                    .map_err(|e| SakiError::QueryFailed(format!("Oracle commit failed: {}", e)))?;
             }
             Ok::<(), SakiError>(())
         })
@@ -136,7 +72,7 @@ impl OracleRestorer {
             .await
             .map_err(|e| SakiError::QueryFailed(format!("Failed to read SQL file: {}", e)))?;
 
-        let statements = Self::split_sql_statements(&sql_content);
+        let statements = split_sql_statements(&sql_content);
         let total_statements = statements.len();
         let total_bytes = sql_content.len() as u64;
 
@@ -144,7 +80,8 @@ impl OracleRestorer {
 
         // Set schema if specified
         if let Some(schema) = &options.schema {
-            let use_schema = format!("ALTER SESSION SET CURRENT_SCHEMA = {}", schema);
+            // Quote the identifier to prevent SQL injection
+            let use_schema = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", schema.replace('"', "\"\""));
             Self::execute_statement(conn.clone(), use_schema).await?;
         }
 
