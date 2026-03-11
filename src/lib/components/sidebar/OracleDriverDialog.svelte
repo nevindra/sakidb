@@ -2,26 +2,31 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import { getAppState } from '$lib/stores';
   import { Loader2, Download, Info, ExternalLink } from '@lucide/svelte';
+  import { onMount } from 'svelte';
 
-  let { open = $bindable(false), onDownloadComplete } = $props<{ 
-    open: boolean;
+  let { onDownloadComplete } = $props<{ 
     onDownloadComplete?: () => void;
   }>();
 
   const app = getAppState();
+
+  onMount(() => {
+    console.log('OracleDriverDialog mounted');
+  });
+
   const progress = $derived(app.oracleDownloadProgress);
   const isDownloading = $derived(app.isOracleDownloading);
 
   async function handleDownload() {
     await app.downloadOracleDriver();
     if (app.oracleDriverStatus?.found) {
-      open = false;
+      app.isOracleDriverDialogOpen = false;
       onDownloadComplete?.();
     }
   }
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open={app.isOracleDriverDialogOpen}>
   <Dialog.Content class="sm:max-w-[480px]">
     <Dialog.Header>
       <Dialog.Title>Oracle Instant Client Required</Dialog.Title>
@@ -74,7 +79,7 @@
     <Dialog.Footer class="gap-2">
       <button
         class="h-9 px-4 text-[13px] font-medium rounded-md border border-border/20 hover:bg-accent/10 transition-colors disabled:opacity-50"
-        onclick={() => open = false}
+        onclick={() => app.isOracleDriverDialogOpen = false}
         disabled={isDownloading}
       >
         Cancel

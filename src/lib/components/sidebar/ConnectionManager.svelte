@@ -7,7 +7,7 @@
   import type { ConnectionInput, EngineType, SavedConnection } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { CheckCircle, Database, Eye, EyeOff, FolderOpen, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open as tauriOpen } from '@tauri-apps/plugin-dialog';
   import OracleDriverDialog from './OracleDriverDialog.svelte';
 
   const app = getAppState();
@@ -201,28 +201,6 @@
     connectError = null;
   }
 
-  // Oracle driver setup
-  let driverDialogOpen = $state(false);
-  let pendingAction = $state<'test' | 'connect' | null>(null);
-
-  async function ensureOracleDriver(): Promise<boolean> {
-    const status = await app.checkOracleDriverStatus();
-    if (!status.found) {
-      driverDialogOpen = true;
-      return false;
-    }
-    return true;
-  }
-
-  function onDriverDownloaded() {
-    if (pendingAction === 'test') {
-      handleTest();
-    } else if (pendingAction === 'connect') {
-      handleConnect();
-    }
-    pendingAction = null;
-  }
-
   function handleNewConnection() {
     isNewMode = true;
     selectedConnectionId = null;
@@ -231,14 +209,6 @@
   }
 
   async function handleTest() {
-    if (form.engine === 'oracle') {
-      const ready = await ensureOracleDriver();
-      if (!ready) {
-        pendingAction = 'test';
-        return;
-      }
-    }
-
     testing = true;
     testResult = null;
     const ok = await app.testConnection(form, selectedConnectionId ?? undefined);
@@ -247,14 +217,6 @@
   }
 
   async function handleConnect() {
-    if (form.engine === 'oracle') {
-      const ready = await ensureOracleDriver();
-      if (!ready) {
-        pendingAction = 'connect';
-        return;
-      }
-    }
-
     connectError = null;
     let error: string | null = null;
     if (isNewMode) {
@@ -514,7 +476,7 @@
                   class="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-all duration-100"
                   aria-label="Browse for database file"
                   onclick={async () => {
-                    const path = await open({
+                    const path = await tauriOpen({
                       multiple: false,
                       filters: [{ name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }],
                     });
@@ -648,6 +610,4 @@
       </div>
     </div>
   </div>
-
-  <OracleDriverDialog bind:open={driverDialogOpen} onDownloadComplete={onDriverDownloaded} />
 </div>

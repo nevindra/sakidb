@@ -24,15 +24,19 @@ pub struct OracleDriverStatus {
 
 /// Checks the status of the Oracle driver in all conventional and requested locations.
 pub fn get_driver_status() -> OracleDriverStatus {
+    info!("Checking Oracle driver status...");
     // 1. Check if OCI_LIB_DIR is already set
     if let Ok(dir) = env::var("OCI_LIB_DIR") {
-        if Path::new(&dir).exists() && is_lib_present(Path::new(&dir)) {
+        let path = Path::new(&dir);
+        if path.exists() && is_lib_present(path) {
+            info!("Found Oracle driver via OCI_LIB_DIR: {}", dir);
             return OracleDriverStatus {
                 found: true,
                 path: Some(dir),
                 method: Some("env_oci_lib_dir".to_string()),
             };
         }
+        info!("OCI_LIB_DIR is set but path doesn't exist or lib missing: {}", dir);
     }
 
     // 2. Check ORACLE_HOME
@@ -42,6 +46,7 @@ pub fn get_driver_status() -> OracleDriverStatus {
             // Check for lib subfolder
             let lib_path = path.join("lib");
             if lib_path.exists() && is_lib_present(&lib_path) {
+                info!("Found Oracle driver via ORACLE_HOME/lib: {}", lib_path.display());
                 return OracleDriverStatus {
                     found: true,
                     path: Some(lib_path.to_string_lossy().to_string()),
@@ -49,12 +54,16 @@ pub fn get_driver_status() -> OracleDriverStatus {
                 };
             }
             if is_lib_present(path) {
+                info!("Found Oracle driver via ORACLE_HOME: {}", dir);
                 return OracleDriverStatus {
                     found: true,
                     path: Some(dir),
                     method: Some("env_oracle_home".to_string()),
                 };
             }
+            info!("ORACLE_HOME is set but libraries missing in {}", dir);
+        } else {
+            info!("ORACLE_HOME is set but path doesn't exist: {}", dir);
         }
     }
 
@@ -71,6 +80,7 @@ pub fn get_driver_status() -> OracleDriverStatus {
             };
             
             if is_lib_present(&dir) {
+                info!("Found Oracle driver in system path: {}", dir.display());
                 return OracleDriverStatus {
                     found: true,
                     path: Some(dir.to_string_lossy().to_string()),
@@ -84,15 +94,18 @@ pub fn get_driver_status() -> OracleDriverStatus {
     if let Ok(platform) = determine_platform() {
         if let Ok(instantclient_dir) = get_local_instantclient_dir(&platform) {
             if instantclient_dir.exists() && is_lib_present(&instantclient_dir) {
+                info!("Found Oracle driver in internal data dir: {}", instantclient_dir.display());
                 return OracleDriverStatus {
                     found: true,
                     path: Some(instantclient_dir.to_string_lossy().to_string()),
                     method: Some("data_dir".to_string()),
                 };
             }
+            info!("Internal data dir check: missing or libraries not present in {}", instantclient_dir.display());
         }
     }
 
+    info!("Oracle driver not found in any standard location.");
     OracleDriverStatus {
         found: false,
         path: None,

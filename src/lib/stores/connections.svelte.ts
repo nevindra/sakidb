@@ -36,6 +36,7 @@ let editDialogConnectionId = $state<string | null>(null);
 let oracleDriverStatus = $state<OracleDriverStatus | null>(null);
 let oracleDownloadProgress = $state<{ progress: number; message: string } | null>(null);
 let isOracleDownloading = $state(false);
+let isDriverDialogOpen = $state(false);
 
 // ── Read access ──
 
@@ -48,6 +49,8 @@ export function hasActiveConnections(): boolean { return activeConnections.size 
 export function getOracleDriverStatus(): OracleDriverStatus | null { return oracleDriverStatus; }
 export function getOracleDownloadProgress() { return oracleDownloadProgress; }
 export function getIsOracleDownloading(): boolean { return isOracleDownloading; }
+export function isOracleDriverDialogOpen(): boolean { return isDriverDialogOpen; }
+export function setOracleDriverDialogOpen(open: boolean) { isDriverDialogOpen = open; }
 
 export function getRuntimeId(savedConnectionId: string, databaseName: string): string | null {
   return activeConnections.get(savedConnectionId)?.activeDatabases.get(databaseName)?.runtimeConnectionId ?? null;
@@ -66,6 +69,7 @@ export function getCapabilities(savedConnectionId: string): EngineCapabilities |
 export async function checkOracleDriverStatus(): Promise<OracleDriverStatus> {
   try {
     const status = await invoke<OracleDriverStatus>('get_oracle_driver_status');
+    console.log('Backend Oracle status:', status);
     oracleDriverStatus = status;
     return status;
   } catch (e) {
@@ -137,6 +141,14 @@ export async function updateConnection(id: string, input: ConnectionInput) {
 }
 
 export async function testConnection(input: ConnectionInput, id?: string): Promise<boolean> {
+  if (input.engine === 'oracle') {
+    const status = await checkOracleDriverStatus();
+    if (!status.found) {
+      isDriverDialogOpen = true;
+      return false;
+    }
+  }
+
   try {
     await invoke('test_connection', { input, id: id ?? null });
     return true;
@@ -194,6 +206,16 @@ export function isDatabaseConnecting(savedConnectionId: string, dbName: string):
 
 export async function connectToDatabase(savedConnectionId: string): Promise<string | null> {
   if (activeConnections.has(savedConnectionId)) return null;
+
+  const savedConn = savedConnections.find(c => c.id === savedConnectionId);
+  if (savedConn?.engine === 'oracle') {
+    const status = await checkOracleDriverStatus();
+    if (!status.found) {
+      isDriverDialogOpen = true;
+      return 'Oracle driver not found';
+    }
+  }
+
   connectingIds.add(savedConnectionId);
   try {
     const result: ConnectResult = await invoke('connect_to_database', {
@@ -245,6 +267,15 @@ export async function connectToDatabase(savedConnectionId: string): Promise<stri
 export async function connectToSpecificDatabase(savedConnectionId: string, dbName: string) {
   const conn = activeConnections.get(savedConnectionId);
   if (!conn || conn.activeDatabases.has(dbName)) return;
+
+  const savedConn = savedConnections.find(c => c.id === savedConnectionId);
+  if (savedConn?.engine === 'oracle') {
+    const status = await checkOracleDriverStatus();
+    if (!status.found) {
+      isDriverDialogOpen = true;
+      return;
+    }
+  }
 
   const connectingKey = `${savedConnectionId}:${dbName}`;
   connectingIds.add(connectingKey);

@@ -5,8 +5,9 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Select from '$lib/components/ui/select';
   import { Eye, EyeOff, CheckCircle, XCircle, Loader2, FolderOpen } from '@lucide/svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open as tauriOpen } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
+  import OracleDriverDialog from './OracleDriverDialog.svelte';
 
   const app = getAppState();
 
@@ -240,7 +241,7 @@
                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-all duration-100"
                 aria-label="Browse for database file"
                 onclick={async () => {
-                  const path = await open({
+                  const path = await tauriOpen({
                     multiple: false,
                     filters: [{ name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }],
                   });

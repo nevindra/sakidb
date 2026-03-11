@@ -50,6 +50,8 @@ import {
   getOracleDriverStatus,
   getOracleDownloadProgress,
   getIsOracleDownloading,
+  isOracleDriverDialogOpen,
+  setOracleDriverDialogOpen,
   checkOracleDriverStatus,
   downloadOracleDriver,
 } from './connections.svelte';
@@ -162,6 +164,8 @@ export function getAppState() {
     get oracleDriverStatus() { return getOracleDriverStatus(); },
     get oracleDownloadProgress() { return getOracleDownloadProgress(); },
     get isOracleDownloading() { return getIsOracleDownloading(); },
+    get isOracleDriverDialogOpen() { return isOracleDriverDialogOpen(); },
+    set isOracleDriverDialogOpen(v: boolean) { setOracleDriverDialogOpen(v); },
 
     // ── Layout ──
     get layoutRoot() { return getLayoutRoot(); },
