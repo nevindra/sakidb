@@ -1,7 +1,7 @@
 mod connection;
 mod executor;
 mod introspect;
-mod instantclient;
+pub mod instantclient;
 mod restore;
 mod formatter;
 pub(crate) mod sql_split;
@@ -9,7 +9,7 @@ pub(crate) mod sql_split;
 pub use connection::OracleDriver;
 pub use executor::OracleExecutor;
 pub use introspect::OracleIntrospector;
-pub use instantclient::ensure_instantclient;
+pub use instantclient::{ensure_instantclient, get_driver_status, download_instantclient_with_progress, OracleDriverStatus};
 pub use restore::OracleRestorer;
 pub use formatter::OracleFormatter;
 

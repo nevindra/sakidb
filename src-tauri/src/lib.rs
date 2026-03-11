@@ -144,6 +144,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::connection::available_engines,
+            commands::connection::get_oracle_driver_status,
+            commands::connection::download_oracle_driver,
             commands::connection::save_connection,
             commands::connection::list_connections,
             commands::connection::delete_connection,

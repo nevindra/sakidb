@@ -30,6 +30,12 @@ export interface ConnectResult {
   capabilities: EngineCapabilities;
 }
 
+export interface OracleDriverStatus {
+  found: boolean;
+  path: string | null;
+  method: string | null;
+}
+
 // ── Connection types ──
 
 export interface ConnectionConfig {

@@ -47,6 +47,11 @@ import {
   loadForeignTables,
   openEditDialog,
   closeEditDialog,
+  getOracleDriverStatus,
+  getOracleDownloadProgress,
+  getIsOracleDownloading,
+  checkOracleDriverStatus,
+  downloadOracleDriver,
 } from './connections.svelte';
 import {
   getTabs,
@@ -154,6 +159,9 @@ export function getAppState() {
     get queryHistory() { return getQueryHistory(); },
     get searchIndex() { return getSearchIndex(); },
     get selectedObjectPath() { return selectedObjectPath(); },
+    get oracleDriverStatus() { return getOracleDriverStatus(); },
+    get oracleDownloadProgress() { return getOracleDownloadProgress(); },
+    get isOracleDownloading() { return getIsOracleDownloading(); },
 
     // ── Layout ──
     get layoutRoot() { return getLayoutRoot(); },
@@ -173,6 +181,8 @@ export function getAppState() {
 
     // ── Connection lookup ──
     getSavedConnection,
+    checkOracleDriverStatus,
+    downloadOracleDriver,
 
     // ── Connection CRUD ──
     loadConnections,

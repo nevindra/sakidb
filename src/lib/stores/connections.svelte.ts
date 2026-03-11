@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type {
   SavedConnection,
@@ -17,6 +18,7 @@ import type {
   ActiveConnection,
   ActiveDatabase,
   EngineCapabilities,
+  OracleDriverStatus,
 } from '$lib/types';
 import { setError } from './shared.svelte';
 import { addToIndex, indexConnections, indexDatabaseSchemas, invalidateConnection, removeFromIndexByPrefix } from './search.svelte';
@@ -30,6 +32,11 @@ let activeConnections = $state<Map<string, ActiveConnection>>(new SvelteMap());
 let connectingIds = $state<Set<string>>(new SvelteSet());
 let editDialogConnectionId = $state<string | null>(null);
 
+// Oracle specific setup state
+let oracleDriverStatus = $state<OracleDriverStatus | null>(null);
+let oracleDownloadProgress = $state<{ progress: number; message: string } | null>(null);
+let isOracleDownloading = $state(false);
+
 // ── Read access ──
 
 export function getSavedConnections(): SavedConnection[] { return savedConnections; }
@@ -37,6 +44,10 @@ export function getActiveConnections(): Map<string, ActiveConnection> { return a
 export function getConnectingIds(): Set<string> { return connectingIds; }
 export function getEditDialogConnectionId(): string | null { return editDialogConnectionId; }
 export function hasActiveConnections(): boolean { return activeConnections.size > 0; }
+
+export function getOracleDriverStatus(): OracleDriverStatus | null { return oracleDriverStatus; }
+export function getOracleDownloadProgress() { return oracleDownloadProgress; }
+export function getIsOracleDownloading(): boolean { return isOracleDownloading; }
 
 export function getRuntimeId(savedConnectionId: string, databaseName: string): string | null {
   return activeConnections.get(savedConnectionId)?.activeDatabases.get(databaseName)?.runtimeConnectionId ?? null;
@@ -48,6 +59,40 @@ export function getSavedConnection(id: string): SavedConnection | undefined {
 
 export function getCapabilities(savedConnectionId: string): EngineCapabilities | null {
   return activeConnections.get(savedConnectionId)?.capabilities ?? null;
+}
+
+// ── Oracle Driver Setup ──
+
+export async function checkOracleDriverStatus(): Promise<OracleDriverStatus> {
+  try {
+    const status = await invoke<OracleDriverStatus>('get_oracle_driver_status');
+    oracleDriverStatus = status;
+    return status;
+  } catch (e) {
+    console.error('Failed to check oracle driver status', e);
+    return { found: false, path: null, method: null };
+  }
+}
+
+export async function downloadOracleDriver() {
+  if (isOracleDownloading) return;
+  isOracleDownloading = true;
+  oracleDownloadProgress = { progress: 0, message: 'Starting...' };
+
+  const unlisten = await listen<{ progress: number; message: string }>('oracle-download-progress', (event) => {
+    oracleDownloadProgress = event.payload;
+  });
+
+  try {
+    await invoke('download_oracle_driver');
+    await checkOracleDriverStatus();
+  } catch (e) {
+    setError(String(e));
+  } finally {
+    isOracleDownloading = false;
+    oracleDownloadProgress = null;
+    unlisten();
+  }
 }
 
 // ── Connection CRUD ──

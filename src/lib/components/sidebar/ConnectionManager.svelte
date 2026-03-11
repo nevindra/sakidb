@@ -8,6 +8,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { CheckCircle, Database, Eye, EyeOff, FolderOpen, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
   import { open } from '@tauri-apps/plugin-dialog';
+  import OracleDriverDialog from './OracleDriverDialog.svelte';
 
   const app = getAppState();
 
@@ -200,6 +201,28 @@
     connectError = null;
   }
 
+  // Oracle driver setup
+  let driverDialogOpen = $state(false);
+  let pendingAction = $state<'test' | 'connect' | null>(null);
+
+  async function ensureOracleDriver(): Promise<boolean> {
+    const status = await app.checkOracleDriverStatus();
+    if (!status.found) {
+      driverDialogOpen = true;
+      return false;
+    }
+    return true;
+  }
+
+  function onDriverDownloaded() {
+    if (pendingAction === 'test') {
+      handleTest();
+    } else if (pendingAction === 'connect') {
+      handleConnect();
+    }
+    pendingAction = null;
+  }
+
   function handleNewConnection() {
     isNewMode = true;
     selectedConnectionId = null;
@@ -208,6 +231,14 @@
   }
 
   async function handleTest() {
+    if (form.engine === 'oracle') {
+      const ready = await ensureOracleDriver();
+      if (!ready) {
+        pendingAction = 'test';
+        return;
+      }
+    }
+
     testing = true;
     testResult = null;
     const ok = await app.testConnection(form, selectedConnectionId ?? undefined);
@@ -216,6 +247,14 @@
   }
 
   async function handleConnect() {
+    if (form.engine === 'oracle') {
+      const ready = await ensureOracleDriver();
+      if (!ready) {
+        pendingAction = 'connect';
+        return;
+      }
+    }
+
     connectError = null;
     let error: string | null = null;
     if (isNewMode) {
@@ -609,4 +648,6 @@
       </div>
     </div>
   </div>
+
+  <OracleDriverDialog bind:open={driverDialogOpen} onDownloadComplete={onDriverDownloaded} />
 </div>
