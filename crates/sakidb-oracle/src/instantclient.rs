@@ -23,94 +23,113 @@ pub struct OracleDriverStatus {
 }
 
 /// Checks the status of the Oracle driver in all conventional and requested locations.
+/// If found, it automatically sets the OCI_LIB_DIR environment variable to ensure 
+/// subsequent connection attempts (even the first one) succeed.
 pub fn get_driver_status() -> OracleDriverStatus {
     info!("Checking Oracle driver status...");
+    
+    let mut status = OracleDriverStatus {
+        found: false,
+        path: None,
+        method: None,
+    };
+
     // 1. Check if OCI_LIB_DIR is already set
     if let Ok(dir) = env::var("OCI_LIB_DIR") {
         let path = Path::new(&dir);
         if path.exists() && is_lib_present(path) {
             info!("Found Oracle driver via OCI_LIB_DIR: {}", dir);
-            return OracleDriverStatus {
+            status = OracleDriverStatus {
                 found: true,
                 path: Some(dir),
                 method: Some("env_oci_lib_dir".to_string()),
             };
+        } else {
+            info!("OCI_LIB_DIR is set but path doesn't exist or lib missing: {}", dir);
         }
-        info!("OCI_LIB_DIR is set but path doesn't exist or lib missing: {}", dir);
     }
 
     // 2. Check ORACLE_HOME
-    if let Ok(dir) = env::var("ORACLE_HOME") {
-        let path = Path::new(&dir);
-        if path.exists() {
-            // Check for lib subfolder
-            let lib_path = path.join("lib");
-            if lib_path.exists() && is_lib_present(&lib_path) {
-                info!("Found Oracle driver via ORACLE_HOME/lib: {}", lib_path.display());
-                return OracleDriverStatus {
-                    found: true,
-                    path: Some(lib_path.to_string_lossy().to_string()),
-                    method: Some("env_oracle_home".to_string()),
-                };
+    if !status.found {
+        if let Ok(dir) = env::var("ORACLE_HOME") {
+            let path = Path::new(&dir);
+            if path.exists() {
+                let lib_path = path.join("lib");
+                if lib_path.exists() && is_lib_present(&lib_path) {
+                    info!("Found Oracle driver via ORACLE_HOME/lib: {}", lib_path.display());
+                    status = OracleDriverStatus {
+                        found: true,
+                        path: Some(lib_path.to_string_lossy().to_string()),
+                        method: Some("env_oracle_home".to_string()),
+                    };
+                } else if is_lib_present(path) {
+                    info!("Found Oracle driver via ORACLE_HOME: {}", dir);
+                    status = OracleDriverStatus {
+                        found: true,
+                        path: Some(dir),
+                        method: Some("env_oracle_home".to_string()),
+                    };
+                }
             }
-            if is_lib_present(path) {
-                info!("Found Oracle driver via ORACLE_HOME: {}", dir);
-                return OracleDriverStatus {
-                    found: true,
-                    path: Some(dir),
-                    method: Some("env_oracle_home".to_string()),
-                };
-            }
-            info!("ORACLE_HOME is set but libraries missing in {}", dir);
-        } else {
-            info!("ORACLE_HOME is set but path doesn't exist: {}", dir);
         }
     }
 
     // 3. Check conventional system paths
-    let system_paths = get_conventional_paths();
-    for path_str in system_paths {
-        let path = Path::new(&path_str);
-        if path.exists() {
-            // If it's a file, we want the directory
-            let dir = if path.is_file() {
-                path.parent().unwrap_or(path).to_path_buf()
-            } else {
-                path.to_path_buf()
-            };
-            
-            if is_lib_present(&dir) {
-                info!("Found Oracle driver in system path: {}", dir.display());
-                return OracleDriverStatus {
-                    found: true,
-                    path: Some(dir.to_string_lossy().to_string()),
-                    method: Some("system".to_string()),
+    if !status.found {
+        let system_paths = get_conventional_paths();
+        for path_str in system_paths {
+            let path = Path::new(&path_str);
+            if path.exists() {
+                let dir = if path.is_file() {
+                    path.parent().unwrap_or(path).to_path_buf()
+                } else {
+                    path.to_path_buf()
                 };
+                
+                if is_lib_present(&dir) {
+                    info!("Found Oracle driver in system path: {}", dir.display());
+                    status = OracleDriverStatus {
+                        found: true,
+                        path: Some(dir.to_string_lossy().to_string()),
+                        method: Some("system".to_string()),
+                    };
+                    break;
+                }
             }
         }
     }
 
     // 4. Check data_dir (Internal download)
-    if let Ok(platform) = determine_platform() {
-        if let Ok(instantclient_dir) = get_local_instantclient_dir(&platform) {
-            if instantclient_dir.exists() && is_lib_present(&instantclient_dir) {
-                info!("Found Oracle driver in internal data dir: {}", instantclient_dir.display());
-                return OracleDriverStatus {
-                    found: true,
-                    path: Some(instantclient_dir.to_string_lossy().to_string()),
-                    method: Some("data_dir".to_string()),
-                };
+    if !status.found {
+        if let Ok(platform) = determine_platform() {
+            if let Ok(instantclient_dir) = get_local_instantclient_dir(&platform) {
+                if instantclient_dir.exists() && is_lib_present(&instantclient_dir) {
+                    info!("Found Oracle driver in internal data dir: {}", instantclient_dir.display());
+                    status = OracleDriverStatus {
+                        found: true,
+                        path: Some(instantclient_dir.to_string_lossy().to_string()),
+                        method: Some("data_dir".to_string()),
+                    };
+                }
             }
-            info!("Internal data dir check: missing or libraries not present in {}", instantclient_dir.display());
         }
     }
 
-    info!("Oracle driver not found in any standard location.");
-    OracleDriverStatus {
-        found: false,
-        path: None,
-        method: None,
+    // CRITICAL: If found, set the environment variable immediately.
+    // This fixes the "fails on first click, works on second" issue because the environment
+    // is prepared as soon as the app checks for the driver (usually on UI load).
+    if status.found {
+        if let Some(ref path) = status.path {
+            unsafe {
+                env::set_var("OCI_LIB_DIR", path);
+            }
+            info!("OCI_LIB_DIR set to: {}", path);
+        }
+    } else {
+        info!("Oracle driver not found in any standard location.");
     }
+
+    status
 }
 
 fn is_lib_present(dir: &Path) -> bool {
@@ -129,18 +148,18 @@ fn get_conventional_paths() -> Vec<String> {
 
     #[cfg(target_os = "macos")]
     {
-        // Homebrew ARM
-        // paths.push("/opt/homebrew/lib".to_string());
-        // Conventional Oracle path
+        // 1. Homebrew ARM (/opt/homebrew/lib)
+        paths.push("/opt/homebrew/lib".to_string());
+        // 2. Oracle Default (/opt/oracle/instantclient)
         paths.push("/opt/oracle/instantclient".to_string());
-        // Home lib
+        // 3. Global convention (/usr/local/lib)
+        paths.push("/usr/local/lib".to_string());
+        // 4. Caskroom
+        paths.push("/usr/local/Caskroom/oracle-instantclient".to_string());
+        // 5. Home lib (Common manual location)
         if let Some(home) = home_dir() {
             paths.push(home.join("lib").to_string_lossy().to_string());
         }
-        // Global convention
-        paths.push("/usr/local/lib".to_string());
-        // Caskroom
-        paths.push("/usr/local/Caskroom/oracle-instantclient".to_string());
     }
 
     #[cfg(target_os = "linux")]
@@ -165,15 +184,10 @@ pub async fn ensure_instantclient() -> Result<()> {
         let path = status.path.unwrap();
         let path_buf = PathBuf::from(&path);
 
-        // On macOS, we must ensure dyld can see the library
+        // On macOS, we try to ensure global visibility in /usr/local/lib if requested.
+        // Even if this fails (permissions), OCI_LIB_DIR is already set above.
         #[cfg(target_os = "macos")]
-        ensure_dyld_visibility(&path_buf).ok(); // Non-fatal if we can't symlink
-
-        // Safety: env::set_var is unsafe in multi-threaded environments
-        unsafe {
-            env::set_var("OCI_LIB_DIR", &path);
-        }
-        info!("Oracle Client configured via {}: {}", status.method.unwrap_or_default(), path);
+        ensure_dyld_visibility(&path_buf).ok(); 
         
         let platform = determine_platform()?;
         update_library_path(&path_buf, &platform)?;
@@ -183,8 +197,8 @@ pub async fn ensure_instantclient() -> Result<()> {
     Err(SakiError::ConnectionFailed("Oracle Instant Client not found. Please download it via the connection dialog.".to_string()))
 }
 
-/// On macOS, SIP and dyld restrictions often ignore OCI_LIB_DIR at runtime.
-/// Creating a symlink in ~/lib is the most reliable way to make libraries visible to dlopen.
+/// On macOS, SIP and dyld restrictions often ignore OCI_LIB_DIR at runtime for the primary binary.
+/// We try to create a symlink in /usr/local/lib.
 #[cfg(target_os = "macos")]
 fn ensure_dyld_visibility(source_dir: &Path) -> std::io::Result<()> {
     let lib_name = "libclntsh.dylib";
@@ -194,23 +208,35 @@ fn ensure_dyld_visibility(source_dir: &Path) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let home = home_dir().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No home dir"))?;
-    let user_lib_dir = home.join("lib");
+    let global_lib_dir = Path::new("/usr/local/lib");
     
-    if !user_lib_dir.exists() {
-        std::fs::create_dir_all(&user_lib_dir)?;
+    // Check if /usr/local/lib exists
+    if !global_lib_dir.exists() {
+        info!("/usr/local/lib does not exist, skipping symlink creation.");
+        return Ok(());
     }
 
-    let target_link = user_lib_dir.join(lib_name);
+    let target_link = global_lib_dir.join(lib_name);
     
-    // If it exists but points elsewhere or is broken, remove it
+    // Check if we already have a valid symlink to the same source
     if target_link.exists() || target_link.symlink_metadata().is_ok() {
+        if let Ok(existing_target) = std::fs::read_link(&target_link) {
+            if existing_target == source_lib {
+                return Ok(());
+            }
+        }
+        // Try to remove old/broken link (may fail if no permissions)
         let _ = std::fs::remove_file(&target_link);
     }
 
-    info!("Creating dyld symlink: {} -> {}", target_link.display(), source_lib.display());
-    std::os::unix::fs::symlink(source_lib, target_link)?;
-    
+    info!("Attempting to create dyld symlink: {} -> {}", target_link.display(), source_lib.display());
+    // This may fail without sudo, which is logged but handled as non-fatal.
+    if let Err(e) = std::os::unix::fs::symlink(source_lib, &target_link) {
+        info!("Could not create symlink in /usr/local/lib: {}. Relying on OCI_LIB_DIR.", e);
+        return Err(e);
+    }
+
+    info!("Successfully created symlink in /usr/local/lib");
     Ok(())
 }
 
@@ -314,9 +340,11 @@ where F: Fn(f64, &str) + Send + Sync + 'static
 
     let _ = fs::remove_file(temp_file).await;
     
-    // Ensure visibility after download
+    // Ensure visibility and environment set after download
     #[cfg(target_os = "macos")]
     ensure_dyld_visibility(&target_dir).ok();
+    
+    unsafe { env::set_var("OCI_LIB_DIR", &target_dir); }
 
     on_progress(100.0, "Setup complete");
     info!("InstantClient setup successfully in: {}", target_dir.display());
