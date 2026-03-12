@@ -1,8 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tokio::fs;
-use tracing::info;
+use tracing::{info, error};
 use dirs::{data_dir, home_dir};
 use sakidb_core::error::{Result, SakiError};
 use serde::Serialize;
@@ -22,9 +21,13 @@ pub struct OracleDriverStatus {
     pub method: Option<String>, // "env", "system", "data_dir", "manual"
 }
 
+use std::sync::Once;
+
+static ORACLE_INIT: Once = Once::new();
+
 /// Checks the status of the Oracle driver in all conventional and requested locations.
-/// If found, it automatically sets the OCI_LIB_DIR environment variable to ensure 
-/// subsequent connection attempts (even the first one) succeed.
+/// If found, it automatically sets the environment to ensure subsequent connection 
+/// attempts (even the first one) succeed.
 pub fn get_driver_status() -> OracleDriverStatus {
     info!("Checking Oracle driver status...");
     
@@ -44,8 +47,6 @@ pub fn get_driver_status() -> OracleDriverStatus {
                 path: Some(dir),
                 method: Some("env_oci_lib_dir".to_string()),
             };
-        } else {
-            info!("OCI_LIB_DIR is set but path doesn't exist or lib missing: {}", dir);
         }
     }
 
@@ -115,21 +116,45 @@ pub fn get_driver_status() -> OracleDriverStatus {
         }
     }
 
-    // CRITICAL: If found, set the environment variable immediately.
-    // This fixes the "fails on first click, works on second" issue because the environment
-    // is prepared as soon as the app checks for the driver (usually on UI load).
+    // CRITICAL: Initialize the client immediately if found.
+    // This fixes the "fails on first click" issue by preparing the ODPI-C context
+    // as soon as the status is checked (usually on UI load).
     if status.found {
         if let Some(ref path) = status.path {
-            unsafe {
-                env::set_var("OCI_LIB_DIR", path);
-            }
-            info!("OCI_LIB_DIR set to: {}", path);
+            init_oracle_client_once(path);
         }
     } else {
         info!("Oracle driver not found in any standard location.");
     }
 
     status
+}
+
+/// Explicitly initialize the Oracle Client with the given library path.
+pub fn init_oracle_client_once(path: &str) {
+    let path_str = path.to_string();
+    ORACLE_INIT.call_once(|| {
+        info!("Initializing Oracle Client with library directory: {}", path_str);
+        
+        // 1. Set environment variable as a hint for other tools
+        unsafe {
+            env::set_var("OCI_LIB_DIR", &path_str);
+        }
+
+        // 2. Programmatic initialization (most reliable for bundled apps)
+        // In rust-oracle 0.6, we use InitParams.
+        let mut params = oracle::InitParams::new();
+        if let Err(e) = params.oracle_client_lib_dir(&path_str) {
+            error!("Failed to set oracle_client_lib_dir: {}", e);
+            return;
+        }
+        
+        match params.init() {
+            Ok(true) => info!("Oracle Client successfully initialized programmatically."),
+            Ok(false) => info!("Oracle Client was already initialized."),
+            Err(e) => error!("Failed to programmatically initialize Oracle Client: {}", e),
+        }
+    });
 }
 
 fn is_lib_present(dir: &Path) -> bool {
@@ -156,7 +181,7 @@ fn get_conventional_paths() -> Vec<String> {
         paths.push("/usr/local/lib".to_string());
         // 4. Caskroom
         paths.push("/usr/local/Caskroom/oracle-instantclient".to_string());
-        // 5. Home lib (Common manual location)
+        // 5. Home lib
         if let Some(home) = home_dir() {
             paths.push(home.join("lib").to_string_lossy().to_string());
         }
@@ -177,67 +202,20 @@ fn get_conventional_paths() -> Vec<String> {
     paths
 }
 
-/// Ensures Oracle Instant Client is available and correctly configured for dynamic loading.
-pub async fn ensure_instantclient() -> Result<()> {
+pub async fn ensure_instantclient() -> Result<PathBuf> {
     let status = get_driver_status();
     if status.found {
         let path = status.path.unwrap();
         let path_buf = PathBuf::from(&path);
-
-        // On macOS, we try to ensure global visibility in /usr/local/lib if requested.
-        // Even if this fails (permissions), OCI_LIB_DIR is already set above.
-        #[cfg(target_os = "macos")]
-        ensure_dyld_visibility(&path_buf).ok(); 
+        
+        init_oracle_client_once(&path);
         
         let platform = determine_platform()?;
         update_library_path(&path_buf, &platform)?;
-        return Ok(());
+        return Ok(path_buf);
     }
 
     Err(SakiError::ConnectionFailed("Oracle Instant Client not found. Please download it via the connection dialog.".to_string()))
-}
-
-/// On macOS, SIP and dyld restrictions often ignore OCI_LIB_DIR at runtime for the primary binary.
-/// We try to create a symlink in /usr/local/lib.
-#[cfg(target_os = "macos")]
-fn ensure_dyld_visibility(source_dir: &Path) -> std::io::Result<()> {
-    let lib_name = "libclntsh.dylib";
-    let source_lib = source_dir.join(lib_name);
-    
-    if !source_lib.exists() {
-        return Ok(());
-    }
-
-    let global_lib_dir = Path::new("/usr/local/lib");
-    
-    // Check if /usr/local/lib exists
-    if !global_lib_dir.exists() {
-        info!("/usr/local/lib does not exist, skipping symlink creation.");
-        return Ok(());
-    }
-
-    let target_link = global_lib_dir.join(lib_name);
-    
-    // Check if we already have a valid symlink to the same source
-    if target_link.exists() || target_link.symlink_metadata().is_ok() {
-        if let Ok(existing_target) = std::fs::read_link(&target_link) {
-            if existing_target == source_lib {
-                return Ok(());
-            }
-        }
-        // Try to remove old/broken link (may fail if no permissions)
-        let _ = std::fs::remove_file(&target_link);
-    }
-
-    info!("Attempting to create dyld symlink: {} -> {}", target_link.display(), source_lib.display());
-    // This may fail without sudo, which is logged but handled as non-fatal.
-    if let Err(e) = std::os::unix::fs::symlink(source_lib, &target_link) {
-        info!("Could not create symlink in /usr/local/lib: {}. Relying on OCI_LIB_DIR.", e);
-        return Err(e);
-    }
-
-    info!("Successfully created symlink in /usr/local/lib");
-    Ok(())
 }
 
 fn determine_platform() -> Result<String> {
@@ -340,11 +318,7 @@ where F: Fn(f64, &str) + Send + Sync + 'static
 
     let _ = fs::remove_file(temp_file).await;
     
-    // Ensure visibility and environment set after download
-    #[cfg(target_os = "macos")]
-    ensure_dyld_visibility(&target_dir).ok();
-    
-    unsafe { env::set_var("OCI_LIB_DIR", &target_dir); }
+    init_oracle_client_once(&target_dir.to_string_lossy());
 
     on_progress(100.0, "Setup complete");
     info!("InstantClient setup successfully in: {}", target_dir.display());
@@ -414,7 +388,7 @@ fn flatten_directory(src: &Path, dst: &Path) {
 
 async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Result<()> {
     info!("Mounting DMG: {}", dmg_file.display());
-    let mount_output = Command::new("hdiutil")
+    let mount_output = std::process::Command::new("hdiutil")
         .args(["attach", "-plist", "-nobrowse", "-readonly", dmg_file.to_str().unwrap()])
         .output()
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to mount DMG: {}", e)))?;
@@ -459,13 +433,13 @@ async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Res
     }
 
     let source_dir = source_dir.ok_or_else(|| {
-        let _ = Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
+        let _ = std::process::Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
         SakiError::ConnectionFailed(format!("Failed to find instantclient folder or libclntsh.dylib in DMG mount: {}", mount_point))
     })?;
 
     info!("Copying from DMG mount {} to {}", source_dir.display(), target_dir.display());
     copy_dir_all(source_dir, target_dir.to_path_buf()).await?;
-    let _ = Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
+    let _ = std::process::Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
     Ok(())
 }
 

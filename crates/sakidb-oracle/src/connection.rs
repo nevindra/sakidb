@@ -21,7 +21,7 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::{executor::OracleExecutor, introspect::OracleIntrospector, restore::OracleRestorer, formatter::OracleFormatter};
-use crate::instantclient::ensure_instantclient;
+use crate::instantclient::{ensure_instantclient, init_oracle_client_once};
 
 pub struct OracleDriver {
     connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -35,7 +35,9 @@ impl OracleDriver {
     }
 
     async fn setup_instantclient(&self) -> Result<()> {
-        ensure_instantclient().await
+        let lib_dir = ensure_instantclient().await?;
+        init_oracle_client_once(lib_dir.to_string_lossy().as_ref());
+        Ok(())
     }
 
     pub(crate) fn build_connection_string(config: &ConnectionConfig) -> String {
