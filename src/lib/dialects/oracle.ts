@@ -324,14 +324,15 @@ END;`;
   },
 
   histogramQuery(schema: string, table: string, col: ColumnInfo): string | null {
-    return `SELECT 
+    return `SELECT * FROM (
+    SELECT 
         ${col.name} as value,
         COUNT(*) as frequency
     FROM ${schema}.${table}
     WHERE ${col.name} IS NOT NULL
     GROUP BY ${col.name}
     ORDER BY frequency DESC
-    FETCH FIRST 20 ROWS ONLY`;
+) WHERE ROWNUM <= 20`;
   },
 
   uniqueCountQuery(schema: string, table: string, col: ColumnInfo): string | null {

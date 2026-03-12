@@ -6,6 +6,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
     let mut line_comment = false;
     let mut block_comment = false;
     let mut begin_count = 0;
+    let mut is_plsql = false;
 
     let chars: Vec<char> = sql_content.chars().collect();
     let mut i = 0;
@@ -75,6 +76,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
         let remaining = &chars[i..];
         if starts_with_word(remaining, "BEGIN") || starts_with_word(remaining, "DECLARE") {
             begin_count += 1;
+            is_plsql = true;
             current.push_str(if starts_with_word(remaining, "BEGIN") { "BEGIN" } else { "DECLARE" });
             i += if starts_with_word(remaining, "BEGIN") { 5 } else { 7 };
             continue;
@@ -88,12 +90,15 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
         }
 
         if ch == ';' && begin_count == 0 {
-            current.push(ch);
+            if is_plsql {
+                current.push(';');
+            }
             let stmt = current.trim().to_string();
-            if !stmt.is_empty() && stmt != ";" {
+            if !stmt.is_empty() {
                 statements.push(stmt);
             }
             current.clear();
+            is_plsql = false;
         } else {
             current.push(ch);
         }
@@ -102,7 +107,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
     }
 
     let last = current.trim().to_string();
-    if !last.is_empty() && last != ";" {
+    if !last.is_empty() {
         statements.push(last);
     }
 
@@ -137,8 +142,8 @@ mod tests {
         let sql = "SELECT * FROM t1; SELECT * FROM t2;";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts[0], "SELECT * FROM t1;");
-        assert_eq!(stmts[1], "SELECT * FROM t2;");
+        assert_eq!(stmts[0], "SELECT * FROM t1");
+        assert_eq!(stmts[1], "SELECT * FROM t2");
     }
 
     #[test]
@@ -146,8 +151,8 @@ mod tests {
         let sql = "INSERT INTO t1 (c1) VALUES ('a;b'); SELECT 1;";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts[0], "INSERT INTO t1 (c1) VALUES ('a;b');");
-        assert_eq!(stmts[1], "SELECT 1;");
+        assert_eq!(stmts[0], "INSERT INTO t1 (c1) VALUES ('a;b')");
+        assert_eq!(stmts[1], "SELECT 1");
     }
 
     #[test]
@@ -155,8 +160,8 @@ mod tests {
         let sql = "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more'); SELECT 1;";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts[0], "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more');");
-        assert_eq!(stmts[1], "SELECT 1;");
+        assert_eq!(stmts[0], "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more')");
+        assert_eq!(stmts[1], "SELECT 1");
     }
 
     #[test]
@@ -164,9 +169,9 @@ mod tests {
         let sql = "SELECT 1; -- comment with ; \n SELECT 2; /* block \n with ; */ SELECT 3;";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 3);
-        assert_eq!(stmts[0], "SELECT 1;");
-        assert_eq!(stmts[1], "SELECT 2;");
-        assert_eq!(stmts[2], "SELECT 3;");
+        assert_eq!(stmts[0], "SELECT 1");
+        assert_eq!(stmts[1], "SELECT 2");
+        assert_eq!(stmts[2], "SELECT 3");
     }
 
     #[test]
@@ -185,7 +190,9 @@ mod tests {
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
         assert!(stmts[0].contains("END;"));
-        assert_eq!(stmts[1], "SELECT 1 FROM dual;");
+        // PL/SQL blocks within DECLARE/BEGIN/END keep their internal semicolons
+        assert!(stmts[0].contains("v_count NUMBER;"));
+        assert_eq!(stmts[1], "SELECT 1 FROM dual");
     }
 
     #[test]
@@ -199,6 +206,7 @@ mod tests {
         ";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 1);
+        assert!(stmts[0].contains("END;"));
     }
 
     #[test]
@@ -206,7 +214,7 @@ mod tests {
         let sql = "SELECT 1; SELECT 2";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts[0], "SELECT 1;");
+        assert_eq!(stmts[0], "SELECT 1");
         assert_eq!(stmts[1], "SELECT 2");
     }
 }
