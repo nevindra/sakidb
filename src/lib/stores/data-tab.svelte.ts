@@ -89,7 +89,9 @@ export function buildDataTabQuery(tab: DataTab): string {
 
   const whereClauses: string[] = [];
 
-  if (tab.filters.length > 0) {
+  if (tab.rawSqlFilter) {
+    whereClauses.push(tab.rawSqlFilter);
+  } else if (tab.filters.length > 0) {
     const filterClauses = tab.filters.map(f => filterToSql(f)).filter(Boolean);
     whereClauses.push(...filterClauses);
   }
@@ -125,6 +127,15 @@ export function updateDataTabFilters(tabId: string, filters: TableFilter[]) {
   const tab = findTab((t): t is DataTab => t.type === 'data' && t.id === tabId);
   if (!tab) return;
   tab.filters = filters;
+  tab.rawSqlFilter = undefined;
+  loadDataTab(tabId);
+}
+
+export function updateDataTabRawFilter(tabId: string, rawSql: string | undefined) {
+  const tab = findTab((t): t is DataTab => t.type === 'data' && t.id === tabId);
+  if (!tab) return;
+  tab.rawSqlFilter = rawSql;
+  if (rawSql) tab.filters = [];
   loadDataTab(tabId);
 }
 

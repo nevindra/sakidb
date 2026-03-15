@@ -128,6 +128,7 @@
         databaseName={tab.databaseName}
         {columnInfos}
         filters={tab.filters}
+        rawSqlFilter={tab.rawSqlFilter ?? ''}
         currentPage={tab.currentPage}
         pageSize={tab.pageSize}
         totalRowEstimate={tab.totalRowEstimate}

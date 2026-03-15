@@ -499,6 +499,29 @@ impl Store {
         Ok(())
     }
 
+    pub fn set_preference(&self, key: &str, value: &str) -> Result<(), SakiError> {
+        self.conn
+            .execute(
+                "INSERT INTO app_config (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, value],
+            )
+            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn get_preference(&self, key: &str) -> Result<Option<String>, SakiError> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT value FROM app_config WHERE key = ?1",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| SakiError::StorageError(e.to_string()))
+    }
+
     pub fn save_from_history(&self, history_id: &str, name: &str) -> Result<SavedQuery, SakiError> {
         let entry: QueryHistoryEntry = self
             .conn

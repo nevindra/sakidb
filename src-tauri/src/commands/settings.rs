@@ -38,3 +38,22 @@ pub async fn reset_all_keybindings(
     let store = state.store.lock().await;
     store.reset_all_keybindings().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn get_preference(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<Option<String>, String> {
+    let store = state.store.lock().await;
+    store.get_preference(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_preference(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let store = state.store.lock().await;
+    store.set_preference(&key, &value).map_err(|e| e.to_string())
+}

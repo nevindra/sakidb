@@ -4,6 +4,27 @@ All notable changes to SakiDB will be documented in this file.
 
 ## Unreleased
 
+### Added
+
+- **Edit mode toolbar** — Visible "Edit" button toggles the toolbar between read and edit modes. No more hidden edit state — you always know when you're editing.
+- **Add/Edit Row dialog** — A proper form dialog for adding and editing rows with type-aware fields: text inputs, boolean dropdowns, JSON editors with Format/Minify, read-only primary key fields, and modified-field indicators.
+- **Edit from row detail panel** — Click the pencil button in the row detail panel to open the edit dialog pre-populated with that row's data.
+- **Edit mode tutorial** — First-time onboarding dialog explains how to use right-click context menus, inline editing, bulk delete, and undo/apply. Can be dismissed permanently.
+- **SQL WHERE filter** — Toggle between quick filters and raw SQL mode. Type any WHERE clause with syntax highlighting (columns, keywords, strings, operators) and column name autocomplete. Quick filter chips auto-convert to SQL when switching modes.
+- **Binary data preview** — Bytea columns now render inline thumbnails for images (PNG, JPEG, GIF, WebP, BMP, AVIF), embedded PDF viewer, and archive cards (ZIP, GZIP, BZ2, XZ, 7Z) with download buttons. Works in the data grid, cell expand popover, and row detail panel.
+- **Create connection from Edit dialog** — The connection edit dialog now supports creating new connections (previously only editing existing ones).
+
+### Improved
+
+- Delete row visuals now use red-tinted backgrounds and × indicators for clearer pending state.
+- Cell expand popover stays visually attached to right-side cells instead of jumping far left.
+- "Edit Row" option added to the right-click context menu.
+
+### Fixed
+
+- Quick filter dropdown no longer closes when selecting options with the mouse.
+- Connection test no longer fails when testing an unsaved connection from the edit dialog.
+
 ## v1.2.0 (2026-03-10)
 
 ### Added

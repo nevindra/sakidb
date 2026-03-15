@@ -12,6 +12,7 @@
     canEdit,
     onclose,
     oneditcell,
+    oneditrow,
     oninsertrow,
     ondeleterow,
     onviewdetails,
@@ -25,6 +26,7 @@
     canEdit: boolean;
     onclose: () => void;
     oneditcell: () => void;
+    oneditrow: () => void;
     oninsertrow: () => void;
     ondeleterow: () => void;
     onviewdetails: () => void;
@@ -86,6 +88,9 @@
   </button>
   {#if canEdit}
     <div class="my-1 h-px bg-border/60"></div>
+    <button class="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground" onclick={() => { oneditrow(); onclose(); }}>
+      Edit Row
+    </button>
     <button class="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground" onclick={() => { oneditcell(); onclose(); }}>
       Edit Cell
     </button>

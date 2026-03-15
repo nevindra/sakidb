@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import type { CellValue, ColumnDef } from '$lib/types';
-  import { cellToPlainText, cellToJsonValue, rowToJson, copyToClipboard } from '$lib/copy-utils';
-  import { cellToImageSrc } from '$lib/image-utils';
+  import { cellToPlainText, rowToJson, copyToClipboard } from '$lib/copy-utils';
+  import { detectBinaryFormat } from '$lib/binary-utils';
+  import BinaryPreview from './BinaryPreview.svelte';
   import * as Sheet from '$lib/components/ui/sheet';
+  import { Pencil } from '@lucide/svelte';
 
   let {
     open = $bindable(false),
@@ -12,6 +13,8 @@
     columns,
     onnavigate,
     totalRows,
+    canEdit = false,
+    onedit,
   }: {
     open: boolean;
     row: CellValue[] | null;
@@ -19,6 +22,8 @@
     columns: ColumnDef[];
     onnavigate: (direction: 'prev' | 'next') => void;
     totalRows: number;
+    canEdit?: boolean;
+    onedit?: () => void;
   } = $props();
 
   let copiedField = $state<number | null>(null);
@@ -75,16 +80,10 @@
     return { text: '?', cls: '' };
   }
 
-  const objectUrls: string[] = [];
-  function trackImageSrc(cell: CellValue): string | null {
-    const src = cellToImageSrc(cell);
-    if (src) objectUrls.push(src);
-    return src;
+  function isBinaryPreviewable(cell: CellValue): boolean {
+    if (cell === 'Null' || !('Bytes' in cell)) return false;
+    return detectBinaryFormat(cell.Bytes).kind !== 'unknown';
   }
-
-  onDestroy(() => {
-    for (const url of objectUrls) URL.revokeObjectURL(url);
-  });
 
   function handleKeydown(e: KeyboardEvent) {
     if (!open) return;
@@ -106,6 +105,16 @@
       <div class="flex items-center justify-between">
         <Sheet.Title class="text-sm font-medium">Row {rowIndex + 1}</Sheet.Title>
         <div class="flex items-center gap-1 mr-6">
+          {#if canEdit && onedit}
+            <button
+              class="px-1.5 py-0.5 rounded text-xs text-primary hover:bg-primary/10 transition-colors flex items-center gap-1"
+              onclick={onedit}
+              title="Edit this row"
+            >
+              <Pencil class="h-3 w-3" />
+            </button>
+            <div class="w-px h-3 bg-border/40"></div>
+          {/if}
           <button
             class="px-1.5 py-0.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors disabled:opacity-30"
             onclick={() => onnavigate('prev')}
@@ -145,23 +154,31 @@
         {#if viewMode === 'fields'}
           <div class="space-y-0">
             {#each columns as col, i}
-              {@const display = formatCellDisplay(row[i])}
-              {@const imgSrc = trackImageSrc(row[i])}
+              {@const cell = row[i]}
+              {@const display = formatCellDisplay(cell)}
+              {@const hasBinary = isBinaryPreviewable(cell)}
               <div class="group py-2 border-b border-border/50 last:border-b-0">
                 <div class="flex items-center justify-between mb-0.5">
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-muted-foreground font-medium">{col.name}</span>
                     <span class="text-[10px] text-text-dim">{col.data_type}</span>
                   </div>
-                  <button
-                    class="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent/50 transition-all"
-                    onclick={() => copyField(i)}
-                  >
-                    {copiedField === i ? 'Copied' : 'Copy'}
-                  </button>
+                  {#if !hasBinary}
+                    <button
+                      class="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent/50 transition-all"
+                      onclick={() => copyField(i)}
+                    >
+                      {copiedField === i ? 'Copied' : 'Copy'}
+                    </button>
+                  {/if}
                 </div>
-                {#if imgSrc}
-                  <img src={imgSrc} alt={col.name} class="max-w-full max-h-60 rounded object-contain mt-1" />
+                {#if hasBinary}
+                  <BinaryPreview
+                    bytes={(cell as { Bytes: number[] }).Bytes}
+                    columnName={col.name}
+                    maxImageHeight={240}
+                    pdfHeight={400}
+                  />
                 {:else}
                   <div class="text-xs break-words {display.cls}">{display.text}</div>
                 {/if}

@@ -180,6 +180,8 @@ pub fn run() {
             commands::settings::set_keybinding,
             commands::settings::reset_keybinding,
             commands::settings::reset_all_keybindings,
+            commands::settings::get_preference,
+            commands::settings::set_preference,
             commands::sqlite::vacuum_database,
             commands::sqlite::check_integrity,
         ])
