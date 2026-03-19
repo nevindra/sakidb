@@ -48,31 +48,30 @@ impl OracleExecutor {
     }
 
     fn row_value_to_cell(row: &oracle::Row, idx: usize) -> CellValue {
-        // Try to get as various types, falling back to string
-        if let Ok(None::<String>) = row.get::<_, Option<String>>(idx) {
-            return CellValue::Null;
-        }
-        // Try i64
+        // [Fix: Minor 2] Prefer i64 for NUMBER to avoid f64 precision loss for large integers
+        // Try i64 first for Number to preserve precision
         if let Ok(Some(v)) = row.get::<_, Option<i64>>(idx) {
             return CellValue::Int(v);
         }
-        // Try f64
+        
+        // Try f64 for decimals
         if let Ok(Some(v)) = row.get::<_, Option<f64>>(idx) {
-            let f = v;
-            if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-                return CellValue::Int(f as i64);
-            }
-            return CellValue::Float(f);
+            return CellValue::Float(v);
         }
+
         // Try bool
         if let Ok(Some(v)) = row.get::<_, Option<bool>>(idx) {
             return CellValue::Bool(v);
         }
-        // Fall back to string
+
+        // Fall back to string for complex types or very large numbers that didn't fit in i64
         match row.get::<_, Option<String>>(idx) {
-            Ok(Some(s)) => CellValue::Text(s.into_boxed_str()),
-            Ok(None) => CellValue::Null,
-            Err(_) => CellValue::Null,
+            Ok(Some(s)) => {
+                // If it's a number type but we're here, it might be a very large integer or high-precision decimal
+                // but we'll treat it as text for the UI to avoid further precision loss in f64.
+                CellValue::Text(s.into_boxed_str())
+            }
+            _ => CellValue::Null,
         }
     }
 
@@ -205,7 +204,22 @@ impl OracleExecutor {
             sql, offset + page_size, offset
         );
 
-        let result = self.execute_single(conn.clone(), paged_sql).await?;
+        let mut result = self.execute_single(conn.clone(), paged_sql).await?;
+
+        // [Fix: M3] Strip the synthetic saki_rnum__ column from the result set
+        if let Some(pos) = result.columns.iter().position(|c| c.name == "SAKI_RNUM__") {
+            result.columns.remove(pos);
+            let num_cols_after = result.columns.len();
+            let mut new_cells = Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
+            
+            // We need to remove the cell at 'pos' for every row
+            for (i, cell) in result.cells.into_iter().enumerate() {
+                if i % (num_cols_after + 1) != pos {
+                    new_cells.push(cell);
+                }
+            }
+            result.cells = new_cells;
+        }
 
         // Get total count
         let count_sql = format!("SELECT COUNT(*) FROM ({})", sql);
@@ -242,27 +256,34 @@ impl OracleExecutor {
         let conn = self.get_connection(conn_id)?;
         let statements = split_sql_statements(sql);
 
-        for stmt in statements {
-            tokio::task::spawn_blocking({
-                let conn = conn.clone();
-                let stmt = stmt.clone();
-                move || {
-                    let conn = conn.blocking_read();
-                    conn.execute(&stmt, &[])
-                        .map_err(|e| SakiError::QueryFailed(format!("Batch execute failed: {}", e)))?;
-                    
-                    // Commit each statement in batch if it was DML
-                    // For simplicity, we commit all. execute() returns a Statement, we don't check if it's DML here
-                    // but usually batch is for DML/DDL.
-                    conn.commit()
-                        .map_err(|e| SakiError::QueryFailed(format!("Batch commit failed: {}", e)))?;
-                    
-                    Ok::<(), SakiError>(())
+        // [Fix: C1] Run all statements in a single transaction and commit only at the end.
+        // This ensures data integrity for multi-statement operations.
+        tokio::task::spawn_blocking({
+            let conn = conn.clone();
+            move || {
+                let conn = conn.blocking_read();
+                // Disable autocommit for the batch (though oracle-rust is manual by default, 
+                // we want to ensure we control the boundary)
+                for stmt in statements {
+                    if stmt.trim().is_empty() {
+                        continue;
+                    }
+                    if let Err(e) = conn.execute(&stmt, &[]) {
+                        // Attempt rollback on error before returning
+                        let _ = conn.rollback();
+                        return Err(SakiError::QueryFailed(format!("Batch execute failed: {}", e)));
+                    }
                 }
-            })
-            .await
-            .map_err(|e| SakiError::QueryFailed(format!("Batch task failed: {}", e)))??;
-        }
+                
+                // Commit the entire batch
+                conn.commit()
+                    .map_err(|e| SakiError::QueryFailed(format!("Batch commit failed: {}", e)))?;
+                
+                Ok::<(), SakiError>(())
+            }
+        })
+        .await
+        .map_err(|e| SakiError::QueryFailed(format!("Batch task failed: {}", e)))??;
 
         Ok(())
     }
@@ -308,10 +329,24 @@ impl OracleExecutor {
                 sql, offset + batch_size, offset
             );
 
-            let result = self.execute_single(conn.clone(), page_sql).await?;
+            let mut result = self.execute_single(conn.clone(), page_sql).await?;
 
             if result.row_count == 0 {
                 break;
+            }
+
+            // [Fix: M3] Strip the synthetic saki_rnum__ column from the export batch
+            if let Some(pos) = result.columns.iter().position(|c| c.name == "SAKI_RNUM__") {
+                result.columns.remove(pos);
+                let num_cols_after = result.columns.len();
+                let mut new_cells = Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
+                
+                for (i, cell) in result.cells.into_iter().enumerate() {
+                    if i % (num_cols_after + 1) != pos {
+                        new_cells.push(cell);
+                    }
+                }
+                result.cells = new_cells;
             }
 
             let num_cols = result.columns.len();

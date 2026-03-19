@@ -136,12 +136,8 @@ pub fn init_oracle_client_once(path: &str) {
     ORACLE_INIT.call_once(|| {
         info!("Initializing Oracle Client with library directory: {}", path_str);
         
-        // 1. Set environment variable as a hint for other tools
-        unsafe {
-            env::set_var("OCI_LIB_DIR", &path_str);
-        }
-
-        // 2. Programmatic initialization (most reliable for bundled apps)
+        // [Fix: M2] Use programmatic initialization via InitParams. 
+        // Removed unsafe env::set_var calls which are unsound in multithreaded programs.
         // In rust-oracle 0.6, we use InitParams.
         let mut params = oracle::InitParams::new();
         if let Err(e) = params.oracle_client_lib_dir(&path_str) {
@@ -207,14 +203,11 @@ pub async fn ensure_instantclient() -> Result<PathBuf> {
     if status.found {
         let path = status.path.unwrap();
         let path_buf = PathBuf::from(&path);
-        
+
         init_oracle_client_once(&path);
-        
-        let platform = determine_platform()?;
-        update_library_path(&path_buf, &platform)?;
+
         return Ok(path_buf);
     }
-
     Err(SakiError::ConnectionFailed("Oracle Instant Client not found. Please download it via the connection dialog.".to_string()))
 }
 
@@ -459,27 +452,4 @@ fn copy_dir_all(source: PathBuf, target: PathBuf) -> std::pin::Pin<Box<dyn std::
         }
         Ok(())
     })
-}
-
-fn update_library_path(instantclient_dir: &PathBuf, platform: &str) -> Result<()> {
-    match platform {
-        "linux-x64" => {
-            if let Ok(ld_path) = env::var("LD_LIBRARY_PATH") {
-                let new_path = format!("{}:{}", instantclient_dir.display(), ld_path);
-                unsafe { env::set_var("LD_LIBRARY_PATH", new_path); }
-            } else {
-                unsafe { env::set_var("LD_LIBRARY_PATH", instantclient_dir); }
-            }
-        }
-        "windows-x64" => {
-            if let Ok(path) = env::var("PATH") {
-                let new_path = format!("{};{}", instantclient_dir.display(), path);
-                unsafe { env::set_var("PATH", new_path); }
-            } else {
-                unsafe { env::set_var("PATH", instantclient_dir); }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
 }

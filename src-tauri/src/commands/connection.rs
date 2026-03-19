@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use tauri::{State, Emitter};
 use tracing::{error, info, warn};
 
@@ -211,6 +209,7 @@ pub async fn update_last_connected(
 
 fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig {
     let engine: EngineType = input.engine.parse().unwrap_or(EngineType::Postgres);
+    // [Fix: M7] Pass through the options field to support engine-specific settings like TNS
     ConnectionConfig {
         engine,
         host: input.host.clone(),
@@ -219,12 +218,13 @@ fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig 
         username: input.username.clone(),
         password: if password.is_empty() { input.password.clone() } else { password.to_string() },
         ssl_mode: parse_ssl_mode(&input.ssl_mode),
-        options: HashMap::new(),
+        options: input.options.clone(),
     }
 }
 
 fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Option<String>) -> ConnectionConfig {
     let engine: EngineType = saved.engine.parse().unwrap_or(EngineType::Postgres);
+    // [Fix: M7] Pass through the options field
     ConnectionConfig {
         engine,
         host: saved.host.clone(),
@@ -233,7 +233,7 @@ fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Opti
         username: saved.username.clone(),
         password: saved.password.clone(),
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
+        options: saved.options.clone(),
     }
 }
 

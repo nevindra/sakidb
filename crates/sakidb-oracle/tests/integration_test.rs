@@ -1,5 +1,6 @@
 #[cfg(feature = "integration")]
 mod integration_tests {
+    // [Fix: M4] Corrected integration tests to use the right traits and signatures (SqlDriver, Introspector, cells vs rows)
     use sakidb_core::{
         error::Result,
         types::{ConnectionConfig, EngineType, SslMode},
@@ -61,6 +62,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::SqlDriver;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -74,12 +76,16 @@ mod integration_tests {
 
         // Test simple query
         let query = "SELECT 1 as test_column FROM dual";
-        match driver.execute_query(&conn_id, query, &[]).await {
+        match driver.execute(&conn_id, query).await {
             Ok(result) => {
                 assert_eq!(result.columns.len(), 1);
                 assert_eq!(result.columns[0].name, "TEST_COLUMN");
-                assert_eq!(result.rows.len(), 1);
-                assert_eq!(result.rows[0][0].as_int(), Some(1));
+                assert_eq!(result.row_count, 1);
+                match &result.cells[0] {
+                    sakidb_core::types::CellValue::Int(v) => assert_eq!(*v, 1),
+                    sakidb_core::types::CellValue::Float(v) => assert_eq!(*v as i64, 1),
+                    _ => panic!("Expected integer result, got {:?}", result.cells[0]),
+                }
                 println!("Query execution test passed");
             }
             Err(e) => {
@@ -99,6 +105,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::Introspector;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -123,10 +130,9 @@ mod integration_tests {
         }
 
         // Test table listing (for current user)
-        match driver.list_tables(&conn_id, None).await {
+        match driver.list_tables(&conn_id, "SYSTEM").await {
             Ok(tables) => {
-                println!("Found {} tables", tables.len());
-                // Might be empty for a fresh test database
+                println!("Found {} tables in SYSTEM", tables.len());
             }
             Err(e) => {
                 println!("Table listing failed: {}", e);
@@ -145,6 +151,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::SqlDriver;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -165,17 +172,17 @@ mod integration_tests {
             )
         "#;
 
-        match driver.execute_query(&conn_id, create_table_sql, &[]).await {
+        match driver.execute(&conn_id, create_table_sql).await {
             Ok(_) => {
                 println!("Test table created successfully");
 
-                // Insert some data
-                let insert_sql = "INSERT INTO test_table (name) VALUES (:1)";
-                let params = vec![sakidb_core::types::CellValue::Text("Test Record".into_boxed_str())];
+                // Insert some data - note: Oracle driver currently uses execute_batch for multi-statement 
+                // but execute() for single DML.
+                let insert_sql = "INSERT INTO test_table (name) VALUES ('Test Record')";
                 
-                match driver.execute_query(&conn_id, insert_sql, &params).await {
+                match driver.execute(&conn_id, insert_sql).await {
                     Ok(result) => {
-                        println!("Insert successful, rows affected: {:?}", result.rows_affected);
+                        println!("Insert successful, rows affected: {:?}", result.row_count);
                     }
                     Err(e) => {
                         println!("Insert failed: {}", e);
@@ -184,10 +191,10 @@ mod integration_tests {
 
                 // Query the data
                 let select_sql = "SELECT id, name, created_at FROM test_table";
-                match driver.execute_query(&conn_id, select_sql, &[]).await {
+                match driver.execute(&conn_id, select_sql).await {
                     Ok(result) => {
-                        println!("Query successful, rows returned: {}", result.rows.len());
-                        assert!(!result.rows.is_empty());
+                        println!("Query successful, rows returned: {}", result.row_count);
+                        assert!(result.row_count > 0);
                     }
                     Err(e) => {
                         println!("Select failed: {}", e);
@@ -196,7 +203,7 @@ mod integration_tests {
 
                 // Clean up - drop the table
                 let drop_sql = "DROP TABLE test_table PURGE";
-                let _ = driver.execute_query(&conn_id, drop_sql, &[]).await;
+                let _ = driver.execute(&conn_id, drop_sql).await;
                 println!("Test table dropped");
             }
             Err(e) => {
@@ -216,6 +223,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::SqlDriver;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -235,47 +243,41 @@ mod integration_tests {
             )
         "#;
 
-        if let Err(e) = driver.execute_query(&conn_id, create_table_sql, &[]).await {
+        if let Err(e) = driver.execute(&conn_id, create_table_sql).await {
             println!("Failed to create test table: {}", e);
             let _ = driver.disconnect(&conn_id).await;
             return;
         }
 
         // Test transaction with rollback
-        let begin_sql = "BEGIN TRANSACTION";
-        let insert_sql = "INSERT INTO test_transaction (id, value) VALUES (:1, :2)";
+        // Oracle starts transactions implicitly. 
+        let insert_sql = "INSERT INTO test_transaction (id, value) VALUES (1, 'Test Value')";
         let rollback_sql = "ROLLBACK";
 
-        // Begin transaction
-        if let Err(e) = driver.execute_query(&conn_id, begin_sql, &[]).await {
-            println!("Failed to begin transaction: {}", e);
+        // Insert data
+        if let Err(e) = driver.execute(&conn_id, insert_sql).await {
+            println!("Failed to insert data: {}", e);
         } else {
-            // Insert data
-            let params = vec![
-                sakidb_core::types::CellValue::Int(1),
-                sakidb_core::types::CellValue::Text("Test Value".into_boxed_str()),
-            ];
-
-            if let Err(e) = driver.execute_query(&conn_id, insert_sql, &params).await {
-                println!("Failed to insert data: {}", e);
+            // Rollback
+            if let Err(e) = driver.execute(&conn_id, rollback_sql).await {
+                println!("Failed to rollback: {}", e);
             } else {
-                // Rollback
-                if let Err(e) = driver.execute_query(&conn_id, rollback_sql, &[]).await {
-                    println!("Failed to rollback: {}", e);
-                } else {
-                    // Check that data was rolled back
-                    let select_sql = "SELECT COUNT(*) FROM test_transaction";
-                    match driver.execute_query(&conn_id, select_sql, &[]).await {
-                        Ok(result) => {
-                            if !result.rows.is_empty() {
-                                let count = result.rows[0][0].as_int().unwrap_or(0);
-                                assert_eq!(count, 0, "Expected 0 rows after rollback, got {}", count);
-                                println!("Transaction rollback test passed");
-                            }
+                // Check that data was rolled back
+                let select_sql = "SELECT COUNT(*) FROM test_transaction";
+                match driver.execute(&conn_id, select_sql).await {
+                    Ok(result) => {
+                        if result.row_count > 0 {
+                            let count = match &result.cells[0] {
+                                sakidb_core::types::CellValue::Int(v) => *v,
+                                sakidb_core::types::CellValue::Float(v) => *v as i64,
+                                _ => 0,
+                            };
+                            assert_eq!(count, 0, "Expected 0 rows after rollback, got {}", count);
+                            println!("Transaction rollback test passed");
                         }
-                        Err(e) => {
-                            println!("Failed to verify rollback: {}", e);
-                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to verify rollback: {}", e);
                     }
                 }
             }
@@ -283,7 +285,7 @@ mod integration_tests {
 
         // Clean up
         let drop_sql = "DROP TABLE test_transaction PURGE";
-        let _ = driver.execute_query(&conn_id, drop_sql, &[]).await;
+        let _ = driver.execute(&conn_id, drop_sql).await;
         let _ = driver.disconnect(&conn_id).await;
     }
 
@@ -295,6 +297,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::SqlDriver;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -316,11 +319,10 @@ mod integration_tests {
 
         // Test each connection with a simple query
         for (i, conn_id) in conn_ids.iter().enumerate() {
-            let query = "SELECT :1 as conn_id FROM dual";
-            let params = vec![sakidb_core::types::CellValue::Int(i as i64)];
+            let query = "SELECT 1 as conn_id FROM dual";
             
-            match driver.execute_query(conn_id, query, &params).await {
-                Ok(result) => {
+            match driver.execute(conn_id, query).await {
+                Ok(_) => {
                     println!("Connection {} query successful", i);
                 }
                 Err(e) => {
@@ -345,6 +347,7 @@ mod integration_tests {
             return;
         }
 
+        use sakidb_core::driver::SqlDriver;
         let driver = OracleDriver::new();
         let config = get_test_config();
 
@@ -358,7 +361,7 @@ mod integration_tests {
 
         // Test invalid SQL
         let invalid_sql = "SELECT * FROM non_existent_table_12345";
-        match driver.execute_query(&conn_id, invalid_sql, &[]).await {
+        match driver.execute(&conn_id, invalid_sql).await {
             Ok(_) => {
                 println!("ERROR: Invalid SQL should have failed");
             }
@@ -369,8 +372,8 @@ mod integration_tests {
         }
 
         // Test SQL injection attempt (should be caught by Oracle)
-        let injection_sql = "SELECT * FROM users WHERE '1'='1' --";
-        match driver.execute_query(&conn_id, injection_sql, &[]).await {
+        let injection_sql = "SELECT * FROM all_users WHERE '1'='1' --";
+        match driver.execute(&conn_id, injection_sql).await {
             Ok(_) => {
                 println!("SQL injection query executed (table might not exist or query returned empty)");
             }

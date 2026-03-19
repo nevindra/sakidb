@@ -26,8 +26,11 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
         if block_comment {
             if ch == '*' && i + 1 < chars.len() && chars[i+1] == '/' {
                 block_comment = false;
+                current.push('*');
+                current.push('/');
                 i += 2;
             } else {
+                current.push(ch);
                 i += 1;
             }
             continue;
@@ -47,9 +50,33 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
                 continue;
             }
             if ch == '/' && i + 1 < chars.len() && chars[i+1] == '*' {
-                block_comment = true;
-                i += 2;
-                continue;
+                // [Fix: Minor 3] Preserve Oracle hints (/*+ ... */) which can change query plans.
+                // M: Check if it's an Oracle hint
+                if i + 2 < chars.len() && chars[i+2] == '+' {
+                    block_comment = true;
+                    current.push('/');
+                    current.push('*');
+                    i += 2;
+                    continue;
+                } else {
+                    // Regular block comment - skip
+                    let mut j = i + 2;
+                    while j + 1 < chars.len() {
+                        if chars[j] == '*' && chars[j+1] == '/' {
+                            i = j + 2;
+                            // Add a space to avoid joining words
+                            if !current.ends_with(' ') {
+                                current.push(' ');
+                            }
+                            break;
+                        }
+                        j += 1;
+                    }
+                    if j + 1 >= chars.len() {
+                        i = chars.len();
+                    }
+                    continue;
+                }
             }
         } else if ch == string_delim {
             // Check for escaped quote (e.g. '')
@@ -172,6 +199,15 @@ mod tests {
         assert_eq!(stmts[0], "SELECT 1");
         assert_eq!(stmts[1], "SELECT 2");
         assert_eq!(stmts[2], "SELECT 3");
+    }
+
+    #[test]
+    fn test_oracle_hints() {
+        let sql = "SELECT /*+ FULL(t) */ * FROM t; SELECT /* regular comment */ 1 FROM dual;";
+        let stmts = split_sql_statements(sql);
+        assert_eq!(stmts.len(), 2);
+        assert_eq!(stmts[0], "SELECT /*+ FULL(t) */ * FROM t");
+        assert_eq!(stmts[1], "SELECT  1 FROM dual");
     }
 
     #[test]

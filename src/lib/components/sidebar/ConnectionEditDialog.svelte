@@ -43,6 +43,7 @@
     username: 'postgres',
     password: '',
     ssl_mode: 'prefer',
+    options: {},
   });
 
   let connectionUrl = $state('');
@@ -71,6 +72,7 @@
         username: connection.username,
         password: '',
         ssl_mode: connection.ssl_mode,
+        options: { ...connection.options },
       };
       connectionUrl = '';
       urlError = null;

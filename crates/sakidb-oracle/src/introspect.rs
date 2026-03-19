@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use oracle::Connection as OracleConnection;
+use oracle::sql_type::{ToSql, Clob};
 use dashmap::DashMap;
 use sakidb_core::{
     error::{Result, SakiError},
@@ -30,14 +31,13 @@ impl OracleIntrospector {
             .ok_or_else(|| SakiError::ConnectionNotFound(conn_id.0.to_string()))
     }
 
-    fn escape_literal(val: &str) -> String {
-        val.replace('\'', "''")
-    }
-
-    async fn execute_query(conn: Arc<RwLock<OracleConnection>>, query: String) -> Result<Vec<oracle::Row>> {
+    async fn execute_query(conn: Arc<RwLock<OracleConnection>>, query: String, params: Vec<String>) -> Result<Vec<oracle::Row>> {
+        // [Fix: M1] Use bind parameters for all introspection queries to prevent SQL injection
         tokio::task::spawn_blocking(move || {
             let conn = conn.blocking_read();
-            let result_set = conn.query(&query, &[])
+            // Convert String vec to &dyn ToSql slice
+            let bind_params: Vec<&dyn ToSql> = params.iter().map(|s| s as &dyn ToSql).collect();
+            let result_set = conn.query(&query, &bind_params)
                 .map_err(|e| SakiError::QueryFailed(format!("Introspection query failed: {}", e)))?;
             let mut rows = Vec::new();
             for row_result in result_set {
@@ -56,6 +56,7 @@ impl OracleIntrospector {
         let rows = Self::execute_query(
             conn,
             "SELECT name FROM v$database WHERE name IS NOT NULL".to_string(),
+            vec![],
         )
         .await?;
 
@@ -70,6 +71,7 @@ impl OracleIntrospector {
 
     pub async fn list_schemas(&self, conn_id: &ConnectionId) -> Result<Vec<SchemaInfo>> {
         let conn = self.get_connection(conn_id)?;
+        // [Fix: Minor 1] Expanded system schema exclusions for Oracle 19c/21c
         let rows = Self::execute_query(conn, "
             SELECT username
             FROM all_users
@@ -77,10 +79,12 @@ impl OracleIntrospector {
                 'SYS','SYSTEM','DBSNMP','OUTLN','FLOWS_FILES','MDSYS','ORDSYS',
                 'EXFSYS','WMSYS','APPQOSSYS','APEX_030200','OWBSYS','CTXSYS',
                 'ANONYMOUS','SYSMAN','XDB','XS$NULL','SI_INFORMTN_SCHEMA',
-                'OLAPSYS','ORDDATA','DIP','ORDPLUGINS','MDDATA'
+                'OLAPSYS','ORDDATA','DIP','ORDPLUGINS','MDDATA',
+                'AUDSYS','DBSFWUSER','GGSYS','REMOTE_SCHEDULER_AGENT','GSMADMIN_INTERNAL',
+                'DVF','DVSYS','LBACSYS','OJVMSYS','WJPYS','WKPYS'
             )
             ORDER BY username
-        ".to_string()).await?;
+        ".to_string(), vec![]).await?;
 
         let mut schemas = Vec::new();
         for row in rows {
@@ -93,16 +97,12 @@ impl OracleIntrospector {
 
     pub async fn list_tables(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<TableInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT table_name, num_rows, blocks
+        let query = "SELECT table_name, num_rows, blocks
              FROM all_tables
-             WHERE owner = '{}'
+             WHERE owner = :1
              AND table_name NOT LIKE 'BIN$%'
-             ORDER BY table_name",
-            schema
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             ORDER BY table_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
 
         let mut tables = Vec::new();
         for row in rows {
@@ -123,16 +123,11 @@ impl OracleIntrospector {
 
     pub async fn list_columns(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Vec<ColumnInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT column_name, data_type, nullable, data_default
+        let query = "SELECT column_name, data_type, nullable, data_default
              FROM all_tab_columns
-             WHERE owner = '{}' AND table_name = '{}'
-             ORDER BY column_id",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn.clone(), query).await?;
+             WHERE owner = :1 AND table_name = :2
+             ORDER BY column_id".to_string();
+        let rows = Self::execute_query(conn.clone(), query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
 
         let mut columns = Vec::new();
         for row in rows {
@@ -153,14 +148,11 @@ impl OracleIntrospector {
         }
 
         // Mark primary key columns
-        let pk_query = format!(
-            "SELECT acc.column_name
+        let pk_query = "SELECT acc.column_name
              FROM all_cons_columns acc
              JOIN all_constraints ac ON acc.constraint_name = ac.constraint_name AND acc.owner = ac.owner
-             WHERE ac.owner = '{}' AND ac.table_name = '{}' AND ac.constraint_type = 'P'",
-            schema_esc, table_esc
-        );
-        let pk_rows = Self::execute_query(conn, pk_query).await?;
+             WHERE ac.owner = :1 AND ac.table_name = :2 AND ac.constraint_type = 'P'".to_string();
+        let pk_rows = Self::execute_query(conn, pk_query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         for row in pk_rows {
             let pk_col: String = row.get(0)
                 .map_err(|e| SakiError::QueryFailed(format!("Failed to get pk col: {}", e)))?;
@@ -174,12 +166,8 @@ impl OracleIntrospector {
 
     pub async fn list_views(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<ViewInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT view_name, read_only FROM all_views WHERE owner = '{}' ORDER BY view_name",
-            schema
-        );
-        let rows = Self::execute_query(conn, query).await?;
+        let query = "SELECT view_name, read_only FROM all_views WHERE owner = :1 ORDER BY view_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
         let mut views = Vec::new();
         for row in rows {
             let name: String = row.get(0)
@@ -192,12 +180,8 @@ impl OracleIntrospector {
 
     pub async fn list_materialized_views(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<MaterializedViewInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT mview_name, num_rows, last_refresh_date FROM all_mviews WHERE owner = '{}' ORDER BY mview_name",
-            schema
-        );
-        let rows = Self::execute_query(conn, query).await?;
+        let query = "SELECT mview_name, num_rows, last_refresh_date FROM all_mviews WHERE owner = :1 ORDER BY mview_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
         let mut mviews = Vec::new();
         for row in rows {
             let name: String = row.get(0)
@@ -216,14 +200,10 @@ impl OracleIntrospector {
 
     pub async fn list_functions(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<FunctionInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT object_name, object_type FROM all_procedures
-             WHERE owner = '{}' AND object_type IN ('FUNCTION', 'PROCEDURE', 'PACKAGE')
-             ORDER BY object_name",
-            schema
-        );
-        let rows = Self::execute_query(conn, query).await?;
+        let query = "SELECT object_name, object_type FROM all_procedures
+             WHERE owner = :1 AND object_type IN ('FUNCTION', 'PROCEDURE', 'PACKAGE')
+             ORDER BY object_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
         let mut functions = Vec::new();
         for row in rows {
             let name: String = row.get(0)
@@ -243,12 +223,8 @@ impl OracleIntrospector {
 
     pub async fn list_sequences(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<SequenceInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT sequence_name, last_number FROM all_sequences WHERE sequence_owner = '{}' ORDER BY sequence_name",
-            schema
-        );
-        let rows = Self::execute_query(conn, query).await?;
+        let query = "SELECT sequence_name, last_number FROM all_sequences WHERE sequence_owner = :1 ORDER BY sequence_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
         let mut sequences = Vec::new();
         for row in rows {
             let name: String = row.get(0)
@@ -265,16 +241,12 @@ impl OracleIntrospector {
 
     pub async fn list_indexes(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<IndexInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT aic.index_name, aic.table_name, aic.column_name, ai.uniqueness, ai.index_type
+        let query = "SELECT aic.index_name, aic.table_name, aic.column_name, ai.uniqueness, ai.index_type
              FROM all_ind_columns aic
              JOIN all_indexes ai ON aic.index_name = ai.index_name AND aic.table_owner = ai.table_owner
-             WHERE ai.table_owner = '{}'
-             ORDER BY aic.index_name, aic.column_position",
-            schema_esc
-        );
-        let rows = Self::execute_query(conn.clone(), query).await?;
+             WHERE ai.table_owner = :1
+             ORDER BY aic.index_name, aic.column_position".to_string();
+        let rows = Self::execute_query(conn.clone(), query, vec![schema.to_uppercase()]).await?;
 
         let mut index_map: HashMap<String, IndexInfo> = HashMap::new();
         for row in rows {
@@ -304,11 +276,8 @@ impl OracleIntrospector {
         }
 
         // Mark primary key indexes
-        let pk_query = format!(
-            "SELECT index_name FROM all_constraints WHERE owner = '{}' AND constraint_type = 'P'",
-            schema_esc
-        );
-        let pk_rows = Self::execute_query(conn, pk_query).await?;
+        let pk_query = "SELECT index_name FROM all_constraints WHERE owner = :1 AND constraint_type = 'P'".to_string();
+        let pk_rows = Self::execute_query(conn, pk_query, vec![schema.to_uppercase()]).await?;
         for row in pk_rows {
             let pk_idx: String = row.get(0).unwrap_or_default();
             if let Some(idx) = index_map.get_mut(&pk_idx) {
@@ -321,16 +290,11 @@ impl OracleIntrospector {
 
     pub async fn list_triggers(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Vec<TriggerInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT trigger_name, table_name, triggering_event, trigger_type, when_clause, trigger_body, status
+        let query = "SELECT trigger_name, table_name, triggering_event, trigger_type, when_clause, trigger_body, status
              FROM all_triggers
-             WHERE owner = '{}' AND table_name = '{}'
-             ORDER BY trigger_name",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             WHERE owner = :1 AND table_name = :2
+             ORDER BY trigger_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         let mut triggers = Vec::new();
         for row in rows {
             let name: String = row.get(0)
@@ -339,18 +303,27 @@ impl OracleIntrospector {
                 .map_err(|e| SakiError::QueryFailed(format!("Failed to get trigger table: {}", e)))?;
             let event: String = row.get(2)
                 .map_err(|e| SakiError::QueryFailed(format!("Failed to get trigger event: {}", e)))?;
-            let timing: String = row.get(3)
-                .map_err(|e| SakiError::QueryFailed(format!("Failed to get trigger timing: {}", e)))?;
+            let tt: String = row.get(3)
+                .map_err(|e| SakiError::QueryFailed(format!("Failed to get trigger type: {}", e)))?;
             let condition: Option<String> = row.get(4).ok().flatten();
             let function_name: String = row.get::<_, String>(5).unwrap_or_default();
             let status: String = row.get(6)
                 .map_err(|e| SakiError::QueryFailed(format!("Failed to get trigger status: {}", e)))?;
+
+            // [Fix: M6] Parse trigger_type (e.g., "BEFORE EACH ROW", "AFTER STATEMENT")
+            // Instead of hardcoding 'ROW', we extract timing and for_each correctly.
+            let (timing, for_each) = if tt.contains("EACH ROW") {
+                (tt.replace(" EACH ROW", ""), "ROW".to_string())
+            } else {
+                (tt, "STATEMENT".to_string())
+            };
+
             triggers.push(TriggerInfo {
                 name,
                 table_name,
                 event,
                 timing,
-                for_each: "ROW".to_string(),
+                for_each,
                 function_name,
                 function_schema: schema.to_string(),
                 condition,
@@ -362,10 +335,7 @@ impl OracleIntrospector {
 
     pub async fn list_foreign_keys(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Vec<ForeignKeyInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT
+        let query = "SELECT
                 a.constraint_name,
                 LISTAGG(a.column_name, ', ') WITHIN GROUP (ORDER BY a.position) AS src_cols,
                 r.owner AS fk_schema,
@@ -377,11 +347,9 @@ impl OracleIntrospector {
              JOIN all_constraints c ON a.constraint_name = c.constraint_name AND a.owner = c.owner
              JOIN all_constraints r ON c.r_constraint_name = r.constraint_name
              JOIN all_cons_columns cr ON r.constraint_name = cr.constraint_name
-             WHERE c.owner = '{}' AND c.table_name = '{}' AND c.constraint_type = 'R'
-             GROUP BY a.constraint_name, r.owner, r.table_name, c.delete_rule",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             WHERE c.owner = :1 AND c.table_name = :2 AND c.constraint_type = 'R'
+             GROUP BY a.constraint_name, r.owner, r.table_name, c.delete_rule".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         let mut fks = Vec::new();
         for row in rows {
             let constraint_name: String = row.get(0)
@@ -407,16 +375,11 @@ impl OracleIntrospector {
 
     pub async fn list_check_constraints(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Vec<CheckConstraintInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT constraint_name, search_condition
+        let query = "SELECT constraint_name, search_condition
              FROM all_constraints
-             WHERE owner = '{}' AND table_name = '{}' AND constraint_type = 'C'
-             ORDER BY constraint_name",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             WHERE owner = :1 AND table_name = :2 AND constraint_type = 'C'
+             ORDER BY constraint_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         let mut constraints = Vec::new();
         for row in rows {
             let constraint_name: String = row.get(0)
@@ -429,19 +392,14 @@ impl OracleIntrospector {
 
     pub async fn list_unique_constraints(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Vec<UniqueConstraintInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT
+        let query = "SELECT
                 a.constraint_name,
                 LISTAGG(a.column_name, ', ') WITHIN GROUP (ORDER BY a.position) AS cols
              FROM all_cons_columns a
              JOIN all_constraints c ON a.constraint_name = c.constraint_name AND a.owner = c.owner
-             WHERE c.owner = '{}' AND c.table_name = '{}' AND c.constraint_type = 'U'
-             GROUP BY a.constraint_name",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             WHERE c.owner = :1 AND c.table_name = :2 AND c.constraint_type = 'U'
+             GROUP BY a.constraint_name".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         let mut constraints = Vec::new();
         for row in rows {
             let constraint_name: String = row.get(0)
@@ -458,25 +416,17 @@ impl OracleIntrospector {
 
     pub async fn get_partition_info(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<Option<PartitionInfo>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let query = format!(
-            "SELECT partitioning_type, partition_count FROM all_part_tables WHERE owner = '{}' AND table_name = '{}'",
-            schema_esc, table_esc
-        );
-        let rows = Self::execute_query(conn.clone(), query).await?;
+        let query = "SELECT partitioning_type, partition_count FROM all_part_tables WHERE owner = :1 AND table_name = :2".to_string();
+        let rows = Self::execute_query(conn.clone(), query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         if rows.is_empty() {
             return Ok(None);
         }
 
         let partitioning_type: String = rows[0].get(0).unwrap_or_else(|_| "RANGE".to_string());
 
-        let detail_query = format!(
-            "SELECT partition_name, high_value FROM all_tab_partitions
-             WHERE table_owner = '{}' AND table_name = '{}' ORDER BY partition_position",
-            schema_esc, table_esc
-        );
-        let detail_rows = Self::execute_query(conn, detail_query).await?;
+        let detail_query = "SELECT partition_name, high_value FROM all_tab_partitions
+             WHERE table_owner = :1 AND table_name = :2 ORDER BY partition_position".to_string();
+        let detail_rows = Self::execute_query(conn, detail_query, vec![schema.to_uppercase(), table.to_uppercase()]).await?;
         let mut partitions = Vec::new();
         for row in detail_rows {
             let name: String = row.get(0).unwrap_or_default();
@@ -497,46 +447,34 @@ impl OracleIntrospector {
 
     pub async fn get_create_table_sql(&self, conn_id: &ConnectionId, schema: &str, table: &str) -> Result<String> {
         let conn = self.get_connection(conn_id)?;
-        let table_esc = Self::escape_literal(&table.to_uppercase());
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        let query = format!(
-            "SELECT dbms_metadata.get_ddl('TABLE', '{}', '{}') FROM dual",
-            table_esc, schema_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+        // [Fix: M5] Use bind parameters for DBMS_METADATA.GET_DDL
+        let query = "SELECT dbms_metadata.get_ddl('TABLE', :1, :2) FROM dual".to_string();
+        let rows = Self::execute_query(conn, query, vec![table.to_uppercase(), schema.to_uppercase()]).await?;
         if rows.is_empty() {
             return Err(SakiError::QueryFailed("Table not found".to_string()));
         }
-        let ddl: String = rows[0].get(0)
-            .map_err(|e| SakiError::QueryFailed(format!("Failed to get DDL: {}", e)))?;
+        let ddl: String = self.row_to_string_or_clob(&rows[0], 0)?;
         Ok(ddl)
     }
 
     pub async fn get_erd_data(&self, conn_id: &ConnectionId, schema: &str) -> Result<ErdData> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
         
         let tables = self.list_tables(conn_id, schema).await?;
         
         // Batch query for all columns in the schema
-        let col_query = format!(
-            "SELECT table_name, column_name, data_type, nullable, data_default
+        let col_query = "SELECT table_name, column_name, data_type, nullable, data_default
              FROM all_tab_columns
-             WHERE owner = '{}'
-             ORDER BY table_name, column_id",
-            schema_esc
-        );
-        let col_rows = Self::execute_query(conn.clone(), col_query).await?;
+             WHERE owner = :1
+             ORDER BY table_name, column_id".to_string();
+        let col_rows = Self::execute_query(conn.clone(), col_query, vec![schema.to_uppercase()]).await?;
         
         // Batch query for all primary keys in the schema
-        let pk_query = format!(
-            "SELECT acc.table_name, acc.column_name
+        let pk_query = "SELECT acc.table_name, acc.column_name
              FROM all_cons_columns acc
              JOIN all_constraints ac ON acc.constraint_name = ac.constraint_name AND acc.owner = ac.owner
-             WHERE ac.owner = '{}' AND ac.constraint_type = 'P'",
-            schema_esc
-        );
-        let pk_rows = Self::execute_query(conn.clone(), pk_query).await?;
+             WHERE ac.owner = :1 AND ac.constraint_type = 'P'".to_string();
+        let pk_rows = Self::execute_query(conn.clone(), pk_query, vec![schema.to_uppercase()]).await?;
         
         let mut pk_map: HashMap<String, Vec<String>> = HashMap::new();
         for row in pk_rows {
@@ -567,8 +505,7 @@ impl OracleIntrospector {
         }
 
         // Batch query for all foreign keys in the schema
-        let fk_query = format!(
-            "SELECT
+        let fk_query = "SELECT
                 a.table_name,
                 a.constraint_name,
                 LISTAGG(a.column_name, ', ') WITHIN GROUP (ORDER BY a.position) AS src_cols,
@@ -580,11 +517,9 @@ impl OracleIntrospector {
              JOIN all_constraints c ON a.constraint_name = c.constraint_name AND a.owner = c.owner
              JOIN all_constraints r ON c.r_constraint_name = r.constraint_name
              JOIN all_cons_columns cr ON r.constraint_name = cr.constraint_name
-             WHERE c.owner = '{}' AND c.constraint_type = 'R'
-             GROUP BY a.table_name, a.constraint_name, r.owner, r.table_name, c.delete_rule",
-            schema_esc
-        );
-        let fk_rows = Self::execute_query(conn, fk_query).await?;
+             WHERE c.owner = :1 AND c.constraint_type = 'R'
+             GROUP BY a.table_name, a.constraint_name, r.owner, r.table_name, c.delete_rule".to_string();
+        let fk_rows = Self::execute_query(conn, fk_query, vec![schema.to_uppercase()]).await?;
         
         let mut foreign_keys = HashMap::new();
         for row in fk_rows {
@@ -612,16 +547,11 @@ impl OracleIntrospector {
 
     pub async fn get_schema_completion_data(&self, conn_id: &ConnectionId, schema: &str) -> Result<HashMap<String, Vec<String>>> {
         let conn = self.get_connection(conn_id)?;
-        let schema_esc = Self::escape_literal(&schema.to_uppercase());
-        
-        let query = format!(
-            "SELECT table_name, column_name
+        let query = "SELECT table_name, column_name
              FROM all_tab_columns
-             WHERE owner = '{}'
-             ORDER BY table_name, column_id",
-            schema_esc
-        );
-        let rows = Self::execute_query(conn, query).await?;
+             WHERE owner = :1
+             ORDER BY table_name, column_id".to_string();
+        let rows = Self::execute_query(conn, query, vec![schema.to_uppercase()]).await?;
         
         let mut result: HashMap<String, Vec<String>> = HashMap::new();
         for row in rows {
@@ -660,5 +590,25 @@ impl OracleIntrospector {
     #[allow(dead_code)]
     fn log_query(query: &str) {
         debug!("Oracle introspect query: {}", query);
+    }
+
+    fn row_to_string_or_clob(&self, row: &oracle::Row, idx: usize) -> Result<String> {
+        // [Fix: M5] Oracle DBMS_METADATA often returns CLOB which requires special handling
+        match row.get::<_, Option<String>>(idx) {
+            Ok(Some(s)) => Ok(s),
+            Ok(None) => Ok(String::new()),
+            Err(_) => {
+                // Try as CLOB explicitly if String fails
+                match row.get::<_, Option<Clob>>(idx) {
+                    Ok(Some(mut clob)) => {
+                        let mut s = String::new();
+                        use std::io::Read;
+                        clob.read_to_string(&mut s).map_err(|e| SakiError::QueryFailed(format!("Failed to read CLOB: {}", e)))?;
+                        Ok(s)
+                    }
+                    _ => Ok(String::new())
+                }
+            }
+        }
     }
 }

@@ -31,6 +31,7 @@ let savedConnections = $state<SavedConnection[]>([]);
 let activeConnections = $state<Map<string, ActiveConnection>>(new SvelteMap());
 let connectingIds = $state<Set<string>>(new SvelteSet());
 let editDialogConnectionId = $state<string | null>(null);
+let availableEngines = $state<string[]>([]);
 
 // Oracle specific setup state
 let oracleDriverStatus = $state<OracleDriverStatus | null>(null);
@@ -45,6 +46,7 @@ export function getActiveConnections(): Map<string, ActiveConnection> { return a
 export function getConnectingIds(): Set<string> { return connectingIds; }
 export function getEditDialogConnectionId(): string | null { return editDialogConnectionId; }
 export function hasActiveConnections(): boolean { return activeConnections.size > 0; }
+export function getAvailableEngines(): string[] { return availableEngines; }
 
 export function getOracleDriverStatus(): OracleDriverStatus | null { return oracleDriverStatus; }
 export function getOracleDownloadProgress() { return oracleDownloadProgress; }
@@ -103,7 +105,12 @@ export async function downloadOracleDriver() {
 
 export async function loadConnections() {
   try {
-    savedConnections = await invoke('list_connections');
+    const [conns, engines] = await Promise.all([
+      invoke<SavedConnection[]>('list_connections'),
+      invoke<string[]>('available_engines'),
+    ]);
+    savedConnections = conns;
+    availableEngines = engines;
     indexConnections(savedConnections);
   } catch (e) {
     setError(String(e));

@@ -46,6 +46,8 @@ export interface ConnectionConfig {
   username: string;
   password: string;
   ssl_mode: string;
+  // [Fix: M7] Options field for engine-specific settings like Oracle TNS
+  options: Record<string, string>;
 }
 
 export interface SavedConnection {
@@ -57,6 +59,8 @@ export interface SavedConnection {
   database: string;
   username: string;
   ssl_mode: string;
+  // [Fix: M7] Options field
+  options: Record<string, string>;
   created_at: string;
   updated_at: string;
   last_connected_at: string | null;
@@ -71,6 +75,8 @@ export interface ConnectionInput {
   username: string;
   password: string;
   ssl_mode: string;
+  // [Fix: M7] Options field for engine-specific settings like Oracle TNS
+  options: Record<string, string>;
 }
 
 // ── Query result types ──
