@@ -72,6 +72,7 @@ import {
   buildDataTabQuery,
   filterToSql,
   updateDataTabFilters,
+  updateDataTabRawFilter,
   updateDataTabPageSize,
 } from './data-tab.svelte';
 import {
@@ -244,6 +245,7 @@ export function getAppState() {
     buildDataTabQuery,
     filterToSql,
     updateDataTabFilters,
+    updateDataTabRawFilter,
     updateDataTabPageSize,
 
     // ── Query tab operations ──

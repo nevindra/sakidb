@@ -6,13 +6,15 @@
   import CellDisplay from './CellDisplay.svelte';
   import CellEditor from './CellEditor.svelte';
   import CellExpandPopover from './CellExpandPopover.svelte';
+  import RowEditDialog from './RowEditDialog.svelte';
+  import EditModeTutorial from './EditModeTutorial.svelte';
   import RowDetailPanel from './RowDetailPanel.svelte';
   import GridFilterBar from './GridFilterBar.svelte';
   import GridContextMenu from './GridContextMenu.svelte';
   import GridBottomBar from './GridBottomBar.svelte';
   import ConfirmDialog from '../ui/confirm-dialog/ConfirmDialog.svelte';
   import ExportDialog from '../structure/ExportDialog.svelte';
-  import { Plus, Trash2, Undo2, Download } from '@lucide/svelte';
+  import { Pencil, Plus, Trash2, Undo2, Download } from '@lucide/svelte';
   import {
     generateUpdateSql,
     generateInsertSql,
@@ -35,6 +37,7 @@
     databaseName = '',
     columnInfos = [] as ColumnInfo[],
     filters = [] as TableFilter[],
+    rawSqlFilter = '',
     currentPage = 0,
     pageSize = 50,
     totalRowEstimate = 0,
@@ -50,6 +53,7 @@
     databaseName?: string;
     columnInfos?: ColumnInfo[];
     filters?: TableFilter[];
+    rawSqlFilter?: string;
     currentPage?: number;
     pageSize?: number;
     totalRowEstimate?: number;
@@ -138,6 +142,15 @@
     }
   });
 
+  // Load tutorial preference
+  $effect(() => {
+    if (isDataTab && canEdit) {
+      invoke<string | null>('get_preference', { key: 'hide_edit_tutorial' }).then((val) => {
+        hideTutorial = val === 'true';
+      }).catch(() => {});
+    }
+  });
+
   const totalTableWidth = $derived(
     COL_WIDTH_NUM + colWidths.reduce((sum, w) => sum + w, 0)
   );
@@ -198,6 +211,12 @@
   let confirmApplyOpen = $state(false);
   let confirmDiscardOpen = $state(false);
   let exportOpen = $state(false);
+  let tutorialOpen = $state(false);
+  let hideTutorial = $state(true); // default hidden until we know preference
+  let rowEditOpen = $state(false);
+  let rowEditMode = $state<'add' | 'edit'>('add');
+  let rowEditValues = $state<CellValue[] | null>(null);
+  let rowEditDisplayIdx = $state<number | null>(null);
 
   // Undo stack
   type UndoAction =
@@ -252,6 +271,7 @@
   const app = getAppState();
   const dialect = $derived((() => { const e = app.getSavedConnection(savedConnectionId)?.engine; return e ? getDialect(e as EngineType) : undefined; })());
   const filterWhereClause = $derived.by(() => {
+    if (rawSqlFilter) return rawSqlFilter;
     if (filters.length === 0) return undefined;
     const clauses = filters.map(f => app.filterToSql(f)).filter(Boolean);
     return clauses.length > 0 ? clauses.join(' AND ') : undefined;
@@ -509,9 +529,13 @@
     expandedCell = null;
   }
 
+  function ctxEditRow() {
+    if (!contextMenu) return;
+    openEditRowDialog(contextMenu.rowIndex);
+  }
+
   function ctxInsertRow() {
-    if (!editMode) editMode = true;
-    addRow();
+    openAddRowDialog();
   }
 
   function ctxDeleteRow() {
@@ -536,6 +560,12 @@
     if (!contextMenu) return;
     selectedRowIndex = contextMenu.rowIndex;
     detailPanelOpen = true;
+  }
+
+  function handleDetailEdit() {
+    if (selectedRowIndex === null) return;
+    detailPanelOpen = false;
+    openEditRowDialog(selectedRowIndex);
   }
 
   function handleDetailNavigate(direction: 'prev' | 'next') {
@@ -611,6 +641,65 @@
         editingCell = { row: rowCount + pendingInserts.length - 1, col: 0 };
       }
     });
+  }
+
+  function enterEditMode() {
+    editMode = true;
+    if (!hideTutorial) {
+      tutorialOpen = true;
+    }
+  }
+
+  function openAddRowDialog() {
+    if (!editMode) editMode = true;
+    rowEditMode = 'add';
+    rowEditValues = null;
+    rowEditDisplayIdx = null;
+    rowEditOpen = true;
+  }
+
+  function openEditRowDialog(displayIdx: number) {
+    if (!editMode) editMode = true;
+    rowEditMode = 'edit';
+    rowEditValues = getRowCells(displayIdx);
+    rowEditDisplayIdx = displayIdx;
+    rowEditOpen = true;
+  }
+
+  function handleRowEditConfirm(newValues: CellValue[]) {
+    if (rowEditMode === 'add') {
+      // Insert as a new pending row
+      pendingInserts.push(newValues);
+      pendingInsertsVer++;
+      undoStack.push({ type: 'insert' });
+      undoStackVer++;
+      requestAnimationFrame(() => {
+        if (scrollContainer) {
+          scrollContainer.scrollTop = (rowCount + pendingInserts.length - 1) * ROW_HEIGHT;
+        }
+      });
+    } else if (rowEditDisplayIdx !== null) {
+      // Apply cell-level updates for changed values
+      if (isInsertRow(rowEditDisplayIdx)) {
+        const insertIdx = rowEditDisplayIdx - rowCount;
+        pendingInserts[insertIdx] = newValues;
+        pendingInsertsVer++;
+      } else {
+        const dataRow = getDataRowIndex(rowEditDisplayIdx);
+        for (let colIdx = 0; colIdx < numCols; colIdx++) {
+          const original = getOriginalCell(dataRow, colIdx);
+          const key = cellKey(dataRow, colIdx);
+          if (!cellValueEquals(newValues[colIdx], original)) {
+            pendingUpdates.set(key, newValues[colIdx]);
+          } else {
+            pendingUpdates.delete(key);
+          }
+        }
+        pendingUpdatesVer++;
+        undoStack.push({ type: 'update', key: -1, oldValue: undefined });
+        undoStackVer++;
+      }
+    }
   }
 
   function deleteSelectedRows() {
@@ -815,48 +904,36 @@
     {#if isDataTab}
     <div class="border-b border-border bg-card shrink-0">
       <div class="flex items-center gap-1.5 px-2 py-1 min-h-[28px]">
-        <!-- Filter section -->
-        <GridFilterBar columns={result.columns} {filters} {tabId} onrefresh={onreload} />
+        <!-- Filter section (always visible) -->
+        <GridFilterBar columns={result.columns} {filters} {rawSqlFilter} {tabId} onrefresh={onreload} />
 
-        <!-- Export button -->
-        {#if canExport}
-          <div class="w-px h-4 bg-border/60 shrink-0"></div>
-          <button
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
-            onclick={() => (exportOpen = true)}
-            title="Export table"
-          >
-            <Download class="h-3.5 w-3.5" />
-          </button>
-        {/if}
-
-        <!-- Edit actions -->
-        {#if canEdit}
+        {#if editMode}
+          <!-- ── Edit mode toolbar ── -->
           <div class="w-px h-4 bg-border/60 shrink-0"></div>
 
           <button
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
-            onclick={addRow}
+            class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-success hover:bg-success/10 transition-colors shrink-0"
+            onclick={openAddRowDialog}
             disabled={isApplying}
-            title="Add row"
+            title="Add row (dialog)"
           >
-            <Plus class="h-3.5 w-3.5" />
+            <Plus class="h-3 w-3" />
+            <span>Add Row</span>
           </button>
 
           {#if selectedRowCount > 0}
             <button
-              class="p-1 rounded text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+              class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-destructive hover:bg-destructive/10 transition-colors shrink-0"
               onclick={deleteSelectedRows}
               disabled={isApplying}
               title="Delete selected rows"
             >
-              <Trash2 class="h-3.5 w-3.5" />
+              <Trash2 class="h-3 w-3" />
+              <span>Delete ({selectedRowCount})</span>
             </button>
           {/if}
 
-          {#if totalChanges > 0}
-            <div class="w-px h-4 bg-border/60 shrink-0"></div>
-
+          {#if hasUndoActions}
             <button
               class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors disabled:opacity-30 shrink-0"
               onclick={handleUndo}
@@ -865,25 +942,56 @@
             >
               <Undo2 class="h-3.5 w-3.5" />
             </button>
+          {/if}
 
-            <span class="text-[11px] text-muted-foreground tabular-nums shrink-0">
-              {totalChanges}
+          {#if totalChanges > 0}
+            <div class="w-px h-4 bg-border/60 shrink-0"></div>
+            <span class="text-[11px] text-muted-foreground tabular-nums shrink-0" title="{updateCount} update{updateCount !== 1 ? 's' : ''}, {insertCount} insert{insertCount !== 1 ? 's' : ''}, {deleteCount} delete{deleteCount !== 1 ? 's' : ''}">
+              {totalChanges} change{totalChanges !== 1 ? 's' : ''}
             </span>
+          {/if}
 
-            <button
-              class="text-[11px] px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
-              onclick={() => { confirmDiscardOpen = true; }}
-              disabled={isApplying}
-            >
-              Discard
-            </button>
+          <div class="w-px h-4 bg-border/60 shrink-0"></div>
 
+          <button
+            class="text-[11px] px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
+            onclick={() => { if (totalChanges > 0) { confirmDiscardOpen = true; } else { editMode = false; } }}
+            disabled={isApplying}
+          >
+            {totalChanges > 0 ? 'Discard' : 'Done'}
+          </button>
+
+          {#if totalChanges > 0}
             <button
               class="text-[11px] px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
               onclick={() => { confirmApplyOpen = true; }}
               disabled={isApplying}
             >
               {isApplying ? 'Applying...' : 'Apply'}
+            </button>
+          {/if}
+        {:else}
+          <!-- ── Read mode toolbar ── -->
+          {#if canExport}
+            <div class="w-px h-4 bg-border/60 shrink-0"></div>
+            <button
+              class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors shrink-0"
+              onclick={() => (exportOpen = true)}
+              title="Export table"
+            >
+              <Download class="h-3.5 w-3.5" />
+            </button>
+          {/if}
+
+          {#if canEdit}
+            <div class="w-px h-4 bg-border/60 shrink-0"></div>
+            <button
+              class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors shrink-0"
+              onclick={enterEditMode}
+              title="Enter edit mode"
+            >
+              <Pencil class="h-3 w-3" />
+              <span>Edit</span>
             </button>
           {/if}
         {/if}
@@ -937,8 +1045,8 @@
               {@const isSelected = isRowSelected(displayIdx)}
               <tr
                 class="transition-colors
-                  {isDeleted ? 'opacity-40 line-through' : ''}
-                  {isSelected ? 'bg-primary/10' : ''}
+                  {isDeleted ? 'bg-destructive/8 line-through opacity-50' : ''}
+                  {isSelected && !isDeleted ? 'bg-primary/10' : ''}
                   {selectedRowIndex === displayIdx && !editMode ? 'bg-accent/20' : ''}
                   {!isDeleted && !isSelected && displayIdx % 2 === 1 ? 'bg-muted/30' : ''}
                   {!isDeleted && !isSelected ? 'hover:bg-accent/30' : ''}"
@@ -955,6 +1063,8 @@
                 >
                   {#if isInsert}
                     +
+                  {:else if isDeleted}
+                    ×
                   {:else}
                     {displayIdx + 1}
                   {/if}
@@ -992,7 +1102,11 @@
                         <CellDisplay value={pendingVal} dataType={col.data_type} />
                       {:else}
                         {@const display = (result as ColumnarResultData).getCellDisplay(dataRow, colIdx)}
-                        <span class={display.cls}>{display.text}</span>
+                        {#if display.isBinaryPreview}
+                          <CellDisplay value={(result as ColumnarResultData).toCellValue(dataRow, colIdx)} dataType={col.data_type} />
+                        {:else}
+                          <span class={display.cls}>{display.text}</span>
+                        {/if}
                       {/if}
                     {:else}
                       <CellDisplay value={getDisplayCell(displayIdx, colIdx)} dataType={col.data_type} />
@@ -1056,6 +1170,7 @@
     {canEdit}
     onclose={() => { contextMenu = null; }}
     oneditcell={ctxEditCell}
+    oneditrow={ctxEditRow}
     oninsertrow={ctxInsertRow}
     ondeleterow={ctxDeleteRow}
     onviewdetails={ctxViewDetails}
@@ -1069,7 +1184,24 @@
   rowIndex={selectedRowIndex ?? 0}
   columns={result.columns}
   totalRows={totalDisplayRows}
+  {canEdit}
   onnavigate={handleDetailNavigate}
+  onedit={handleDetailEdit}
+/>
+
+<!-- Edit mode tutorial -->
+<EditModeTutorial bind:open={tutorialOpen} onhide={() => { hideTutorial = true; }} />
+
+<!-- Row edit dialog (add / edit) -->
+<RowEditDialog
+  bind:open={rowEditOpen}
+  mode={rowEditMode}
+  columns={result.columns}
+  {columnInfos}
+  values={rowEditValues}
+  {schema}
+  {table}
+  onconfirm={handleRowEditConfirm}
 />
 
 <!-- Confirm apply dialog -->

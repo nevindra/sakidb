@@ -300,6 +300,7 @@ export interface DataTab {
   currentPage: number;
   pageSize: number;
   filters: TableFilter[];
+  rawSqlFilter?: string;
 }
 
 export type CompareMatchMode = 'position' | 'key';

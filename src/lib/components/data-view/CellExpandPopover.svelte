@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import type { CellValue, ColumnDef } from '$lib/types';
-  import { cellToPlainText, cellToJsonValue, copyToClipboard } from '$lib/copy-utils';
-  import { cellToImageSrc } from '$lib/image-utils';
+  import { cellToPlainText, copyToClipboard } from '$lib/copy-utils';
+  import { detectBinaryFormat } from '$lib/binary-utils';
   import { getTypeCategory } from '$lib/type-utils';
+  import BinaryPreview from './BinaryPreview.svelte';
 
   let {
     cell,
@@ -44,36 +44,54 @@
   });
 
   const isJson = $derived(cell !== 'Null' && 'Json' in cell);
+  const isText = $derived(cell !== 'Null' && typeof cell === 'object' && 'Text' in cell);
   const isNull = $derived(cell === 'Null');
   const isBytes = $derived(cell !== 'Null' && typeof cell === 'object' && 'Bytes' in cell);
-  const imageSrc = $derived(cellToImageSrc(cell));
+  const bytesFormat = $derived(isBytes ? detectBinaryFormat((cell as { Bytes: number[] }).Bytes) : null);
+  const hasBinaryPreview = $derived(bytesFormat !== null && bytesFormat.kind !== 'unknown');
   const category = $derived(getTypeCategory(column.data_type));
   const isXml = $derived(category === 'xml');
 
-  onDestroy(() => {
-    if (imageSrc) URL.revokeObjectURL(imageSrc);
-  });
+  // Larger popover for PDF
+  const isPdf = $derived(bytesFormat?.kind === 'pdf');
+  const baseMaxW = $derived(isPdf ? 560 : 400);
+  const baseMaxH = $derived(isPdf ? 480 : 300);
 
-  // Position: prefer below-right of anchor, flip if needed
+  // Position: prefer below-right of anchor, stay close to cell
+  const MARGIN = 4;
+  const effectiveMaxW = $derived(Math.min(baseMaxW, containerRect.width - MARGIN * 2));
+  const effectiveMaxH = $derived(Math.min(baseMaxH, containerRect.height - MARGIN * 2));
+
   const position = $derived.by(() => {
-    const MARGIN = 8;
-    const maxW = 400;
-    const maxH = 300;
+    const cellTop = anchorRect.top - containerRect.top;
+    const cellBottom = anchorRect.bottom - containerRect.top;
+    const cellLeft = anchorRect.left - containerRect.left;
 
-    let top = anchorRect.bottom - containerRect.top + MARGIN;
-    let left = anchorRect.left - containerRect.left;
+    const spaceBelow = containerRect.height - cellBottom;
+    const spaceAbove = cellTop;
 
-    // Flip up if not enough space below
-    if (top + maxH > containerRect.height) {
-      top = anchorRect.top - containerRect.top - maxH - MARGIN;
+    // Vertical: use top when below, bottom when above (so popover hugs the cell)
+    let vertical: { top: string; bottom: string };
+    if (spaceBelow >= effectiveMaxH + MARGIN || spaceBelow >= spaceAbove) {
+      // Below: anchor popover top to cell bottom
+      const top = Math.max(MARGIN, cellBottom + MARGIN);
+      vertical = { top: `${top}px`, bottom: 'auto' };
+    } else {
+      // Above: anchor popover bottom to cell top (content grows upward)
+      const bottom = Math.max(MARGIN, containerRect.height - cellTop + MARGIN);
+      vertical = { top: 'auto', bottom: `${bottom}px` };
     }
 
-    // Clamp left
-    if (left + maxW > containerRect.width) {
-      left = Math.max(0, containerRect.width - maxW - MARGIN);
+    // Horizontal: align with cell left, or anchor to cell right if overflows
+    const cellRight = anchorRect.right - containerRect.left;
+    let left = cellLeft;
+    if (left + effectiveMaxW > containerRect.width - MARGIN) {
+      // Align popover right edge with cell right edge
+      left = cellRight - effectiveMaxW;
     }
+    left = Math.max(MARGIN, left);
 
-    return { top: Math.max(0, top), left: Math.max(0, left) };
+    return { ...vertical, left };
   });
 
   async function handleCopy() {
@@ -117,7 +135,7 @@
   bind:this={popoverEl}
   use:setupClickOutside
   class="absolute z-30 border border-border bg-card rounded-md shadow-xl shadow-black/40 overflow-hidden"
-  style="top: {position.top}px; left: {position.left}px; max-width: 400px; max-height: 300px;"
+  style="top: {position.top}; bottom: {position.bottom}; left: {position.left}px; max-width: {effectiveMaxW}px; max-height: {effectiveMaxH}px;"
 >
   <!-- Header -->
   <div class="flex items-center justify-between px-3 py-1.5 border-b border-border bg-card">
@@ -125,22 +143,31 @@
       <span class="font-medium text-foreground">{column.name}</span>
       <span class="text-text-dim text-[10px]">{column.data_type}</span>
     </div>
-    <button
-      class="text-xs px-2 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-      onclick={handleCopy}
-    >
-      {copied ? 'Copied' : 'Copy'}
-    </button>
+    {#if !hasBinaryPreview}
+      <button
+        class="text-xs px-2 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+        onclick={handleCopy}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    {/if}
   </div>
 
   <!-- Content -->
-  <div class="overflow-auto p-3 text-xs" style="max-height: 256px;">
-    {#if imageSrc}
-      <img src={imageSrc} alt={column.name} class="max-w-full max-h-[230px] rounded object-contain" />
+  <div class="overflow-auto p-3 text-xs" style="max-height: {effectiveMaxH - 40}px;">
+    {#if isBytes && hasBinaryPreview}
+      <BinaryPreview
+        bytes={(cell as { Bytes: number[] }).Bytes}
+        columnName={column.name}
+        maxImageHeight={isPdf ? 0 : effectiveMaxH - 80}
+        pdfHeight={effectiveMaxH - 80}
+      />
     {:else if isNull}
       <span class="text-text-dim italic">NULL</span>
     {:else if isJson}
       <pre class="font-mono text-primary whitespace-pre-wrap break-words">{formattedValue}</pre>
+    {:else if isText}
+      <pre class="font-mono whitespace-pre-wrap break-words">{formattedValue}</pre>
     {:else if isXml}
       <pre class="font-mono text-primary whitespace-pre-wrap break-words">{formattedValue}</pre>
     {:else if isBytes}

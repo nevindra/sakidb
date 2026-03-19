@@ -93,10 +93,11 @@ pub async fn test_connection(
 ) -> Result<(), String> {
     // When editing an existing connection with no password entered,
     // look up the stored password so the test uses valid credentials.
+    // If the lookup fails (e.g. unsaved connection), fall back to empty.
     let stored_password = if input.password.is_empty() {
         if let Some(ref conn_id) = id {
             let store = state.store.lock().await;
-            store.get_connection(conn_id).map_err(|e| e.to_string())?.password
+            store.get_connection(conn_id).ok().map(|c| c.password).unwrap_or_default()
         } else {
             String::new()
         }

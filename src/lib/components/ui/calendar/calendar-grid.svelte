@@ -11,6 +11,6 @@
 
 <CalendarPrimitive.Grid
 	bind:ref
-	class={cn("mt-4 flex w-full border-collapse flex-col gap-1", className)}
+	class={cn("mt-1 flex w-full border-collapse flex-col", className)}
 	{...restProps}
 />

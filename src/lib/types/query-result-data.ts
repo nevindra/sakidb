@@ -1,5 +1,6 @@
 import type { ColumnDef, CellValue, ColumnArray, TextColumn } from '$lib/types';
 import { getCategoryCss } from '$lib/type-utils';
+import { detectBinaryFormat, formatBinaryLabel } from '$lib/binary-utils';
 
 /**
  * Class wrapper for query results that prevents Svelte 5 from
@@ -129,7 +130,7 @@ export class ColumnarResultData {
   }
 
   /** Get display text and CSS class for a cell — fast path for rendering. */
-  getCellDisplay(row: number, col: number): { text: string; cls: string; isNull: boolean } {
+  getCellDisplay(row: number, col: number): { text: string; cls: string; isNull: boolean; isBinaryPreview?: boolean } {
     const cd = this.columnData[col];
     if (cd.nulls[row] !== 0) return { text: 'NULL', cls: 'text-text-dim italic', isNull: true };
 
@@ -147,6 +148,15 @@ export class ColumnarResultData {
       }
       case 'bytes': {
         const bytes = cd.values[row];
+        const format = detectBinaryFormat(Array.from(bytes.slice(0, 12)));
+        if (format.kind !== 'unknown') {
+          return {
+            text: formatBinaryLabel(format, bytes.length),
+            cls: 'text-text-dim text-[10px]',
+            isNull: false,
+            isBinaryPreview: true,
+          };
+        }
         const hex = Array.from(bytes.slice(0, 16))
           .map(b => b.toString(16).padStart(2, '0'))
           .join(' ');
@@ -157,5 +167,12 @@ export class ColumnarResultData {
         };
       }
     }
+  }
+
+  /** Get raw bytes for a cell (for binary preview rendering). Returns null if not bytes or null. */
+  getBytes(row: number, col: number): Uint8Array | null {
+    const cd = this.columnData[col];
+    if (cd.type !== 'bytes' || cd.nulls[row] !== 0) return null;
+    return cd.values[row];
   }
 }
