@@ -117,6 +117,10 @@ export function indexMenuItems(): MenuEntry[] {
 
 export function foreignTableMenuItems(): MenuEntry[] {
   return [
+    { id: 'open-data', label: 'Open Data' },
+    { id: 'view-structure', label: 'View Structure', when: c => c.capabilities?.introspection !== false },
+    { id: 'new-query', label: 'New Query', when: c => c.capabilities?.sql !== false },
+    { kind: 'separator' },
     { id: 'copy-name', label: 'Copy Name' },
     { kind: 'separator', when: c => c.capabilities?.sql !== false },
     { id: 'drop', label: 'Drop Foreign Table...', variant: 'destructive', when: c => c.capabilities?.sql !== false },
@@ -134,11 +138,12 @@ export function databaseMenuItems(ctx: MenuContext): MenuEntry[] {
     { kind: 'separator', when: () => ctx.isDbConnected === true && ctx.capabilities?.restore === true },
     { id: 'refresh', label: 'Refresh', when: () => ctx.isDbConnected === true },
     { id: 'disconnect', label: 'Disconnect', when: () => ctx.isDbConnected === true },
+    { kind: 'separator', when: () => ctx.isDbConnected === true && ctx.capabilities?.sql !== false },
+    { id: 'create-schema', label: 'Create Schema...', when: () => ctx.isDbConnected === true && ctx.capabilities?.sql !== false },
     // Disconnected
     { id: 'connect', label: 'Connect', when: () => ctx.isDbConnected !== true },
-    // Multi-database ops
+    // Database ops
     { kind: 'separator', when: () => ctx.capabilities?.multi_database === true },
-    { id: 'create-db', label: 'New Database', when: () => ctx.capabilities?.multi_database === true },
     { id: 'rename-db', label: 'Rename Database', when: () => ctx.capabilities?.multi_database === true },
     { id: 'edit-db', label: 'Edit Database...', when: () => ctx.capabilities?.multi_database === true },
     { kind: 'separator', when: () => ctx.capabilities?.multi_database === true },
@@ -171,6 +176,11 @@ export function connectionTreeMenuItems(ctx: MenuContext): MenuEntry[] {
     { id: 'integrity-check', label: 'Integrity Check', when: () => ctx.isConnected === true && ctx.engineType === 'sqlite' },
     { kind: 'separator', when: () => ctx.isConnected === true && ctx.engineType === 'sqlite' },
     { id: 'disconnect', label: 'Disconnect', when: () => ctx.isConnected === true },
+    // Database & schema creation
+    { kind: 'separator', when: () => ctx.isConnected === true && ctx.capabilities?.multi_database === true },
+    { id: 'create-db', label: 'New Database', when: () => ctx.isConnected === true && ctx.capabilities?.multi_database === true },
+    { kind: 'separator', when: () => ctx.isConnected === true && ctx.capabilities?.schemas === true },
+    { id: 'create-schema', label: 'Create Schema...', when: () => ctx.isConnected === true && ctx.capabilities?.schemas === true },
     // Disconnected
     { id: 'connect', label: 'Connect', when: () => ctx.isConnected !== true },
     // Always

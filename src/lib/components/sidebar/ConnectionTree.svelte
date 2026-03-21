@@ -10,6 +10,8 @@
   import DatabaseNode from './tree/DatabaseNode.svelte';
   import SchemaNode from './tree/SchemaNode.svelte';
   import HighlightMatch from './HighlightMatch.svelte';
+  import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
+  import { getDialect } from '$lib/dialects';
 
   const ENGINE_SHORT: Record<EngineType, string> = {
     postgres: 'PG',
@@ -112,6 +114,22 @@
 
   const connMenuCtx: MenuContext = $derived({ capabilities, isConnected, engineType: connection.engine });
 
+  let showCreateSchema = $state(false);
+  let showCreateDb = $state(false);
+
+  async function handleCreateSchema(name: string) {
+    const dialect = getDialect(connection.engine as EngineType);
+    const rid = app._getRuntimeId(connection.id, connection.database);
+    if (!rid) return;
+    const sql = dialect.createSchema(name);
+    await invoke('execute_batch', { activeConnectionId: rid, sql });
+    await app.refreshDatabases(connection.id);
+  }
+
+  async function handleCreateDatabase(name: string) {
+    await app.createDatabase(connection.id, name);
+  }
+
   function handleConnMenuAction(id: string) {
     switch (id) {
       case 'new-query': return app.openQueryTab(connection.id, connection.database);
@@ -133,6 +151,8 @@
       case 'connect': return app.connectToDatabase(connection.id);
       case 'edit': return app.openEditDialog(connection.id);
       case 'delete': return app.deleteConnection(connection.id);
+      case 'create-schema': showCreateSchema = true; return;
+      case 'create-db': showCreateDb = true; return;
     }
   }
 </script>
@@ -215,3 +235,23 @@
 
   <ContextMenuRenderer items={connectionTreeMenuItems(connMenuCtx)} ctx={connMenuCtx} onaction={handleConnMenuAction} />
 </ContextMenu.Root>
+
+<InputDialog
+  bind:open={showCreateSchema}
+  title="Create Schema"
+  description="Enter a name for the new schema."
+  label="Schema name"
+  placeholder="new_schema"
+  confirmLabel="Create"
+  onconfirm={handleCreateSchema}
+/>
+
+<InputDialog
+  bind:open={showCreateDb}
+  title="New Database"
+  description="Enter a name for the new database."
+  label="Database name"
+  placeholder="my_database"
+  confirmLabel="Create"
+  onconfirm={handleCreateDatabase}
+/>

@@ -67,6 +67,10 @@
 
   function handleMenuAction(id: string) {
     switch (id) {
+      case 'open-data': return connectionId && databaseName && app.openDataTab(connectionId, databaseName, schema, foreignTable.name);
+      case 'view-structure': return connectionId && databaseName && app.openStructureTab(connectionId, databaseName, schema, foreignTable.name);
+      case 'new-query': return connectionId && databaseName && app.openQueryTab(connectionId, databaseName,
+        `SELECT * FROM ${dialect?.qualifiedTable(schema, foreignTable.name) ?? '"' + foreignTable.name + '"'} LIMIT 100;`);
       case 'copy-name': return navigator.clipboard.writeText(
         dialect?.qualifiedTable(schema, foreignTable.name) ?? `"${schema}"."${foreignTable.name}"`);
       case 'drop': dropConfirmOpen = true; return;

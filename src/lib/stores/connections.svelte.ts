@@ -286,7 +286,7 @@ export async function dropDatabase(savedConnectionId: string, dbName: string) {
         const databases: DatabaseInfo[] = await invoke('list_databases', {
           activeConnectionId: anyDb.value.runtimeConnectionId,
         });
-        conn.databases = databases;
+        activeConnections.set(savedConnectionId, { ...conn, databases });
       } catch (e) {
         setError(String(e));
       }
@@ -336,18 +336,20 @@ export async function refreshDatabases(savedConnectionId: string) {
     const databases: DatabaseInfo[] = await invoke('list_databases', {
       activeConnectionId: anyDb.value.runtimeConnectionId,
     });
-    conn.databases = databases;
 
-    for (const [, dbConn] of conn.activeDatabases) {
+    for (const [dbName, dbConn] of conn.activeDatabases) {
       try {
         const schemas: SchemaInfo[] = await invoke('list_schemas', {
           activeConnectionId: dbConn.runtimeConnectionId,
         });
-        dbConn.schemas = schemas;
+        conn.activeDatabases.set(dbName, { runtimeConnectionId: dbConn.runtimeConnectionId, schemas });
       } catch {
         // Schema refresh failure is non-fatal
       }
     }
+
+    // Replace the outer entry to trigger activeConnections.get() subscribers
+    activeConnections.set(savedConnectionId, { ...conn, databases });
   } catch (e) {
     setError(String(e));
   }

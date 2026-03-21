@@ -11,6 +11,7 @@
   import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
   import SchemaNode from './SchemaNode.svelte';
   import RestoreDialog from './RestoreDialog.svelte';
+  import EditDatabaseDialog from './EditDatabaseDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { getDialect } from '$lib/dialects';
   import { invoke } from '@tauri-apps/api/core';
@@ -128,8 +129,8 @@
   const showCascade = $derived(engineType === 'postgres');
 
   let showDropConfirm = $state(false);
-  let showCreateDialog = $state(false);
   let showRenameDialog = $state(false);
+  let showEditDbDialog = $state(false);
   let showDbRestore = $state(false);
   let showSchemaRestore = $state(false);
   let restoreSchemaName = $state('');
@@ -143,10 +144,6 @@
 
   async function handleDropDatabase() {
     await app.dropDatabase(connectionId, database.name);
-  }
-
-  async function handleCreateDatabase(name: string) {
-    await app.createDatabase(connectionId, name);
   }
 
   async function handleRenameDatabase(newName: string) {
@@ -166,17 +163,10 @@
       case 'refresh': return handleRefresh();
       case 'disconnect': return app.disconnectSpecificDatabase(connectionId, database.name);
       case 'connect': return app.connectToSpecificDatabase(connectionId, database.name);
-      case 'create-db': showCreateDialog = true; return;
       case 'rename-db': showRenameDialog = true; return;
-      case 'edit-db': {
-        // Open a query tab with ALTER DATABASE template
-        if (dialect) {
-          const sql = `-- Edit database properties\nALTER DATABASE ${dialect.quoteIdent(database.name)}\n    -- OWNER TO new_owner\n    -- SET configuration_parameter = value\n;\n`;
-          app.openQueryTab(connectionId, database.name, sql);
-        }
-        return;
-      }
+      case 'edit-db': showEditDbDialog = true; return;
       case 'drop-db': showDropConfirm = true; return;
+      case 'create-schema': showCreateSchemaDialog = true; return;
     }
   }
 
@@ -315,15 +305,6 @@
   onconfirm={handleDropDatabase}
 />
 
-<InputDialog
-  bind:open={showCreateDialog}
-  title="New Database"
-  description="Enter a name for the new database."
-  label="Database name"
-  placeholder="my_database"
-  confirmLabel="Create"
-  onconfirm={handleCreateDatabase}
-/>
 
 <InputDialog
   bind:open={showRenameDialog}
@@ -379,4 +360,12 @@
   loading={dropSchemaLoading}
   {showCascade}
   onconfirm={handleDropSchema}
+/>
+
+<EditDatabaseDialog
+  bind:open={showEditDbDialog}
+  databaseName={database.name}
+  {connectionId}
+  isTemplate={database.is_template}
+  onedited={handleRefresh}
 />
