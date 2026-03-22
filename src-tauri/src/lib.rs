@@ -81,6 +81,26 @@ pub fn run() {
         );
     }
 
+    // Register Oracle driver
+    #[cfg(feature = "oracle")]
+    {
+        use sakidb_oracle::OracleDriver;
+        let ora = Arc::new(OracleDriver::new());
+        registry.register(
+            sakidb_core::types::EngineType::Oracle,
+            DriverEntry {
+                driver: ora.clone(),
+                sql: Some(ora.clone()),
+                introspector: Some(ora.clone()),
+                exporter: Some(ora.clone()),
+                restorer: Some(ora.clone()),
+                formatter: Some(ora.clone()),
+                key_value: None,
+                document: None,
+            },
+        );
+    }
+
     let app_state = AppState {
         registry: Arc::new(registry),
         store: Arc::new(Mutex::new(store)),
@@ -124,6 +144,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::connection::available_engines,
+            commands::connection::get_oracle_driver_status,
+            commands::connection::download_oracle_driver,
             commands::connection::save_connection,
             commands::connection::list_connections,
             commands::connection::delete_connection,

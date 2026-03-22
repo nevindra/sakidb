@@ -13,6 +13,7 @@ import {
   getActiveConnections,
   getConnectingIds,
   getEditDialogConnectionId,
+  getAvailableEngines,
   hasActiveConnections,
   getRuntimeId,
   getCapabilities,
@@ -47,6 +48,13 @@ import {
   loadForeignTables,
   openEditDialog,
   closeEditDialog,
+  getOracleDriverStatus,
+  getOracleDownloadProgress,
+  getIsOracleDownloading,
+  isOracleDriverDialogOpen,
+  setOracleDriverDialogOpen,
+  checkOracleDriverStatus,
+  downloadOracleDriver,
 } from './connections.svelte';
 import {
   getTabs,
@@ -150,11 +158,17 @@ export function getAppState() {
     get hasActiveConnections() { return hasActiveConnections(); },
     get editDialogConnectionId() { return getEditDialogConnectionId(); },
     get connectingIds() { return getConnectingIds(); },
+    get availableEngines() { return getAvailableEngines(); },
     get queryTimeoutSeconds() { return getQueryTimeoutSeconds(); },
     get savedQueries() { return getSavedQueries(); },
     get queryHistory() { return getQueryHistory(); },
     get searchIndex() { return getSearchIndex(); },
     get selectedObjectPath() { return selectedObjectPath(); },
+    get oracleDriverStatus() { return getOracleDriverStatus(); },
+    get oracleDownloadProgress() { return getOracleDownloadProgress(); },
+    get isOracleDownloading() { return getIsOracleDownloading(); },
+    get isOracleDriverDialogOpen() { return isOracleDriverDialogOpen(); },
+    set isOracleDriverDialogOpen(v: boolean) { setOracleDriverDialogOpen(v); },
 
     // ── Layout ──
     get layoutRoot() { return getLayoutRoot(); },
@@ -174,6 +188,8 @@ export function getAppState() {
 
     // ── Connection lookup ──
     getSavedConnection,
+    checkOracleDriverStatus,
+    downloadOracleDriver,
 
     // ── Connection CRUD ──
     loadConnections,

@@ -5,14 +5,16 @@
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Select from '$lib/components/ui/select';
   import { Eye, EyeOff, CheckCircle, XCircle, Loader2, FolderOpen } from '@lucide/svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open as tauriOpen } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
+  import OracleDriverDialog from './OracleDriverDialog.svelte';
 
   const app = getAppState();
 
   const ENGINE_LABELS: Record<EngineType, string> = {
     postgres: 'PostgreSQL',
     sqlite: 'SQLite',
+    oracle: 'Oracle',
     redis: 'Redis',
     mongodb: 'MongoDB',
     duckdb: 'DuckDB',
@@ -22,6 +24,7 @@
   const ENGINE_DEFAULTS: Record<EngineType, { port: number; database: string; username: string }> = {
     postgres: { port: 5432, database: 'postgres', username: 'postgres' },
     sqlite: { port: 0, database: '', username: '' },
+    oracle: { port: 1521, database: 'ORCL', username: '' },
     redis: { port: 6379, database: '', username: '' },
     mongodb: { port: 27017, database: '', username: '' },
     duckdb: { port: 0, database: '', username: '' },
@@ -40,6 +43,7 @@
     username: 'postgres',
     password: '',
     ssl_mode: 'prefer',
+    options: {},
   });
 
   let connectionUrl = $state('');
@@ -69,6 +73,7 @@
         username: connection.username,
         password: '',
         ssl_mode: connection.ssl_mode,
+        options: { ...connection.options },
       };
     } else if (isCreateMode) {
       form = {
@@ -254,7 +259,7 @@
                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-all duration-100"
                 aria-label="Browse for database file"
                 onclick={async () => {
-                  const path = await open({
+                  const path = await tauriOpen({
                     multiple: false,
                     filters: [{ name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }],
                   });
@@ -303,19 +308,21 @@
           </div>
 
           <!-- SSL -->
-          <div class="flex items-center gap-3">
-            <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
-            <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
-              <Select.Trigger class="flex-1 h-9 bg-transparent">
-                <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
-              </Select.Trigger>
-              <Select.Content>
-                <Select.Item value="prefer" label="Prefer" />
-                <Select.Item value="require" label="Require" />
-                <Select.Item value="disable" label="Disable" />
-              </Select.Content>
-            </Select.Root>
-          </div>
+          {#if form.engine === 'postgres' || form.engine === 'oracle'}
+            <div class="flex items-center gap-3">
+              <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
+              <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>
+                <Select.Trigger class="flex-1 h-9 bg-transparent">
+                  <span class="text-foreground text-sm">{form.ssl_mode === 'prefer' ? 'Prefer' : form.ssl_mode === 'require' ? 'Require' : 'Disable'}</span>
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="prefer" label="Prefer" />
+                  <Select.Item value="require" label="Require" />
+                  <Select.Item value="disable" label="Disable" />
+                </Select.Content>
+              </Select.Root>
+            </div>
+          {/if}
         {/if}
       </div>
 

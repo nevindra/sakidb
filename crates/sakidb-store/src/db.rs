@@ -42,6 +42,7 @@ impl Store {
                     username    TEXT NOT NULL,
                     password    TEXT NOT NULL DEFAULT '',
                     ssl_mode    TEXT NOT NULL DEFAULT 'prefer',
+                    options     TEXT NOT NULL DEFAULT '{}',
                     created_at  TEXT NOT NULL,
                     updated_at  TEXT NOT NULL
                 );
@@ -94,6 +95,16 @@ impl Store {
                 .map_err(|e| SakiError::StorageError(e.to_string()))?;
         }
 
+        // [Fix: M7] Migration: add options column if missing to support engine-specific settings
+        let has_options: bool = self.conn
+            .prepare("SELECT options FROM connections LIMIT 0")
+            .is_ok();
+        if !has_options {
+            self.conn
+                .execute_batch("ALTER TABLE connections ADD COLUMN options TEXT NOT NULL DEFAULT '{}';")
+                .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        }
+
         // Migration: if password column was BLOB (old encrypted format), clear them out.
         // SQLite doesn't support ALTER COLUMN, so we detect old rows by checking type affinity.
         // Old encrypted passwords were stored as BLOB; new ones are TEXT.
@@ -109,12 +120,13 @@ impl Store {
         debug!(name = %input.name, host = %input.host, "saving connection");
         let id = Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
+        let options_json = serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
 
         self.conn
             .execute(
-                "INSERT INTO connections (id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                params![id, input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, now],
+                "INSERT INTO connections (id, name, engine, host, port, database, username, password, ssl_mode, options, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![id, input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, options_json, now, now],
             )
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
@@ -128,6 +140,7 @@ impl Store {
             username: input.username.clone(),
             password: input.password.clone(),
             ssl_mode: input.ssl_mode.clone(),
+            options: input.options.clone(),
             created_at: now.clone(),
             updated_at: now,
             last_connected_at: None,
@@ -137,11 +150,13 @@ impl Store {
     pub fn list_connections(&self) -> Result<Vec<SavedConnection>, SakiError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections ORDER BY name")
+            .prepare("SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at, options FROM connections ORDER BY name")
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         let rows = stmt
             .query_map([], |row| {
+                let options_json: String = row.get(12).unwrap_or_else(|_| "{}".to_string());
+                let options = serde_json::from_str(&options_json).unwrap_or_default();
                 Ok(SavedConnection {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -155,6 +170,7 @@ impl Store {
                     created_at: row.get(9)?,
                     updated_at: row.get(10)?,
                     last_connected_at: row.get(11)?,
+                    options,
                 })
             })
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
@@ -166,9 +182,11 @@ impl Store {
     pub fn get_connection(&self, id: &str) -> Result<SavedConnection, SakiError> {
         self.conn
             .query_row(
-                "SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at FROM connections WHERE id = ?1",
+                "SELECT id, name, engine, host, port, database, username, password, ssl_mode, created_at, updated_at, last_connected_at, options FROM connections WHERE id = ?1",
                 params![id],
                 |row| {
+                    let options_json: String = row.get(12).unwrap_or_else(|_| "{}".to_string());
+                    let options = serde_json::from_str(&options_json).unwrap_or_default();
                     Ok(SavedConnection {
                         id: row.get(0)?,
                         name: row.get(1)?,
@@ -182,6 +200,7 @@ impl Store {
                         created_at: row.get(9)?,
                         updated_at: row.get(10)?,
                         last_connected_at: row.get(11)?,
+                        options,
                     })
                 },
             )
@@ -190,17 +209,18 @@ impl Store {
 
     pub fn update_connection(&self, id: &str, input: &ConnectionInput) -> Result<(), SakiError> {
         let now = chrono::Utc::now().to_rfc3339();
+        let options_json = serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
 
         let affected = if input.password.is_empty() {
             // Don't overwrite stored password when none provided
             self.conn.execute(
-                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, ssl_mode=?7, updated_at=?8 WHERE id=?9",
-                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.ssl_mode, now, id],
+                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, ssl_mode=?7, options=?8, updated_at=?9 WHERE id=?10",
+                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.ssl_mode, options_json, now, id],
             )
         } else {
             self.conn.execute(
-                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, password=?7, ssl_mode=?8, updated_at=?9 WHERE id=?10",
-                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, now, id],
+                "UPDATE connections SET name=?1, engine=?2, host=?3, port=?4, database=?5, username=?6, password=?7, ssl_mode=?8, options=?9, updated_at=?10 WHERE id=?11",
+                params![input.name, input.engine, input.host, input.port, input.database, input.username, input.password, input.ssl_mode, options_json, now, id],
             )
         }
         .map_err(|e| SakiError::StorageError(e.to_string()))?;
