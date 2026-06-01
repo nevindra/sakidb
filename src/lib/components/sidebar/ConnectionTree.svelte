@@ -16,6 +16,7 @@
   const ENGINE_SHORT: Record<EngineType, string> = {
     postgres: 'PG',
     sqlite: 'SL',
+    oracle: 'OR',
     redis: 'RD',
     mongodb: 'MG',
     duckdb: 'DK',

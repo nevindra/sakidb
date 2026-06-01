@@ -49,6 +49,7 @@ pub(crate) fn test_connection_input() -> sakidb_store::models::ConnectionInput {
         username: "testuser".to_string(),
         password: "testpass".to_string(),
         ssl_mode: "prefer".to_string(),
+        options: std::collections::HashMap::new(),
     }
 }
 

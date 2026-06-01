@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 // ── Connection models ──
@@ -14,6 +15,8 @@ pub struct SavedConnection {
     #[serde(skip)]
     pub password: String,
     pub ssl_mode: String,
+    #[serde(default)]
+    pub options: HashMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
     pub last_connected_at: Option<String>,
@@ -29,6 +32,8 @@ pub struct ConnectionInput {
     pub username: String,
     pub password: String,
     pub ssl_mode: String,
+    #[serde(default)]
+    pub options: HashMap<String, String>,
 }
 
 // ── Query models ──

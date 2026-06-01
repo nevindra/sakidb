@@ -7,13 +7,15 @@
   import type { ConnectionInput, EngineType, SavedConnection } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { CheckCircle, Database, Eye, EyeOff, FolderOpen, Loader2, Plus, Search, XCircle } from '@lucide/svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open as tauriOpen } from '@tauri-apps/plugin-dialog';
+  import OracleDriverDialog from './OracleDriverDialog.svelte';
 
   const app = getAppState();
 
   const ENGINE_LABELS: Record<EngineType, string> = {
     postgres: 'PostgreSQL',
     sqlite: 'SQLite',
+    oracle: 'Oracle',
     redis: 'Redis',
     mongodb: 'MongoDB',
     duckdb: 'DuckDB',
@@ -23,6 +25,7 @@
   const ENGINE_DEFAULTS: Record<EngineType, { port: number; database: string; username: string }> = {
     postgres: { port: 5432, database: 'postgres', username: 'postgres' },
     sqlite: { port: 0, database: '', username: '' },
+    oracle: { port: 1521, database: 'ORCL', username: '' },
     redis: { port: 6379, database: '', username: '' },
     mongodb: { port: 27017, database: '', username: '' },
     duckdb: { port: 0, database: '', username: '' },
@@ -47,6 +50,7 @@
     username: 'postgres',
     password: '',
     ssl_mode: 'prefer',
+    options: {},
   });
 
   let connectionUrl = $state('');
@@ -173,6 +177,7 @@
       username: 'postgres',
       password: '',
       ssl_mode: 'prefer',
+      options: {},
     };
     connectionUrl = '';
     urlError = null;
@@ -192,6 +197,7 @@
       username: conn.username,
       password: '',
       ssl_mode: conn.ssl_mode,
+      options: { ...conn.options },
     };
     showPassword = false;
     testResult = null;
@@ -274,6 +280,7 @@
       username: conn.username,
       password: '',
       ssl_mode: conn.ssl_mode,
+      options: { ...conn.options },
     };
     testResult = null;
   }
@@ -473,7 +480,7 @@
                   class="h-9 w-9 shrink-0 flex items-center justify-center rounded-md border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-all duration-100"
                   aria-label="Browse for database file"
                   onclick={async () => {
-                    const path = await open({
+                    const path = await tauriOpen({
                       multiple: false,
                       filters: [{ name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3', 'db3'] }],
                     });
@@ -530,7 +537,7 @@
         {/if}
 
         <!-- SSL (only for engines that support it) -->
-        {#if form.engine === 'postgres' || form.engine === 'clickhouse' || form.engine === 'mongodb'}
+        {#if form.engine === 'postgres' || form.engine === 'oracle' || form.engine === 'clickhouse' || form.engine === 'mongodb'}
           <div class="flex items-center gap-3">
             <span class="w-20 shrink-0 text-[12px] text-muted-foreground select-none">SSL</span>
             <Select.Root type="single" value={form.ssl_mode} onValueChange={(v) => { if (v) form.ssl_mode = v; }}>

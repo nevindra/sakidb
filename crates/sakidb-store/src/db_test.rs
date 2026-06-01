@@ -11,6 +11,7 @@ fn test_input() -> ConnectionInput {
         username: "user".into(),
         password: "secret123".into(),
         ssl_mode: "prefer".into(),
+        options: std::collections::HashMap::new(),
     }
 }
 

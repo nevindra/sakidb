@@ -14,6 +14,7 @@ pub enum EngineType {
     MongoDB,
     DuckDB,
     ClickHouse,
+    Oracle,
 }
 
 impl std::fmt::Display for EngineType {
@@ -25,6 +26,7 @@ impl std::fmt::Display for EngineType {
             Self::MongoDB => write!(f, "mongodb"),
             Self::DuckDB => write!(f, "duckdb"),
             Self::ClickHouse => write!(f, "clickhouse"),
+            Self::Oracle => write!(f, "oracle"),
         }
     }
 }
@@ -40,6 +42,7 @@ impl std::str::FromStr for EngineType {
             "mongodb" => Ok(Self::MongoDB),
             "duckdb" => Ok(Self::DuckDB),
             "clickhouse" => Ok(Self::ClickHouse),
+            "oracle" => Ok(Self::Oracle),
             _ => Err(format!("unknown engine: {}", s)),
         }
     }
@@ -558,4 +561,7 @@ pub struct RestoreProgress {
 /// Parameters: (columns, cells as flat array, total_rows_so_far)
 pub type ExportBatchFn =
     dyn Fn(&[ColumnDef], &[CellValue], u64) -> crate::error::Result<()> + Send + Sync;
+
+// Re-export driver functions
+pub use crate::driver::rows_to_columnar;
 

@@ -1,10 +1,11 @@
-use std::collections::HashMap;
-
-use tauri::State;
+use tauri::{State, Emitter};
 use tracing::{error, info, warn};
 
 use sakidb_core::types::{ConnectResult, ConnectionConfig, ConnectionId, EngineType, SslMode};
 use sakidb_store::models::ConnectionInput;
+
+#[cfg(feature = "oracle")]
+use sakidb_oracle::{get_driver_status, download_instantclient_with_progress, OracleDriverStatus};
 
 use crate::state::AppState;
 
@@ -13,6 +14,39 @@ pub async fn available_engines(
     state: State<'_, AppState>,
 ) -> Result<Vec<EngineType>, String> {
     Ok(state.registry.available_engines())
+}
+
+#[cfg(feature = "oracle")]
+#[tauri::command]
+pub async fn get_oracle_driver_status() -> Result<OracleDriverStatus, String> {
+    Ok(get_driver_status())
+}
+
+#[cfg(not(feature = "oracle"))]
+#[tauri::command]
+pub async fn get_oracle_driver_status() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({ "found": false, "path": null, "method": null }))
+}
+
+#[cfg(feature = "oracle")]
+#[tauri::command]
+pub async fn download_oracle_driver(
+    window: tauri::Window,
+) -> Result<(), String> {
+    download_instantclient_with_progress(move |progress, message| {
+        let _ = window.emit("oracle-download-progress", serde_json::json!({
+            "progress": progress,
+            "message": message,
+        }));
+    })
+    .await
+    .map_err(|e: sakidb_core::SakiError| e.to_string())
+}
+
+#[cfg(not(feature = "oracle"))]
+#[tauri::command]
+pub async fn download_oracle_driver() -> Result<(), String> {
+    Err("Oracle driver is not enabled in this build".to_string())
 }
 
 #[tauri::command]
@@ -176,6 +210,7 @@ pub async fn update_last_connected(
 
 fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig {
     let engine: EngineType = input.engine.parse().unwrap_or(EngineType::Postgres);
+    // [Fix: M7] Pass through the options field to support engine-specific settings like TNS
     ConnectionConfig {
         engine,
         host: input.host.clone(),
@@ -184,12 +219,13 @@ fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig 
         username: input.username.clone(),
         password: if password.is_empty() { input.password.clone() } else { password.to_string() },
         ssl_mode: parse_ssl_mode(&input.ssl_mode),
-        options: HashMap::new(),
+        options: input.options.clone(),
     }
 }
 
 fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Option<String>) -> ConnectionConfig {
     let engine: EngineType = saved.engine.parse().unwrap_or(EngineType::Postgres);
+    // [Fix: M7] Pass through the options field
     ConnectionConfig {
         engine,
         host: saved.host.clone(),
@@ -198,7 +234,7 @@ fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Opti
         username: saved.username.clone(),
         password: saved.password.clone(),
         ssl_mode: parse_ssl_mode(&saved.ssl_mode),
-        options: HashMap::new(),
+        options: saved.options.clone(),
     }
 }
 

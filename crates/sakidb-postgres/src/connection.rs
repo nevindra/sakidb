@@ -235,6 +235,12 @@ impl ConnectionManager {
     }
 }
 
+impl Default for ConnectionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn build_pg_config(config: &ConnectionConfig) -> tokio_postgres::Config {
     let mut pg_config = tokio_postgres::Config::new();
     pg_config
