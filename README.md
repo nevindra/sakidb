@@ -144,6 +144,15 @@ Grab the latest release for your platform:
 
 Requires [Rust](https://rustup.rs/), [Node.js](https://nodejs.org/), and [pnpm](https://pnpm.io/).
 
+On **Linux** (Debian/Ubuntu), you also need the Tauri system dependencies and the [mold](https://github.com/rui314/mold) linker (the workspace is configured to link with mold):
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev mold
+```
+
+For other distros, see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/).
+
 ```bash
 git clone https://github.com/nevindra/sakidb.git
 cd sakidb
