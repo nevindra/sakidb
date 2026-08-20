@@ -112,7 +112,7 @@ impl OracleExecutor {
                 }
 
                 let num_cols = columns.len();
-                let row_count = if num_cols > 0 { (cells.len() / num_cols) as u64 } else { 0 };
+                let row_count = cells.len().checked_div(num_cols).unwrap_or(0) as u64;
 
                 Ok::<QueryResult, SakiError>(QueryResult {
                     columns,

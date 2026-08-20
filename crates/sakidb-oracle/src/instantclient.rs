@@ -2,7 +2,9 @@ use std::env;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::{info, error};
-use dirs::{data_dir, home_dir};
+use dirs::data_dir;
+#[cfg(target_os = "macos")]
+use dirs::home_dir;
 use sakidb_core::error::{Result, SakiError};
 use serde::Serialize;
 
