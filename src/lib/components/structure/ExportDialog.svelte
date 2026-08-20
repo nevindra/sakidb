@@ -20,13 +20,16 @@
     open?: boolean;
     savedConnectionId: string;
     databaseName: string;
-    schema: string;
-    table: string;
+    schema?: string;
+    table?: string;
     whereClause?: string;
   } = $props();
 
   const app = getAppState();
   const capabilities = $derived(app.getCapabilities(savedConnectionId));
+
+  // Scope: single table, whole schema, or whole database. CSV only applies to tables.
+  const mode = $derived<'table' | 'schema' | 'database'>(table ? 'table' : schema ? 'schema' : 'database');
 
   interface ExportProgressEvent {
     rows_exported: number;
@@ -34,7 +37,8 @@
     phase: string;
   }
 
-  let format = $state<'csv' | 'sql'>('csv');
+  // svelte-ignore state_referenced_locally
+  let format = $state<'csv' | 'sql'>(table ? 'csv' : 'sql');
   let includeHeader = $state(true);
   let includeDdl = $state(true);
   let includeData = $state(true);
@@ -54,7 +58,10 @@
 
   async function handleExport() {
     const ext = format === 'csv' ? 'csv' : 'sql';
-    const defaultName = `${schema}_${table}.${ext}`;
+    const defaultName =
+      mode === 'table' ? `${schema}_${table}.${ext}`
+      : mode === 'schema' ? `${schema}.sql`
+      : `${databaseName}.sql`;
 
     const filePath = await save({
       defaultPath: defaultName,
@@ -79,12 +86,22 @@
 
     try {
       let rowCount: number;
-      if (format === 'csv') {
+      if (mode !== 'table') {
+        rowCount = await app.exportDatabaseSql(
+          savedConnectionId,
+          databaseName,
+          filePath,
+          includeDdl,
+          includeData,
+          mode === 'schema' ? schema : undefined,
+        );
+        resultMessage = `Exported ${includeDdl ? 'DDL + ' : ''}${rowCount.toLocaleString()} rows to ${filePath}`;
+      } else if (format === 'csv') {
         rowCount = await app.exportTableCsv(
           savedConnectionId,
           databaseName,
-          schema,
-          table,
+          schema!,
+          table!,
           filePath,
           useFilters ? whereClause : undefined,
           includeHeader,
@@ -94,8 +111,8 @@
         rowCount = await app.exportTableSql(
           savedConnectionId,
           databaseName,
-          schema,
-          table,
+          schema!,
+          table!,
           filePath,
           includeDdl,
           includeData,
@@ -134,7 +151,15 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="max-w-sm">
     <Dialog.Header>
-      <Dialog.Title>Export {schema ? `"${schema}"."${table}"` : `"${table}"`}</Dialog.Title>
+      <Dialog.Title>
+        {#if mode === 'table'}
+          Export {schema ? `"${schema}"."${table}"` : `"${table}"`}
+        {:else if mode === 'schema'}
+          Export Schema "{schema}"
+        {:else}
+          Export Database "{databaseName}"
+        {/if}
+      </Dialog.Title>
     </Dialog.Header>
 
     <div class="space-y-4 py-2">
@@ -177,22 +202,24 @@
           <p class="text-sm text-muted-foreground text-center">{resultMessage}</p>
         </div>
       {:else}
-        <!-- Format selection -->
-        <div>
-          <span class="text-xs font-medium text-muted-foreground">Format</span>
-          <RadioGroup.Root bind:value={format} class="flex gap-4 mt-1.5">
-            <label class="flex items-center gap-2 text-sm cursor-pointer">
-              <RadioGroup.Item value="csv" />
-              CSV
-            </label>
-            {#if capabilities?.sql !== false}
+        <!-- Format selection (whole-schema/database exports are always SQL) -->
+        {#if mode === 'table'}
+          <div>
+            <span class="text-xs font-medium text-muted-foreground">Format</span>
+            <RadioGroup.Root bind:value={format} class="flex gap-4 mt-1.5">
               <label class="flex items-center gap-2 text-sm cursor-pointer">
-                <RadioGroup.Item value="sql" />
-                SQL
+                <RadioGroup.Item value="csv" />
+                CSV
               </label>
-            {/if}
-          </RadioGroup.Root>
-        </div>
+              {#if capabilities?.sql !== false}
+                <label class="flex items-center gap-2 text-sm cursor-pointer">
+                  <RadioGroup.Item value="sql" />
+                  SQL
+                </label>
+              {/if}
+            </RadioGroup.Root>
+          </div>
+        {/if}
 
         <!-- CSV options -->
         {#if format === 'csv'}

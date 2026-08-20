@@ -52,6 +52,11 @@ describe('PostgresDialect', () => {
       .toBe('CREATE TABLE "public"."users_copy" AS SELECT * FROM "public"."users";');
   });
 
+  it('generates rename table', () => {
+    expect(d.renameTable('public', 'users', 'members'))
+      .toBe('ALTER TABLE "public"."users" RENAME TO "members";');
+  });
+
   it('formats cell literal with PG casts', () => {
     const json: CellValue = { Json: '{"a":1}' };
     expect(d.cellLiteral(json)).toBe("'{\"a\":1}'::jsonb");
@@ -88,6 +93,11 @@ describe('SqliteDialect', () => {
   it('generates duplicate table (structure) with WHERE 0', () => {
     expect(d.duplicateTable('', 'users', 'users_copy', 'structure'))
       .toBe('CREATE TABLE "users_copy" AS SELECT * FROM "users" WHERE 0;');
+  });
+
+  it('generates rename table', () => {
+    expect(d.renameTable('', 'users', 'members'))
+      .toBe('ALTER TABLE "users" RENAME TO "members";');
   });
 
   it('formats cell literal without PG casts', () => {

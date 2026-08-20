@@ -13,9 +13,14 @@ All notable changes to SakiDB will be documented in this file.
 - **SQL WHERE filter** — Toggle between quick filters and raw SQL mode. Type any WHERE clause with syntax highlighting (columns, keywords, strings, operators) and column name autocomplete. Quick filter chips auto-convert to SQL when switching modes.
 - **Binary data preview** — Bytea columns now render inline thumbnails for images (PNG, JPEG, GIF, WebP, BMP, AVIF), embedded PDF viewer, and archive cards (ZIP, GZIP, BZ2, XZ, 7Z) with download buttons. Works in the data grid, cell expand popover, and row detail panel.
 - **Create connection from Edit dialog** — The connection edit dialog now supports creating new connections (previously only editing existing ones).
+- **Export a whole database or schema** — Right-click a database or schema to export all its tables to a single SQL file (structure, data, or both), with progress and cancel. The file works directly with "Restore from SQL".
+- **Duplicate connection** — Right-click a connection to create a copy with all its settings pre-filled.
+- **Rename table** — Right-click a table to rename it.
+- **Refresh anywhere** — Connections, databases, and schemas each have a Refresh action to reload their contents without reconnecting.
 
 ### Improved
 
+- Sidebar right-click menus are now tailored per item: connections show server-level actions, databases show database-level actions, and the two no longer overlap. Schemas in single-file databases now have their own right-click menu too.
 - Delete row visuals now use red-tinted backgrounds and × indicators for clearer pending state.
 - Cell expand popover stays visually attached to right-side cells instead of jumping far left.
 - "Edit Row" option added to the right-click context menu.

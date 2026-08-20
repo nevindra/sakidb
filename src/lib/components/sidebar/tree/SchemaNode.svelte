@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getAppState } from '$lib/stores';
+  import { untrack } from 'svelte';
   import type {
     TableInfo,
     ViewInfo,
@@ -110,28 +111,47 @@
   // Tab-to-tree sync: auto-expand Tables when active tab targets a table in this schema
   const revealTablesExpand = $derived(app.selectedObjectPath?.startsWith(schemaPrefix + '/') ?? false);
 
-  // Loaders
+  // Loaders — each records itself so a schema refresh only re-fetches loaded categories
+  const loadedKinds = new Set<() => Promise<void>>();
+
   async function loadTables() {
     tables = await app.loadTables(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadTables);
   }
   async function loadViews() {
     views = await app.loadViews(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadViews);
   }
   async function loadMaterializedViews() {
     materializedViews = await app.loadMaterializedViews(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadMaterializedViews);
   }
   async function loadFunctions() {
     functions = await app.loadFunctions(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadFunctions);
   }
   async function loadSequences() {
     sequences = await app.loadSequences(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadSequences);
   }
   async function loadIndexes() {
     indexes = await app.loadIndexes(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadIndexes);
   }
   async function loadForeignTables() {
     foreignTables = await app.loadForeignTables(connectionId, databaseName, schemaName);
+    loadedKinds.add(loadForeignTables);
   }
+
+  // Re-fetch loaded categories when a "Refresh" is requested for this schema
+  const refreshTick = $derived(app.getSchemaRefreshTick(connectionId, databaseName, schemaName));
+  $effect(() => {
+    if (refreshTick > 0) {
+      untrack(() => {
+        for (const reload of loadedKinds) reload();
+      });
+    }
+  });
 
   const dialect = $derived((() => {
     const e = app.getSavedConnection(connectionId)?.engine;

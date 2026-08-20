@@ -10,6 +10,7 @@
   import ExportDialog from '$lib/components/structure/ExportDialog.svelte';
   import RestoreDialog from './RestoreDialog.svelte';
   import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
+  import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
   import DuplicateTableDialog from './DuplicateTableDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { invoke } from '@tauri-apps/api/core';
@@ -79,8 +80,23 @@
   let dropConfirmOpen = $state(false);
   let truncateConfirmOpen = $state(false);
   let duplicateOpen = $state(false);
+  let renameOpen = $state(false);
   let dropLoading = $state(false);
   let truncateLoading = $state(false);
+
+  async function handleRename(newName: string) {
+    const rid = app.getRuntimeConnectionId(connectionId, databaseName);
+    if (!rid || !dialect) return;
+    try {
+      await invoke('execute_batch', {
+        activeConnectionId: rid,
+        sql: dialect.renameTable(schema, table.name, newName),
+      });
+      onRefreshTables?.();
+    } catch {
+      // Error handled by store
+    }
+  }
 
   async function handleDrop() {
     dropLoading = true;
@@ -157,6 +173,7 @@
       case 'restore': restoreOpen = true; return;
       case 'sql-create': return handleCreateSql();
       case 'duplicate': duplicateOpen = true; return;
+      case 'rename': renameOpen = true; return;
       case 'truncate': truncateConfirmOpen = true; return;
       case 'drop': dropConfirmOpen = true; return;
     }
@@ -259,6 +276,19 @@
     {connectionId}
     {databaseName}
     onDuplicated={onRefreshTables}
+  />
+{/if}
+
+{#if renameOpen}
+  <InputDialog
+    bind:open={renameOpen}
+    title="Rename Table"
+    description={`Rename "${table.name}" to a new name.`}
+    label="New name"
+    placeholder={table.name}
+    initialValue={table.name}
+    confirmLabel="Rename"
+    onconfirm={handleRename}
   />
 {/if}
 

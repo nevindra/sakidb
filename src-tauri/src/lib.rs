@@ -187,6 +187,7 @@ pub fn run() {
             commands::explorer::get_table_columns_for_completion,
             commands::export::export_table_csv,
             commands::export::export_table_sql,
+            commands::export::export_database_sql,
             commands::export::cancel_export,
             commands::import::restore_from_sql,
             commands::import::cancel_restore,

@@ -47,7 +47,11 @@ import {
   loadIndexes,
   loadForeignTables,
   openEditDialog,
+  openDuplicateDialog,
   closeEditDialog,
+  getDuplicateSourceConnectionId,
+  getSchemaRefreshTick,
+  refreshSchemaObjects,
   getOracleDriverStatus,
   getOracleDownloadProgress,
   getIsOracleDownloading,
@@ -118,6 +122,7 @@ import {
   cancelRestore,
   cancelExport,
   exportTableSql,
+  exportDatabaseSql,
 } from './exports.svelte';
 import {
   getUpdate,
@@ -157,6 +162,7 @@ export function getAppState() {
     get activeTab() { return getActiveTab(); },
     get hasActiveConnections() { return hasActiveConnections(); },
     get editDialogConnectionId() { return getEditDialogConnectionId(); },
+    get duplicateSourceConnectionId() { return getDuplicateSourceConnectionId(); },
     get connectingIds() { return getConnectingIds(); },
     get availableEngines() { return getAvailableEngines(); },
     get queryTimeoutSeconds() { return getQueryTimeoutSeconds(); },
@@ -218,6 +224,8 @@ export function getAppState() {
     createDatabase,
     renameDatabase,
     refreshDatabases,
+    getSchemaRefreshTick,
+    refreshSchemaObjects,
 
     // ── Runtime ID helper ──
     _getRuntimeId: getRuntimeId,
@@ -287,9 +295,11 @@ export function getAppState() {
     cancelRestore,
     cancelExport,
     exportTableSql,
+    exportDatabaseSql,
 
     // ── UI state ──
     openEditDialog,
+    openDuplicateDialog,
     closeEditDialog,
     clearError,
 

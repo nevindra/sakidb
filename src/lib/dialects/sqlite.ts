@@ -149,6 +149,10 @@ export const sqliteDialect: SqlDialect = {
       : `CREATE TABLE ${d} AS SELECT * FROM ${s};`;
   },
 
+  renameTable(schema, oldName, newName) {
+    return `ALTER TABLE ${qualified(schema, oldName)} RENAME TO ${q(newName)};`;
+  },
+
   refreshMaterializedView() {
     return null;
   },

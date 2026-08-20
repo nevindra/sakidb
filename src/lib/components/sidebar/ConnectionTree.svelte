@@ -5,12 +5,15 @@
   import { ChevronRight, ChevronDown, Loader2, Server, FolderClosed, FolderOpen } from '@lucide/svelte';
   import { invoke } from '@tauri-apps/api/core';
   import * as ContextMenu from '$lib/components/ui/context-menu';
-  import { ContextMenuRenderer, connectionTreeMenuItems } from '$lib/context-menus';
+  import { ContextMenuRenderer, connectionTreeMenuItems, schemaMenuItems } from '$lib/context-menus';
   import type { MenuContext } from '$lib/context-menus';
   import DatabaseNode from './tree/DatabaseNode.svelte';
   import SchemaNode from './tree/SchemaNode.svelte';
+  import RestoreDialog from './tree/RestoreDialog.svelte';
+  import ExportDialog from '$lib/components/structure/ExportDialog.svelte';
   import HighlightMatch from './HighlightMatch.svelte';
   import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
+  import ConfirmDialog from '$lib/components/ui/confirm-dialog/ConfirmDialog.svelte';
   import { getDialect } from '$lib/dialects';
 
   const ENGINE_SHORT: Record<EngineType, string> = {
@@ -118,6 +121,15 @@
   let showCreateSchema = $state(false);
   let showCreateDb = $state(false);
 
+  // Schema-row menu state (single-database engines with schemas)
+  let targetSchemaName = $state('');
+  let showRenameSchemaDialog = $state(false);
+  let showDropSchemaConfirm = $state(false);
+  let showSchemaRestore = $state(false);
+  let showSchemaExport = $state(false);
+  let dropSchemaLoading = $state(false);
+  const showCascade = $derived(connection.engine === 'postgres');
+
   async function handleCreateSchema(name: string) {
     const dialect = getDialect(connection.engine as EngineType);
     const rid = app._getRuntimeId(connection.id, connection.database);
@@ -150,10 +162,53 @@
       }
       case 'disconnect': return app.disconnectFromDatabase(connection.id);
       case 'connect': return app.connectToDatabase(connection.id);
+      case 'refresh': return app.refreshDatabases(connection.id);
       case 'edit': return app.openEditDialog(connection.id);
+      case 'duplicate': return app.openDuplicateDialog(connection.id);
       case 'delete': return app.deleteConnection(connection.id);
-      case 'create-schema': showCreateSchema = true; return;
       case 'create-db': showCreateDb = true; return;
+    }
+  }
+
+  function handleSchemaMenuAction(schemaName: string, id: string) {
+    switch (id) {
+      case 'view-erd': return app.openErdTab(connection.id, connection.database, schemaName);
+      case 'new-query': return app.openQueryTab(connection.id, connection.database);
+      case 'refresh': return app.refreshSchemaObjects(connection.id, connection.database, schemaName);
+      case 'export-schema': targetSchemaName = schemaName; showSchemaExport = true; return;
+      case 'restore': targetSchemaName = schemaName; showSchemaRestore = true; return;
+      case 'create-schema': showCreateSchema = true; return;
+      case 'rename-schema': targetSchemaName = schemaName; showRenameSchemaDialog = true; return;
+      case 'drop-schema': targetSchemaName = schemaName; showDropSchemaConfirm = true; return;
+    }
+  }
+
+  async function handleRenameSchema(newName: string) {
+    const dialect = getDialect(connection.engine as EngineType);
+    const rid = app._getRuntimeId(connection.id, connection.database);
+    if (!rid) return;
+    try {
+      const sql = dialect.renameSchema(targetSchemaName, newName);
+      await invoke('execute_batch', { activeConnectionId: rid, sql });
+      await app.refreshDatabases(connection.id);
+    } catch {
+      // Error handled by store
+    }
+  }
+
+  async function handleDropSchema(cascade?: boolean) {
+    dropSchemaLoading = true;
+    try {
+      const dialect = getDialect(connection.engine as EngineType);
+      const rid = app._getRuntimeId(connection.id, connection.database);
+      if (!rid) return;
+      const sql = dialect.dropSchema(targetSchemaName, cascade ?? false);
+      await invoke('execute_batch', { activeConnectionId: rid, sql });
+      await app.refreshDatabases(connection.id);
+    } catch {
+      // Error handled by store
+    } finally {
+      dropSchemaLoading = false;
     }
   }
 </script>
@@ -210,19 +265,27 @@
       {:else if capabilities?.schemas}
         <!-- Single-database with schemas: Connection > Schema > Objects -->
         {#each schemas as schema (schema.name)}
-          <button
-            class="w-full text-left pl-6 pr-2 py-0.5 text-xs flex items-center gap-1.5 hover:bg-sidebar-accent transition-colors"
-            onclick={() => toggleSchema(schema.name)}
-          >
-            {#if expandedSchemas.has(schema.name)}
-              <ChevronDown class="h-3 w-3 text-muted-foreground shrink-0" />
-              <FolderOpen class="h-3 w-3 text-warning shrink-0" />
-            {:else}
-              <ChevronRight class="h-3 w-3 text-muted-foreground shrink-0" />
-              <FolderClosed class="h-3 w-3 text-warning shrink-0" />
-            {/if}
-            <span class="truncate">{schema.name}</span>
-          </button>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div oncontextmenu={(e) => e.stopPropagation()}>
+            <ContextMenu.Root>
+              <ContextMenu.Trigger class="block w-full">
+                <button
+                  class="w-full text-left pl-6 pr-2 py-0.5 text-xs flex items-center gap-1.5 hover:bg-sidebar-accent transition-colors"
+                  onclick={() => toggleSchema(schema.name)}
+                >
+                  {#if expandedSchemas.has(schema.name)}
+                    <ChevronDown class="h-3 w-3 text-muted-foreground shrink-0" />
+                    <FolderOpen class="h-3 w-3 text-warning shrink-0" />
+                  {:else}
+                    <ChevronRight class="h-3 w-3 text-muted-foreground shrink-0" />
+                    <FolderClosed class="h-3 w-3 text-warning shrink-0" />
+                  {/if}
+                  <span class="truncate">{schema.name}</span>
+                </button>
+              </ContextMenu.Trigger>
+              <ContextMenuRenderer items={schemaMenuItems(connMenuCtx)} ctx={connMenuCtx} onaction={(id) => handleSchemaMenuAction(schema.name, id)} />
+            </ContextMenu.Root>
+          </div>
           {#if expandedSchemas.has(schema.name)}
             <SchemaNode schemaName={schema.name} connectionId={connection.id} databaseName={connection.database} {filterQuery} {searchResults} />
           {/if}
@@ -256,3 +319,43 @@
   confirmLabel="Create"
   onconfirm={handleCreateDatabase}
 />
+
+<InputDialog
+  bind:open={showRenameSchemaDialog}
+  title="Rename Schema"
+  description={`Rename "${targetSchemaName}" to a new name.`}
+  label="New name"
+  placeholder={targetSchemaName}
+  initialValue={targetSchemaName}
+  confirmLabel="Rename"
+  onconfirm={handleRenameSchema}
+/>
+
+<ConfirmDialog
+  bind:open={showDropSchemaConfirm}
+  title="Drop Schema"
+  description={`This will permanently drop the schema "${targetSchemaName}" and all objects within it.`}
+  confirmLabel="Drop"
+  variant="destructive"
+  loading={dropSchemaLoading}
+  {showCascade}
+  onconfirm={handleDropSchema}
+/>
+
+{#if showSchemaRestore}
+  <RestoreDialog
+    bind:open={showSchemaRestore}
+    savedConnectionId={connection.id}
+    databaseName={connection.database}
+    schema={targetSchemaName}
+  />
+{/if}
+
+{#if showSchemaExport}
+  <ExportDialog
+    bind:open={showSchemaExport}
+    savedConnectionId={connection.id}
+    databaseName={connection.database}
+    schema={targetSchemaName}
+  />
+{/if}

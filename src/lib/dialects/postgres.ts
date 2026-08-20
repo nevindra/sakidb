@@ -205,6 +205,10 @@ export const postgresDialect: SqlDialect = {
       : `CREATE TABLE ${d} AS SELECT * FROM ${s};`;
   },
 
+  renameTable(schema, oldName, newName) {
+    return `ALTER TABLE ${qualified(schema, oldName)} RENAME TO ${q(newName)};`;
+  },
+
   refreshMaterializedView(schema, view) {
     return `REFRESH MATERIALIZED VIEW ${qualified(schema, view)};`;
   },

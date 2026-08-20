@@ -11,6 +11,7 @@
   import InputDialog from '$lib/components/ui/input-dialog/InputDialog.svelte';
   import SchemaNode from './SchemaNode.svelte';
   import RestoreDialog from './RestoreDialog.svelte';
+  import ExportDialog from '$lib/components/structure/ExportDialog.svelte';
   import EditDatabaseDialog from './EditDatabaseDialog.svelte';
   import HighlightMatch from '../HighlightMatch.svelte';
   import { getDialect } from '$lib/dialects';
@@ -132,8 +133,11 @@
   let showRenameDialog = $state(false);
   let showEditDbDialog = $state(false);
   let showDbRestore = $state(false);
+  let showDbExport = $state(false);
   let showSchemaRestore = $state(false);
+  let showSchemaExport = $state(false);
   let restoreSchemaName = $state('');
+  let exportSchemaName = $state('');
 
   // Schema CRUD state
   let showCreateSchemaDialog = $state(false);
@@ -159,6 +163,7 @@
   function handleDbMenuAction(id: string) {
     switch (id) {
       case 'new-query': return app.openQueryTab(connectionId, database.name);
+      case 'export-db': showDbExport = true; return;
       case 'restore': showDbRestore = true; return;
       case 'refresh': return handleRefresh();
       case 'disconnect': return app.disconnectSpecificDatabase(connectionId, database.name);
@@ -216,6 +221,8 @@
     switch (id) {
       case 'view-erd': return app.openErdTab(connectionId, database.name, schemaName);
       case 'new-query': return app.openQueryTab(connectionId, database.name);
+      case 'refresh': return app.refreshSchemaObjects(connectionId, database.name, schemaName);
+      case 'export-schema': exportSchemaName = schemaName; showSchemaExport = true; return;
       case 'restore': restoreSchemaName = schemaName; showSchemaRestore = true; return;
       case 'create-schema': showCreateSchemaDialog = true; return;
       case 'rename-schema': targetSchemaName = schemaName; showRenameSchemaDialog = true; return;
@@ -322,6 +329,23 @@
   savedConnectionId={connectionId}
   databaseName={database.name}
 />
+
+{#if showDbExport}
+  <ExportDialog
+    bind:open={showDbExport}
+    savedConnectionId={connectionId}
+    databaseName={database.name}
+  />
+{/if}
+
+{#if showSchemaExport}
+  <ExportDialog
+    bind:open={showSchemaExport}
+    savedConnectionId={connectionId}
+    databaseName={database.name}
+    schema={exportSchemaName}
+  />
+{/if}
 
 <RestoreDialog
   bind:open={showSchemaRestore}

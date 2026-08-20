@@ -49,6 +49,25 @@ export async function cancelExport(savedConnectionId: string, databaseName: stri
   await invoke('cancel_export', { activeConnectionId: rid });
 }
 
+export async function exportDatabaseSql(
+  savedConnectionId: string,
+  databaseName: string,
+  filePath: string,
+  includeDdl: boolean = true,
+  includeData: boolean = true,
+  schema?: string,
+): Promise<number> {
+  const rid = getRuntimeId(savedConnectionId, databaseName);
+  if (!rid) throw new Error('Not connected');
+  return await invoke('export_database_sql', {
+    activeConnectionId: rid,
+    filePath,
+    includeDdl,
+    includeData,
+    schema: schema ?? null,
+  });
+}
+
 export async function exportTableSql(
   savedConnectionId: string,
   databaseName: string,

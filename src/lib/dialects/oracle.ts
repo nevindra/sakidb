@@ -29,6 +29,10 @@ export const oracleDialect: SqlDialect = {
     }
   },
 
+  renameTable(schema: string, oldName: string, newName: string): string {
+    return `ALTER TABLE ${schema}.${oldName} RENAME TO ${newName}`;
+  },
+
   refreshMaterializedView(schema: string, view: string): string | null {
     return `DBMS_MVIEW.REFRESH('${schema}.${view}', 'C')`;
   },

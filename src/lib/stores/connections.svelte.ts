@@ -31,7 +31,10 @@ let savedConnections = $state<SavedConnection[]>([]);
 let activeConnections = $state<Map<string, ActiveConnection>>(new SvelteMap());
 let connectingIds = $state<Set<string>>(new SvelteSet());
 let editDialogConnectionId = $state<string | null>(null);
+let duplicateSourceConnectionId = $state<string | null>(null);
 let availableEngines = $state<string[]>([]);
+// Bumped per schema path to signal SchemaNode to reload its object lists
+let schemaRefreshTicks = $state<Map<string, number>>(new SvelteMap());
 
 // Oracle specific setup state
 let oracleDriverStatus = $state<OracleDriverStatus | null>(null);
@@ -45,6 +48,7 @@ export function getSavedConnections(): SavedConnection[] { return savedConnectio
 export function getActiveConnections(): Map<string, ActiveConnection> { return activeConnections; }
 export function getConnectingIds(): Set<string> { return connectingIds; }
 export function getEditDialogConnectionId(): string | null { return editDialogConnectionId; }
+export function getDuplicateSourceConnectionId(): string | null { return duplicateSourceConnectionId; }
 export function hasActiveConnections(): boolean { return activeConnections.size > 0; }
 export function getAvailableEngines(): string[] { return availableEngines; }
 
@@ -416,9 +420,11 @@ export async function refreshDatabases(savedConnectionId: string) {
   if (anyDb.done) return;
 
   try {
-    const databases: DatabaseInfo[] = await invoke('list_databases', {
-      activeConnectionId: anyDb.value.runtimeConnectionId,
-    });
+    const databases: DatabaseInfo[] = conn.capabilities.multi_database
+      ? await invoke('list_databases', {
+          activeConnectionId: anyDb.value.runtimeConnectionId,
+        })
+      : conn.databases;
 
     for (const [dbName, dbConn] of conn.activeDatabases) {
       try {
@@ -488,12 +494,31 @@ export function loadForeignTables(savedConnectionId: string, databaseName: strin
   return loadSchemaObjects<ForeignTableInfo>(savedConnectionId, databaseName, 'list_foreign_tables', { schema });
 }
 
+// ── Schema object refresh signal ──
+
+export function getSchemaRefreshTick(savedConnectionId: string, databaseName: string, schemaName: string): number {
+  return schemaRefreshTicks.get(`${savedConnectionId}/${databaseName}/${schemaName}`) ?? 0;
+}
+
+export function refreshSchemaObjects(savedConnectionId: string, databaseName: string, schemaName: string) {
+  const key = `${savedConnectionId}/${databaseName}/${schemaName}`;
+  schemaRefreshTicks.set(key, (schemaRefreshTicks.get(key) ?? 0) + 1);
+}
+
 // ── UI state ──
 
 export function openEditDialog(connectionId: string) {
+  duplicateSourceConnectionId = null;
   editDialogConnectionId = connectionId;
+}
+
+// Opens the edit dialog in create mode, prefilled from an existing connection
+export function openDuplicateDialog(connectionId: string) {
+  duplicateSourceConnectionId = connectionId;
+  editDialogConnectionId = '';
 }
 
 export function closeEditDialog() {
   editDialogConnectionId = null;
+  duplicateSourceConnectionId = null;
 }

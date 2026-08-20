@@ -76,17 +76,32 @@
         options: { ...connection.options },
       };
     } else if (isCreateMode) {
-      form = {
-        name: '',
-        engine: 'postgres',
-        host: 'localhost',
-        port: 5432,
-        database: 'postgres',
-        username: 'postgres',
-        password: '',
-        ssl_mode: 'prefer',
-        options: {},
-      };
+      const source = app.duplicateSourceConnectionId
+        ? app.savedConnections.find(c => c.id === app.duplicateSourceConnectionId)
+        : null;
+      form = source
+        ? {
+            name: `${source.name} (copy)`,
+            engine: source.engine || 'postgres',
+            host: source.host,
+            port: source.port,
+            database: source.database,
+            username: source.username,
+            password: '',
+            ssl_mode: source.ssl_mode,
+            options: { ...source.options },
+          }
+        : {
+            name: '',
+            engine: 'postgres',
+            host: 'localhost',
+            port: 5432,
+            database: 'postgres',
+            username: 'postgres',
+            password: '',
+            ssl_mode: 'prefer',
+            options: {},
+          };
     }
     connectionUrl = '';
     urlError = null;
