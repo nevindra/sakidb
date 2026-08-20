@@ -13,7 +13,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
 
     while i < chars.len() {
         let ch = chars[i];
-        
+
         // Handle comments and strings
         if line_comment {
             if ch == '\n' {
@@ -24,7 +24,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
         }
 
         if block_comment {
-            if ch == '*' && i + 1 < chars.len() && chars[i+1] == '/' {
+            if ch == '*' && i + 1 < chars.len() && chars[i + 1] == '/' {
                 block_comment = false;
                 current.push('*');
                 current.push('/');
@@ -44,15 +44,15 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
                 i += 1;
                 continue;
             }
-            if ch == '-' && i + 1 < chars.len() && chars[i+1] == '-' {
+            if ch == '-' && i + 1 < chars.len() && chars[i + 1] == '-' {
                 line_comment = true;
                 i += 2;
                 continue;
             }
-            if ch == '/' && i + 1 < chars.len() && chars[i+1] == '*' {
+            if ch == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
                 // [Fix: Minor 3] Preserve Oracle hints (/*+ ... */) which can change query plans.
                 // M: Check if it's an Oracle hint
-                if i + 2 < chars.len() && chars[i+2] == '+' {
+                if i + 2 < chars.len() && chars[i + 2] == '+' {
                     block_comment = true;
                     current.push('/');
                     current.push('*');
@@ -62,7 +62,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
                     // Regular block comment - skip
                     let mut j = i + 2;
                     while j + 1 < chars.len() {
-                        if chars[j] == '*' && chars[j+1] == '/' {
+                        if chars[j] == '*' && chars[j + 1] == '/' {
                             i = j + 2;
                             // Add a space to avoid joining words
                             if !current.ends_with(' ') {
@@ -80,7 +80,7 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
             }
         } else if ch == string_delim {
             // Check for escaped quote (e.g. '')
-            if ch == '\'' && i + 1 < chars.len() && chars[i+1] == '\'' {
+            if ch == '\'' && i + 1 < chars.len() && chars[i + 1] == '\'' {
                 current.push('\'');
                 current.push('\'');
                 i += 2;
@@ -104,8 +104,16 @@ pub fn split_sql_statements(sql_content: &str) -> Vec<String> {
         if starts_with_word(remaining, "BEGIN") || starts_with_word(remaining, "DECLARE") {
             begin_count += 1;
             is_plsql = true;
-            current.push_str(if starts_with_word(remaining, "BEGIN") { "BEGIN" } else { "DECLARE" });
-            i += if starts_with_word(remaining, "BEGIN") { 5 } else { 7 };
+            current.push_str(if starts_with_word(remaining, "BEGIN") {
+                "BEGIN"
+            } else {
+                "DECLARE"
+            });
+            i += if starts_with_word(remaining, "BEGIN") {
+                5
+            } else {
+                7
+            };
             continue;
         } else if starts_with_word(remaining, "END") {
             if begin_count > 0 {
@@ -187,7 +195,10 @@ mod tests {
         let sql = "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more'); SELECT 1;";
         let stmts = split_sql_statements(sql);
         assert_eq!(stmts.len(), 2);
-        assert_eq!(stmts[0], "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more')");
+        assert_eq!(
+            stmts[0],
+            "INSERT INTO t1 (c1) VALUES ('O''Reilly; and more')"
+        );
         assert_eq!(stmts[1], "SELECT 1");
     }
 

@@ -57,7 +57,8 @@ fn setup_db(
     let batch_size = 500;
     for batch_start in (0..row_count).step_by(batch_size) {
         let batch_end = (batch_start + batch_size).min(row_count);
-        let mut sql = String::from("INSERT INTO bench_data (id, name, value, active, data) VALUES ");
+        let mut sql =
+            String::from("INSERT INTO bench_data (id, name, value, active, data) VALUES ");
         for i in batch_start..batch_end {
             if i > batch_start {
                 sql.push_str(", ");
@@ -130,17 +131,12 @@ fn bench_bulk_insert_10k_rows(c: &mut Criterion) {
                 let batch_size = 500;
                 for batch_start in (0..10_000).step_by(batch_size) {
                     let batch_end = batch_start + batch_size;
-                    let mut sql = String::from(
-                        "INSERT INTO bulk_test (id, name, value) VALUES ",
-                    );
+                    let mut sql = String::from("INSERT INTO bulk_test (id, name, value) VALUES ");
                     for i in batch_start..batch_end {
                         if i > batch_start {
                             sql.push_str(", ");
                         }
-                        sql.push_str(&format!(
-                            "({i}, 'name_{i}', {val})",
-                            val = i as f64 * 2.71
-                        ));
+                        sql.push_str(&format!("({i}, 'name_{i}', {val})", val = i as f64 * 2.71));
                     }
                     rt.block_on(driver.execute(&conn_id, &sql)).unwrap();
                 }

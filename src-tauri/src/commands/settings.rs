@@ -28,13 +28,13 @@ pub async fn reset_keybinding(
     command_id: String,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    store.reset_keybinding(&command_id).map_err(|e| e.to_string())
+    store
+        .reset_keybinding(&command_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn reset_all_keybindings(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn reset_all_keybindings(state: State<'_, AppState>) -> Result<(), String> {
     let store = state.store.lock().await;
     store.reset_all_keybindings().map_err(|e| e.to_string())
 }
@@ -55,5 +55,7 @@ pub async fn set_preference(
     value: String,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    store.set_preference(&key, &value).map_err(|e| e.to_string())
+    store
+        .set_preference(&key, &value)
+        .map_err(|e| e.to_string())
 }

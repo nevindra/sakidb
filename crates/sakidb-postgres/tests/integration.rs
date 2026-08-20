@@ -27,7 +27,9 @@ fn make_config() -> ConnectionConfig {
         .split_once('@')
         .unwrap_or(("postgres:", without_scheme));
     let (username, password) = userinfo.split_once(':').unwrap_or((userinfo, ""));
-    let (hostport, database) = hostinfo.split_once('/').unwrap_or((hostinfo, "sakidb_test"));
+    let (hostport, database) = hostinfo
+        .split_once('/')
+        .unwrap_or((hostinfo, "sakidb_test"));
     let (host, port_str) = hostport.split_once(':').unwrap_or((hostport, "5432"));
     let port: u16 = port_str.parse().unwrap_or(5432);
 
@@ -384,7 +386,9 @@ async fn introspect_full_schema() {
         .await
         .unwrap();
     assert!(
-        uniques.iter().any(|u| u.columns.contains(&"email".to_string())),
+        uniques
+            .iter()
+            .any(|u| u.columns.contains(&"email".to_string())),
         "expected unique constraint on email, got {:?}",
         uniques
     );
@@ -496,7 +500,10 @@ async fn completion_bundle() {
         "completion bundle should contain items table"
     );
     assert!(
-        bundle.tables.iter().any(|t| t.name == "item_names" && t.kind == "view"),
+        bundle
+            .tables
+            .iter()
+            .any(|t| t.name == "item_names" && t.kind == "view"),
         "completion bundle should contain item_names view"
     );
 
@@ -606,9 +613,7 @@ async fn export_sql_and_cancel() {
                 "CREATE TABLE {schema}.export_test (id INT, val TEXT);
                  {}",
                 (1..=50)
-                    .map(|i| format!(
-                        "INSERT INTO {schema}.export_test VALUES ({i}, 'row_{i}')"
-                    ))
+                    .map(|i| format!("INSERT INTO {schema}.export_test VALUES ({i}, 'row_{i}')"))
                     .collect::<Vec<_>>()
                     .join("; ")
             ),
@@ -619,9 +624,7 @@ async fn export_sql_and_cancel() {
     // Export without cancellation
     let cancelled = AtomicBool::new(false);
 
-    let on_batch: Box<ExportBatchFn> = Box::new(move |_cols, _cells, _total| {
-        Ok(())
-    });
+    let on_batch: Box<ExportBatchFn> = Box::new(move |_cols, _cells, _total| Ok(()));
 
     let rows = driver
         .export_stream(

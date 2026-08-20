@@ -23,7 +23,9 @@ async fn save_query_without_connection() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    let saved = store.save_query("Standalone", "SELECT 42", None, None).unwrap();
+    let saved = store
+        .save_query("Standalone", "SELECT 42", None, None)
+        .unwrap();
     assert!(saved.connection_id.is_none());
     assert!(saved.database_name.is_none());
 }
@@ -53,7 +55,9 @@ async fn update_saved_query_name() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    let saved = store.save_query("Original", "SELECT 1", None, None).unwrap();
+    let saved = store
+        .save_query("Original", "SELECT 1", None, None)
+        .unwrap();
     let updated = store
         .update_saved_query(&saved.id, Some("Renamed"), None)
         .unwrap();
@@ -185,12 +189,16 @@ async fn save_from_history_creates_saved_query() {
     let store = state.store.lock().await;
 
     let entry = store
-        .add_query_history("SELECT * FROM users", Some("c1"), Some("db1"), Some(50), Some(10))
+        .add_query_history(
+            "SELECT * FROM users",
+            Some("c1"),
+            Some("db1"),
+            Some(50),
+            Some(10),
+        )
         .unwrap();
 
-    let saved = store
-        .save_from_history(&entry.id, "Users query")
-        .unwrap();
+    let saved = store.save_from_history(&entry.id, "Users query").unwrap();
 
     assert_eq!(saved.name, "Users query");
     assert_eq!(saved.sql, "SELECT * FROM users");

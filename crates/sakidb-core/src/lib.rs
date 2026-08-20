@@ -11,8 +11,8 @@ mod sql_test;
 mod types_test;
 
 pub use driver::{
-    DocumentDriver, Driver, Exporter, Introspector, KeyValueDriver, Restorer, SqlDriver,
-    SqlFormatter, rows_to_columnar,
+    rows_to_columnar, DocumentDriver, Driver, Exporter, Introspector, KeyValueDriver, Restorer,
+    SqlDriver, SqlFormatter,
 };
 pub use error::{Result, SakiError};
 pub use types::*;

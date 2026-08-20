@@ -149,15 +149,16 @@ pub async fn restore_from_sql(
                                 return Err(SakiError::Cancelled);
                             }
 
-                            let trimmed = copy_line
-                                .trim_end_matches('\n')
-                                .trim_end_matches('\r');
+                            let trimmed = copy_line.trim_end_matches('\n').trim_end_matches('\r');
                             if trimmed == "\\." {
                                 break;
                             }
 
                             if send_err.is_none() {
-                                if let Err(e) = sink.send(Bytes::copy_from_slice(copy_line.as_bytes())).await {
+                                if let Err(e) = sink
+                                    .send(Bytes::copy_from_slice(copy_line.as_bytes()))
+                                    .await
+                                {
                                     send_err = Some(format_pg_error(&e));
                                 }
                             }
@@ -193,9 +194,7 @@ pub async fn restore_from_sql(
                                 break;
                             }
                             progress.bytes_read += dn as u64;
-                            let trimmed = drain_line
-                                .trim_end_matches('\n')
-                                .trim_end_matches('\r');
+                            let trimmed = drain_line.trim_end_matches('\n').trim_end_matches('\r');
                             if trimmed == "\\." {
                                 break;
                             }
@@ -210,7 +209,9 @@ pub async fn restore_from_sql(
                     if continue_on_error {
                         progress.errors_skipped += 1;
                         if progress.error_messages.len() < MAX_ERROR_MESSAGES {
-                            progress.error_messages.push(format!("{copy_label}... → {err}"));
+                            progress
+                                .error_messages
+                                .push(format!("{copy_label}... → {err}"));
                         }
                     } else {
                         return Err(SakiError::QueryFailed(format!("{copy_label}: {err}")));
@@ -277,7 +278,10 @@ async fn flush_batch(
                 batch.clear();
                 return Err(SakiError::QueryFailed(format_pg_error(&e)));
             }
-            warn!(batch_size = batch.len(), "batch failed, retrying one-by-one");
+            warn!(
+                batch_size = batch.len(),
+                "batch failed, retrying one-by-one"
+            );
             // Retry one-by-one to skip only the broken statements
             for stmt in batch.iter() {
                 match client.batch_execute(stmt).await {
@@ -286,7 +290,9 @@ async fn flush_batch(
                         progress.errors_skipped += 1;
                         if progress.error_messages.len() < MAX_ERROR_MESSAGES {
                             let label: String = stmt.chars().take(80).collect();
-                            progress.error_messages.push(format!("{label}... → {}", format_pg_error(&e)));
+                            progress
+                                .error_messages
+                                .push(format!("{label}... → {}", format_pg_error(&e)));
                         }
                     }
                 }
@@ -312,7 +318,8 @@ pub(crate) fn is_copy_from_stdin(stmt: &str) -> bool {
     // Sliding window search for "FROM STDIN" without allocation
     let needle = b"FROM STDIN";
     let hay = &bytes[5..];
-    hay.windows(needle.len()).any(|w| w.eq_ignore_ascii_case(needle))
+    hay.windows(needle.len())
+        .any(|w| w.eq_ignore_ascii_case(needle))
 }
 
 // ── SQL Statement Parser ──
@@ -366,14 +373,20 @@ impl SqlParser {
                 if in_run {
                     self.buf.push_str(&line[run_start..i]);
                     #[allow(unused_assignments)]
-                    { in_run = false; }
+                    {
+                        in_run = false;
+                    }
                 }
             };
         }
 
         while i < len {
             let c = bytes[i];
-            let next = if i + 1 < len { Some(bytes[i + 1]) } else { None };
+            let next = if i + 1 < len {
+                Some(bytes[i + 1])
+            } else {
+                None
+            };
 
             // Inside block comment
             if self.block_comment_depth > 0 {
@@ -560,7 +573,10 @@ pub(crate) fn extract_dollar_tag_from_bytes(bytes: &[u8]) -> Option<(String, usi
     if !first.is_ascii_alphabetic() && first != b'_' {
         return None;
     }
-    if tag_bytes.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_') {
+    if tag_bytes
+        .iter()
+        .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+    {
         // SAFETY: we verified all bytes are ASCII alphanumeric or underscore
         let tag = unsafe { std::str::from_utf8_unchecked(tag_bytes) }.to_string();
         Some((tag, end + 2)) // $tag$
@@ -568,4 +584,3 @@ pub(crate) fn extract_dollar_tag_from_bytes(bytes: &[u8]) -> Option<(String, usi
         None
     }
 }
-

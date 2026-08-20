@@ -135,9 +135,7 @@ fn flush_batch(
                 progress.errors_skipped += 1;
                 if progress.error_messages.len() < MAX_ERROR_MESSAGES {
                     let label: String = stmt.chars().take(80).collect();
-                    progress
-                        .error_messages
-                        .push(format!("{label}... → {e}"));
+                    progress.error_messages.push(format!("{label}... → {e}"));
                 }
             }
         }

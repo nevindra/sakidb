@@ -2,8 +2,8 @@ use rusqlite::{params, Connection};
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use sakidb_core::SakiError;
 use crate::models::{ConnectionInput, QueryHistoryEntry, SavedConnection, SavedQuery};
+use sakidb_core::SakiError;
 
 pub struct Store {
     conn: Connection,
@@ -12,8 +12,7 @@ pub struct Store {
 impl Store {
     pub fn open(db_path: &str) -> Result<Self, SakiError> {
         debug!(path = db_path, "opening store");
-        let conn = Connection::open(db_path)
-            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        let conn = Connection::open(db_path).map_err(|e| SakiError::StorageError(e.to_string()))?;
         let store = Self { conn };
         store.init_tables()?;
         info!(path = db_path, "store opened");
@@ -22,8 +21,8 @@ impl Store {
 
     #[cfg(test)]
     pub fn open_in_memory() -> Result<Self, SakiError> {
-        let conn = Connection::open_in_memory()
-            .map_err(|e| SakiError::StorageError(e.to_string()))?;
+        let conn =
+            Connection::open_in_memory().map_err(|e| SakiError::StorageError(e.to_string()))?;
         let store = Self { conn };
         store.init_tables()?;
         Ok(store)
@@ -76,7 +75,8 @@ impl Store {
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         // Migration: add last_connected_at column if missing
-        let has_column: bool = self.conn
+        let has_column: bool = self
+            .conn
             .prepare("SELECT last_connected_at FROM connections LIMIT 0")
             .is_ok();
         if !has_column {
@@ -86,22 +86,28 @@ impl Store {
         }
 
         // Migration: add engine column if missing (defaults existing rows to 'postgres')
-        let has_engine: bool = self.conn
+        let has_engine: bool = self
+            .conn
             .prepare("SELECT engine FROM connections LIMIT 0")
             .is_ok();
         if !has_engine {
             self.conn
-                .execute_batch("ALTER TABLE connections ADD COLUMN engine TEXT NOT NULL DEFAULT 'postgres';")
+                .execute_batch(
+                    "ALTER TABLE connections ADD COLUMN engine TEXT NOT NULL DEFAULT 'postgres';",
+                )
                 .map_err(|e| SakiError::StorageError(e.to_string()))?;
         }
 
         // [Fix: M7] Migration: add options column if missing to support engine-specific settings
-        let has_options: bool = self.conn
+        let has_options: bool = self
+            .conn
             .prepare("SELECT options FROM connections LIMIT 0")
             .is_ok();
         if !has_options {
             self.conn
-                .execute_batch("ALTER TABLE connections ADD COLUMN options TEXT NOT NULL DEFAULT '{}';")
+                .execute_batch(
+                    "ALTER TABLE connections ADD COLUMN options TEXT NOT NULL DEFAULT '{}';",
+                )
                 .map_err(|e| SakiError::StorageError(e.to_string()))?;
         }
 
@@ -110,7 +116,10 @@ impl Store {
         // Old encrypted passwords were stored as BLOB; new ones are TEXT.
         // Clear any BLOB passwords since they can't be decrypted without the old master password.
         self.conn
-            .execute("UPDATE connections SET password = '' WHERE typeof(password) = 'blob'", [])
+            .execute(
+                "UPDATE connections SET password = '' WHERE typeof(password) = 'blob'",
+                [],
+            )
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         Ok(())
@@ -120,7 +129,8 @@ impl Store {
         debug!(name = %input.name, host = %input.host, "saving connection");
         let id = Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
-        let options_json = serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
+        let options_json =
+            serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
 
         self.conn
             .execute(
@@ -209,7 +219,8 @@ impl Store {
 
     pub fn update_connection(&self, id: &str, input: &ConnectionInput) -> Result<(), SakiError> {
         let now = chrono::Utc::now().to_rfc3339();
-        let options_json = serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
+        let options_json =
+            serde_json::to_string(&input.options).unwrap_or_else(|_| "{}".to_string());
 
         let affected = if input.password.is_empty() {
             // Don't overwrite stored password when none provided
@@ -371,7 +382,10 @@ impl Store {
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
 
         if affected == 0 {
-            return Err(SakiError::StorageError(format!("Saved query not found: {}", id)));
+            return Err(SakiError::StorageError(format!(
+                "Saved query not found: {}",
+                id
+            )));
         }
         Ok(())
     }
@@ -446,7 +460,10 @@ impl Store {
         })
     }
 
-    pub fn list_query_history(&self, limit: Option<u32>) -> Result<Vec<QueryHistoryEntry>, SakiError> {
+    pub fn list_query_history(
+        &self,
+        limit: Option<u32>,
+    ) -> Result<Vec<QueryHistoryEntry>, SakiError> {
         let limit = limit.unwrap_or(100);
         let mut stmt = self
             .conn
@@ -494,7 +511,11 @@ impl Store {
             .map_err(|e| SakiError::StorageError(e.to_string()))
     }
 
-    pub fn set_keybinding(&self, command_id: &str, keybinding: Option<&str>) -> Result<(), SakiError> {
+    pub fn set_keybinding(
+        &self,
+        command_id: &str,
+        keybinding: Option<&str>,
+    ) -> Result<(), SakiError> {
         self.conn
             .execute(
                 "INSERT INTO keybindings (command_id, keybinding) VALUES (?1, ?2)
@@ -507,7 +528,10 @@ impl Store {
 
     pub fn reset_keybinding(&self, command_id: &str) -> Result<(), SakiError> {
         self.conn
-            .execute("DELETE FROM keybindings WHERE command_id = ?1", params![command_id])
+            .execute(
+                "DELETE FROM keybindings WHERE command_id = ?1",
+                params![command_id],
+            )
             .map_err(|e| SakiError::StorageError(e.to_string()))?;
         Ok(())
     }
@@ -570,4 +594,3 @@ impl Store {
         )
     }
 }
-

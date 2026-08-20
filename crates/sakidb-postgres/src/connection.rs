@@ -130,19 +130,16 @@ impl ConnectionManager {
         };
 
         // Verify the connection actually works
-        let _ = pool
-            .get()
-            .await
-            .map_err(|e| {
-                error!(
-                    host = %config.host,
-                    port = config.port,
-                    database = %config.database,
-                    error = %e,
-                    "connection failed"
-                );
-                SakiError::ConnectionFailed(e.to_string())
-            })?;
+        let _ = pool.get().await.map_err(|e| {
+            error!(
+                host = %config.host,
+                port = config.port,
+                database = %config.database,
+                error = %e,
+                "connection failed"
+            );
+            SakiError::ConnectionFailed(e.to_string())
+        })?;
 
         let id = ConnectionId::new();
         self.pools.write().await.insert(id, pool);
@@ -187,13 +184,10 @@ impl ConnectionManager {
 
         match config.ssl_mode {
             SslMode::Disable => {
-                let (client, connection) = pg_config
-                    .connect(NoTls)
-                    .await
-                    .map_err(|e| {
-                        warn!(host = %config.host, error = %e, "test connection failed");
-                        SakiError::ConnectionFailed(e.to_string())
-                    })?;
+                let (client, connection) = pg_config.connect(NoTls).await.map_err(|e| {
+                    warn!(host = %config.host, error = %e, "test connection failed");
+                    SakiError::ConnectionFailed(e.to_string())
+                })?;
 
                 tokio::spawn(async move {
                     if let Err(e) = connection.await {
@@ -208,13 +202,10 @@ impl ConnectionManager {
             }
             SslMode::Prefer | SslMode::Require => {
                 let tls = make_tls_connector();
-                let (client, connection) = pg_config
-                    .connect(tls)
-                    .await
-                    .map_err(|e| {
-                        warn!(host = %config.host, error = %e, "test connection failed (SSL)");
-                        SakiError::ConnectionFailed(e.to_string())
-                    })?;
+                let (client, connection) = pg_config.connect(tls).await.map_err(|e| {
+                    warn!(host = %config.host, error = %e, "test connection failed (SSL)");
+                    SakiError::ConnectionFailed(e.to_string())
+                })?;
 
                 tokio::spawn(async move {
                     if let Err(e) = connection.await {

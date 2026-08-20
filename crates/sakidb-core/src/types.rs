@@ -155,7 +155,7 @@ pub struct ColumnDef {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueryResult {
     pub columns: Vec<ColumnDef>,
-    pub cells: Vec<CellValue>,      // flat: cells[row * num_cols + col]
+    pub cells: Vec<CellValue>, // flat: cells[row * num_cols + col]
     pub row_count: u64,
     pub execution_time_ms: u64,
     #[serde(default)]
@@ -179,9 +179,17 @@ pub enum ColumnStorage {
     Bool { nulls: Vec<u8>, values: Vec<u8> },
     /// Variable-length UTF-8 strings (text, json, timestamp, uuid, etc.).
     /// offsets has length row_count + 1. Row i's bytes are data[offsets[i]..offsets[i+1]].
-    Text { nulls: Vec<u8>, offsets: Vec<u32>, data: Vec<u8> },
+    Text {
+        nulls: Vec<u8>,
+        offsets: Vec<u32>,
+        data: Vec<u8>,
+    },
     /// Variable-length byte arrays (bytea).
-    Bytes { nulls: Vec<u8>, offsets: Vec<u32>, data: Vec<u8> },
+    Bytes {
+        nulls: Vec<u8>,
+        offsets: Vec<u32>,
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Debug)]
@@ -262,35 +270,37 @@ impl ColumnarResult {
                     buf.extend_from_slice(&values);
                     // nulls + values dropped here
                 }
-                ColumnStorage::Text { nulls, offsets, data } => {
+                ColumnStorage::Text {
+                    nulls,
+                    offsets,
+                    data,
+                } => {
                     buf.push(2); // type tag
                     buf.extend_from_slice(&nulls);
                     drop(nulls);
                     buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
                     buf.extend_from_slice(&data);
                     drop(data); // free text data immediately (can be 100+ MB)
-                    // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
+                                // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
                     let byte_slice = unsafe {
-                        std::slice::from_raw_parts(
-                            offsets.as_ptr() as *const u8,
-                            offsets.len() * 4,
-                        )
+                        std::slice::from_raw_parts(offsets.as_ptr() as *const u8, offsets.len() * 4)
                     };
                     buf.extend_from_slice(byte_slice);
                 }
-                ColumnStorage::Bytes { nulls, offsets, data } => {
+                ColumnStorage::Bytes {
+                    nulls,
+                    offsets,
+                    data,
+                } => {
                     buf.push(3); // type tag
                     buf.extend_from_slice(&nulls);
                     drop(nulls);
                     buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
                     buf.extend_from_slice(&data);
                     drop(data); // free byte data immediately
-                    // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
+                                // Bulk write: cast Vec<u32> directly to bytes (all targets are LE)
                     let byte_slice = unsafe {
-                        std::slice::from_raw_parts(
-                            offsets.as_ptr() as *const u8,
-                            offsets.len() * 4,
-                        )
+                        std::slice::from_raw_parts(offsets.as_ptr() as *const u8, offsets.len() * 4)
                     };
                     buf.extend_from_slice(byte_slice);
                 }
@@ -322,7 +332,7 @@ impl ColumnarResult {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PagedResult {
     pub columns: Vec<ColumnDef>,
-    pub cells: Vec<CellValue>,      // flat: cells[row * num_cols + col]
+    pub cells: Vec<CellValue>, // flat: cells[row * num_cols + col]
     pub row_count: u64,
     pub page: usize,
     pub page_size: usize,
@@ -564,4 +574,3 @@ pub type ExportBatchFn =
 
 // Re-export driver functions
 pub use crate::driver::rows_to_columnar;
-

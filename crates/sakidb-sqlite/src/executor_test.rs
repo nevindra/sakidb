@@ -36,9 +36,17 @@ fn test_split_empty() {
 
 #[test]
 fn test_sqlite_value_to_cell() {
-    assert!(matches!(sqlite_value_to_cell(ValueRef::Null), CellValue::Null));
-    assert!(matches!(sqlite_value_to_cell(ValueRef::Integer(42)), CellValue::Int(42)));
-    assert!(matches!(sqlite_value_to_cell(ValueRef::Real(3.14)), CellValue::Float(f) if (f - 3.14).abs() < f64::EPSILON));
+    assert!(matches!(
+        sqlite_value_to_cell(ValueRef::Null),
+        CellValue::Null
+    ));
+    assert!(matches!(
+        sqlite_value_to_cell(ValueRef::Integer(42)),
+        CellValue::Int(42)
+    ));
+    assert!(
+        matches!(sqlite_value_to_cell(ValueRef::Real(3.14)), CellValue::Float(f) if (f - 3.14).abs() < f64::EPSILON)
+    );
 }
 
 // ── Additional sqlite_value_to_cell tests ──
@@ -144,7 +152,10 @@ fn test_split_single() {
 #[test]
 fn test_split_nested_block_comments() {
     let stmts = split_sql_statements("SELECT /* outer /* inner */ still */ 1; SELECT 2");
-    assert_eq!(stmts, vec!["SELECT /* outer /* inner */ still */ 1", "SELECT 2"]);
+    assert_eq!(
+        stmts,
+        vec!["SELECT /* outer /* inner */ still */ 1", "SELECT 2"]
+    );
 }
 
 #[test]
@@ -201,8 +212,9 @@ fn test_execute_query_multiple_rows() {
         "CREATE TABLE t (id INTEGER, name TEXT);
          INSERT INTO t VALUES (1, 'Alice');
          INSERT INTO t VALUES (2, 'Bob');
-         INSERT INTO t VALUES (3, 'Charlie');"
-    ).unwrap();
+         INSERT INTO t VALUES (3, 'Charlie');",
+    )
+    .unwrap();
     let result = crate::executor::execute_query(&conn, "SELECT * FROM t ORDER BY id").unwrap();
     assert_eq!(result.row_count, 3);
     assert_eq!(result.columns.len(), 2);
@@ -215,8 +227,9 @@ fn test_execute_query_with_nulls() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     conn.execute_batch(
         "CREATE TABLE t (id INTEGER, val TEXT);
-         INSERT INTO t VALUES (1, NULL);"
-    ).unwrap();
+         INSERT INTO t VALUES (1, NULL);",
+    )
+    .unwrap();
     let result = crate::executor::execute_query(&conn, "SELECT * FROM t").unwrap();
     assert_eq!(result.row_count, 1);
     assert!(matches!(result.cells[1], CellValue::Null));
@@ -242,7 +255,11 @@ fn test_execute_multi_two_statements() {
 #[test]
 fn test_execute_batch_creates_table() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
-    crate::executor::execute_batch(&conn, "CREATE TABLE t (id INTEGER); INSERT INTO t VALUES (1);").unwrap();
+    crate::executor::execute_batch(
+        &conn,
+        "CREATE TABLE t (id INTEGER); INSERT INTO t VALUES (1);",
+    )
+    .unwrap();
     let result = crate::executor::execute_query(&conn, "SELECT * FROM t").unwrap();
     assert_eq!(result.row_count, 1);
 }
@@ -263,9 +280,11 @@ fn test_execute_paged_first_page() {
          INSERT INTO t VALUES (2);
          INSERT INTO t VALUES (3);
          INSERT INTO t VALUES (4);
-         INSERT INTO t VALUES (5);"
-    ).unwrap();
-    let result = crate::executor::execute_paged(&conn, "SELECT * FROM t ORDER BY id", 0, 2).unwrap();
+         INSERT INTO t VALUES (5);",
+    )
+    .unwrap();
+    let result =
+        crate::executor::execute_paged(&conn, "SELECT * FROM t ORDER BY id", 0, 2).unwrap();
     assert_eq!(result.page, 0);
     assert_eq!(result.page_size, 2);
     assert_eq!(result.row_count, 2);
@@ -282,9 +301,11 @@ fn test_execute_paged_second_page() {
          INSERT INTO t VALUES (2);
          INSERT INTO t VALUES (3);
          INSERT INTO t VALUES (4);
-         INSERT INTO t VALUES (5);"
-    ).unwrap();
-    let result = crate::executor::execute_paged(&conn, "SELECT * FROM t ORDER BY id", 1, 2).unwrap();
+         INSERT INTO t VALUES (5);",
+    )
+    .unwrap();
+    let result =
+        crate::executor::execute_paged(&conn, "SELECT * FROM t ORDER BY id", 1, 2).unwrap();
     assert_eq!(result.page, 1);
     assert_eq!(result.row_count, 2);
     // Non-first page should not have a total rows estimate
@@ -297,9 +318,11 @@ fn test_execute_query_columnar_simple() {
     conn.execute_batch(
         "CREATE TABLE t (id INTEGER, name TEXT, score REAL);
          INSERT INTO t VALUES (1, 'Alice', 95.5);
-         INSERT INTO t VALUES (2, 'Bob', 87.0);"
-    ).unwrap();
-    let result = crate::executor::execute_query_columnar(&conn, "SELECT * FROM t ORDER BY id").unwrap();
+         INSERT INTO t VALUES (2, 'Bob', 87.0);",
+    )
+    .unwrap();
+    let result =
+        crate::executor::execute_query_columnar(&conn, "SELECT * FROM t ORDER BY id").unwrap();
     assert_eq!(result.row_count, 2);
     assert_eq!(result.columns.len(), 3);
     assert!(!result.truncated);
@@ -308,7 +331,8 @@ fn test_execute_query_columnar_simple() {
 #[test]
 fn test_execute_query_columnar_empty() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.execute_batch("CREATE TABLE t (id INTEGER, name TEXT)").unwrap();
+    conn.execute_batch("CREATE TABLE t (id INTEGER, name TEXT)")
+        .unwrap();
     let result = crate::executor::execute_query_columnar(&conn, "SELECT * FROM t").unwrap();
     assert_eq!(result.row_count, 0);
     assert_eq!(result.columns.len(), 2);

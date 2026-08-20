@@ -32,8 +32,16 @@ fn test_split_dollar_quoted() {
 
 #[test]
 fn test_split_tagged_dollar_quote() {
-    let stmts = split_sql_statements("CREATE FUNCTION f() RETURNS void AS $body$BEGIN; END;$body$; SELECT 1");
-    assert_eq!(stmts, vec!["CREATE FUNCTION f() RETURNS void AS $body$BEGIN; END;$body$", "SELECT 1"]);
+    let stmts = split_sql_statements(
+        "CREATE FUNCTION f() RETURNS void AS $body$BEGIN; END;$body$; SELECT 1",
+    );
+    assert_eq!(
+        stmts,
+        vec![
+            "CREATE FUNCTION f() RETURNS void AS $body$BEGIN; END;$body$",
+            "SELECT 1"
+        ]
+    );
 }
 
 #[test]
@@ -65,7 +73,10 @@ fn test_split_single() {
 #[test]
 fn test_split_nested_block_comments() {
     let stmts = split_sql_statements("SELECT /* outer /* inner */ still comment */ 1; SELECT 2");
-    assert_eq!(stmts, vec!["SELECT /* outer /* inner */ still comment */ 1", "SELECT 2"]);
+    assert_eq!(
+        stmts,
+        vec!["SELECT /* outer /* inner */ still comment */ 1", "SELECT 2"]
+    );
 }
 
 #[test]
@@ -118,7 +129,12 @@ fn test_split_mixed_comments_and_strings() {
 fn test_split_only_comments() {
     let stmts = split_sql_statements("-- just a comment\n/* block */");
     // Comments alone with no real statements
-    assert!(stmts.is_empty() || stmts.iter().all(|s| s.trim().starts_with("--") || s.trim().starts_with("/*")));
+    assert!(
+        stmts.is_empty()
+            || stmts
+                .iter()
+                .all(|s| s.trim().starts_with("--") || s.trim().starts_with("/*"))
+    );
 }
 
 #[test]

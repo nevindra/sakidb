@@ -2,26 +2,28 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use oracle::{Connection as OracleConnection, Connector};
 use sakidb_core::{
-    driver::{Driver, SqlDriver, Introspector, Exporter, Restorer, SqlFormatter},
+    driver::{Driver, Exporter, Introspector, Restorer, SqlDriver, SqlFormatter},
     error::{Result, SakiError},
     types::{
-        EngineType, EngineCapabilities, ConnectionConfig, ConnectionId,
-        QueryResult, MultiQueryResult, MultiColumnarResult, PagedResult, PagedColumnarResult,
-        DatabaseInfo, SchemaInfo, TableInfo, ColumnInfo, ViewInfo, MaterializedViewInfo,
-        FunctionInfo, SequenceInfo, IndexInfo, ForeignTableInfo, TriggerInfo,
-        ForeignKeyInfo, CheckConstraintInfo, UniqueConstraintInfo, PartitionInfo,
-        ErdData, CompletionBundle, CompletionColumn, RestoreOptions, RestoreProgress,
-        ExportBatchFn, ColumnDef, CellValue, DdlContext,
+        CellValue, CheckConstraintInfo, ColumnDef, ColumnInfo, CompletionBundle, CompletionColumn,
+        ConnectionConfig, ConnectionId, DatabaseInfo, DdlContext, EngineCapabilities, EngineType,
+        ErdData, ExportBatchFn, ForeignKeyInfo, ForeignTableInfo, FunctionInfo, IndexInfo,
+        MaterializedViewInfo, MultiColumnarResult, MultiQueryResult, PagedColumnarResult,
+        PagedResult, PartitionInfo, QueryResult, RestoreOptions, RestoreProgress, SchemaInfo,
+        SequenceInfo, TableInfo, TriggerInfo, UniqueConstraintInfo, ViewInfo,
     },
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::{executor::OracleExecutor, introspect::OracleIntrospector, restore::OracleRestorer, formatter::OracleFormatter};
 use crate::instantclient::{ensure_instantclient, init_oracle_client_once};
+use crate::{
+    executor::OracleExecutor, formatter::OracleFormatter, introspect::OracleIntrospector,
+    restore::OracleRestorer,
+};
 
 pub struct OracleDriver {
     connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -96,15 +98,16 @@ impl Driver for OracleDriver {
             connection_string.clone(),
         );
 
-        let connection = tokio::task::spawn_blocking(move || {
-            connector.connect()
-        })
-        .await
-        .map_err(|e| SakiError::ConnectionFailed(format!("Connection task failed: {}", e)))?
-        .map_err(|e| SakiError::ConnectionFailed(format!("Failed to connect to Oracle: {}", e)))?;
+        let connection = tokio::task::spawn_blocking(move || connector.connect())
+            .await
+            .map_err(|e| SakiError::ConnectionFailed(format!("Connection task failed: {}", e)))?
+            .map_err(|e| {
+                SakiError::ConnectionFailed(format!("Failed to connect to Oracle: {}", e))
+            })?;
 
         let conn_id = ConnectionId::new();
-        self.connections.insert(conn_id, Arc::new(RwLock::new(connection)));
+        self.connections
+            .insert(conn_id, Arc::new(RwLock::new(connection)));
 
         info!("Successfully connected to Oracle: {}", conn_id.0);
         Ok(conn_id)
@@ -137,16 +140,21 @@ impl Driver for OracleDriver {
 
         let connection = tokio::task::spawn_blocking(move || {
             let conn = oracle::Connection::connect(&username, &password, &connection_string)
-                .map_err(|e| SakiError::ConnectionFailed(format!("Failed to connect to Oracle: {}", e)))?;
+                .map_err(|e| {
+                    SakiError::ConnectionFailed(format!("Failed to connect to Oracle: {}", e))
+                })?;
             // Run a simple test query
             conn.query("SELECT 1 FROM DUAL", &[])
                 .map_err(|e| SakiError::ConnectionFailed(format!("Test query failed: {}", e)))?;
-            conn.close()
-                .map_err(|e| SakiError::ConnectionFailed(format!("Failed to close test connection: {}", e)))?;
+            conn.close().map_err(|e| {
+                SakiError::ConnectionFailed(format!("Failed to close test connection: {}", e))
+            })?;
             Ok::<(), SakiError>(())
         })
         .await
-        .map_err(|e| SakiError::ConnectionFailed(format!("Connection test task failed: {}", e)))??;
+        .map_err(|e| {
+            SakiError::ConnectionFailed(format!("Connection test task failed: {}", e))
+        })??;
 
         let _ = connection;
         info!("Oracle connection test successful");
@@ -194,7 +202,9 @@ impl SqlDriver for OracleDriver {
         page_size: usize,
     ) -> Result<PagedColumnarResult> {
         let executor = OracleExecutor::new(self.connections.clone());
-        executor.execute_paged_columnar(conn_id, sql, page, page_size).await
+        executor
+            .execute_paged_columnar(conn_id, sql, page, page_size)
+            .await
     }
 
     async fn execute_batch(&self, conn_id: &ConnectionId, sql: &str) -> Result<()> {
@@ -267,11 +277,7 @@ impl Introspector for OracleDriver {
         introspector.list_sequences(conn_id, schema).await
     }
 
-    async fn list_indexes(
-        &self,
-        conn_id: &ConnectionId,
-        schema: &str,
-    ) -> Result<Vec<IndexInfo>> {
+    async fn list_indexes(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<IndexInfo>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
         introspector.list_indexes(conn_id, schema).await
     }
@@ -311,7 +317,9 @@ impl Introspector for OracleDriver {
         table: &str,
     ) -> Result<Vec<CheckConstraintInfo>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.list_check_constraints(conn_id, schema, table).await
+        introspector
+            .list_check_constraints(conn_id, schema, table)
+            .await
     }
 
     async fn list_unique_constraints(
@@ -321,7 +329,9 @@ impl Introspector for OracleDriver {
         table: &str,
     ) -> Result<Vec<UniqueConstraintInfo>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.list_unique_constraints(conn_id, schema, table).await
+        introspector
+            .list_unique_constraints(conn_id, schema, table)
+            .await
     }
 
     async fn get_partition_info(
@@ -331,7 +341,9 @@ impl Introspector for OracleDriver {
         table: &str,
     ) -> Result<Option<PartitionInfo>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.get_partition_info(conn_id, schema, table).await
+        introspector
+            .get_partition_info(conn_id, schema, table)
+            .await
     }
 
     async fn get_create_table_sql(
@@ -341,7 +353,9 @@ impl Introspector for OracleDriver {
         table: &str,
     ) -> Result<String> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.get_create_table_sql(conn_id, schema, table).await
+        introspector
+            .get_create_table_sql(conn_id, schema, table)
+            .await
     }
 
     async fn get_erd_data(&self, conn_id: &ConnectionId, schema: &str) -> Result<ErdData> {
@@ -355,7 +369,9 @@ impl Introspector for OracleDriver {
         schema: &str,
     ) -> Result<HashMap<String, Vec<String>>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.get_schema_completion_data(conn_id, schema).await
+        introspector
+            .get_schema_completion_data(conn_id, schema)
+            .await
     }
 
     async fn get_completion_bundle(
@@ -374,7 +390,9 @@ impl Introspector for OracleDriver {
         table: &str,
     ) -> Result<Vec<CompletionColumn>> {
         let introspector = OracleIntrospector::new(self.connections.clone());
-        introspector.get_table_columns_for_completion(conn_id, schema, table).await
+        introspector
+            .get_table_columns_for_completion(conn_id, schema, table)
+            .await
     }
 }
 
@@ -389,7 +407,9 @@ impl Exporter for OracleDriver {
         on_batch: &ExportBatchFn,
     ) -> Result<u64> {
         let executor = OracleExecutor::new(self.connections.clone());
-        executor.export_stream(conn_id, sql, batch_size, cancelled, on_batch).await
+        executor
+            .export_stream(conn_id, sql, batch_size, cancelled, on_batch)
+            .await
     }
 }
 
@@ -404,7 +424,9 @@ impl Restorer for OracleDriver {
         on_progress: Box<dyn for<'a> Fn(&'a RestoreProgress) + Send + Sync>,
     ) -> Result<RestoreProgress> {
         let restorer = OracleRestorer::new(self.connections.clone());
-        restorer.restore(conn_id, file_path, options, cancelled, on_progress).await
+        restorer
+            .restore(conn_id, file_path, options, cancelled, on_progress)
+            .await
     }
 }
 

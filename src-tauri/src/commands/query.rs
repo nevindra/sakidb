@@ -28,9 +28,8 @@ pub async fn execute_query(
     active_connection_id: String,
     sql: String,
 ) -> Result<Response, String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
     let result = state
         .registry
         .sql_for(&conn_id)
@@ -56,9 +55,8 @@ pub async fn execute_query_multi(
     active_connection_id: String,
     sql: String,
 ) -> Result<Response, String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
     let result = state
         .registry
         .sql_for(&conn_id)
@@ -84,9 +82,8 @@ pub async fn execute_query_multi_columnar(
     active_connection_id: String,
     sql: String,
 ) -> Result<Response, String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
 
     let start = Instant::now();
     let result = state
@@ -144,9 +141,8 @@ pub async fn execute_query_paged(
     page: usize,
     page_size: usize,
 ) -> Result<Response, String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
     let result = state
         .registry
         .sql_for(&conn_id)
@@ -177,9 +173,8 @@ pub async fn execute_query_paged_columnar(
     page: usize,
     page_size: usize,
 ) -> Result<Response, String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
 
     let start = Instant::now();
     let result = state
@@ -216,9 +211,8 @@ pub async fn execute_batch(
     active_connection_id: String,
     sql: String,
 ) -> Result<(), String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
     let t0 = Instant::now();
     state
         .registry
@@ -237,9 +231,8 @@ pub async fn cancel_query(
     active_connection_id: String,
 ) -> Result<(), String> {
     info!(conn_id = %active_connection_id, "cancel query requested");
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
     state
         .registry
         .sql_for(&conn_id)

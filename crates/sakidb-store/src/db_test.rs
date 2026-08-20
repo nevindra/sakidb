@@ -60,14 +60,18 @@ fn delete_nonexistent_fails() {
 fn saved_queries_crud() {
     let store = Store::open_in_memory().unwrap();
 
-    let q = store.save_query("My Query", "SELECT 1", Some("conn-1"), Some("mydb")).unwrap();
+    let q = store
+        .save_query("My Query", "SELECT 1", Some("conn-1"), Some("mydb"))
+        .unwrap();
     assert_eq!(q.name, "My Query");
     assert_eq!(q.sql, "SELECT 1");
 
     let list = store.list_saved_queries().unwrap();
     assert_eq!(list.len(), 1);
 
-    let updated = store.update_saved_query(&q.id, Some("Renamed"), None).unwrap();
+    let updated = store
+        .update_saved_query(&q.id, Some("Renamed"), None)
+        .unwrap();
     assert_eq!(updated.name, "Renamed");
     assert_eq!(updated.sql, "SELECT 1");
 
@@ -79,8 +83,12 @@ fn saved_queries_crud() {
 fn query_history_dedup() {
     let store = Store::open_in_memory().unwrap();
 
-    let e1 = store.add_query_history("SELECT 1", Some("c1"), Some("db1"), Some(10), Some(1)).unwrap();
-    let e2 = store.add_query_history("SELECT 1", Some("c1"), Some("db1"), Some(20), Some(1)).unwrap();
+    let e1 = store
+        .add_query_history("SELECT 1", Some("c1"), Some("db1"), Some(10), Some(1))
+        .unwrap();
+    let e2 = store
+        .add_query_history("SELECT 1", Some("c1"), Some("db1"), Some(20), Some(1))
+        .unwrap();
 
     // Same id due to dedup
     assert_eq!(e1.id, e2.id);
@@ -98,10 +106,15 @@ fn keybindings_crud() {
     assert_eq!(store.get_keybinding_overrides().unwrap().len(), 0);
 
     // Set a keybinding
-    store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+N"))
+        .unwrap();
     let overrides = store.get_keybinding_overrides().unwrap();
     assert_eq!(overrides.len(), 1);
-    assert_eq!(overrides[0], ("nav.new-query".to_string(), Some("Ctrl+N".to_string())));
+    assert_eq!(
+        overrides[0],
+        ("nav.new-query".to_string(), Some("Ctrl+N".to_string()))
+    );
 
     // Unbind (set to None)
     store.set_keybinding("nav.new-query", None).unwrap();
@@ -123,7 +136,15 @@ fn keybindings_crud() {
 fn save_from_history_works() {
     let store = Store::open_in_memory().unwrap();
 
-    let entry = store.add_query_history("SELECT * FROM users", Some("c1"), Some("db1"), Some(50), Some(10)).unwrap();
+    let entry = store
+        .add_query_history(
+            "SELECT * FROM users",
+            Some("c1"),
+            Some("db1"),
+            Some(50),
+            Some(10),
+        )
+        .unwrap();
     let saved = store.save_from_history(&entry.id, "Users query").unwrap();
 
     assert_eq!(saved.name, "Users query");

@@ -1,6 +1,6 @@
 use sakidb_core::{
     driver::SqlFormatter,
-    types::{ColumnDef, CellValue, DdlContext},
+    types::{CellValue, ColumnDef, DdlContext},
 };
 
 pub struct OracleFormatter;
@@ -24,7 +24,8 @@ impl SqlFormatter for OracleFormatter {
         }
         ddl.push_str(&column_defs.join(",\n"));
 
-        let pk_columns: Vec<String> = ctx.columns
+        let pk_columns: Vec<String> = ctx
+            .columns
             .iter()
             .filter(|col| col.is_primary_key)
             .map(|col| col.name.clone())
@@ -61,8 +62,7 @@ impl SqlFormatter for OracleFormatter {
         for check in ctx.check_constraints {
             ddl.push_str(&format!(
                 "\n    CONSTRAINT {} CHECK ({})",
-                check.constraint_name,
-                check.check_clause
+                check.constraint_name, check.check_clause
             ));
         }
 

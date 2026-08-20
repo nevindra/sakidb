@@ -37,7 +37,10 @@ pub fn list_tables(conn: &Connection) -> Result<Vec<TableInfo>, SakiError> {
 pub fn list_columns(conn: &Connection, table: &str) -> Result<Vec<ColumnInfo>, SakiError> {
     debug!(table, "listing columns");
     let mut stmt = conn
-        .prepare(&format!("PRAGMA table_info(\"{}\")", table.replace('"', "\"\"")))
+        .prepare(&format!(
+            "PRAGMA table_info(\"{}\")",
+            table.replace('"', "\"\"")
+        ))
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
 
     let columns = stmt
@@ -97,8 +100,8 @@ pub fn list_indexes(conn: &Connection, table: &str) -> Result<Vec<IndexInfo>, Sa
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(1)?, // name
-                row.get::<_, bool>(2)?,    // unique
-                row.get::<_, String>(3)?,  // origin (c=CREATE INDEX, u=UNIQUE, pk=PRIMARY KEY)
+                row.get::<_, bool>(2)?,   // unique
+                row.get::<_, String>(3)?, // origin (c=CREATE INDEX, u=UNIQUE, pk=PRIMARY KEY)
             ))
         })
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?
@@ -258,11 +261,11 @@ pub fn list_foreign_keys(conn: &Connection, table: &str) -> Result<Vec<ForeignKe
         .query_map([], |row| {
             Ok((
                 row.get::<_, i32>(0)?,    // id
-                row.get::<_, String>(2)?,  // foreign table
-                row.get::<_, String>(3)?,  // from column
-                row.get::<_, String>(4)?,  // to column
-                row.get::<_, String>(5)?,  // on_update
-                row.get::<_, String>(6)?,  // on_delete
+                row.get::<_, String>(2)?, // foreign table
+                row.get::<_, String>(3)?, // from column
+                row.get::<_, String>(4)?, // to column
+                row.get::<_, String>(5)?, // on_update
+                row.get::<_, String>(6)?, // on_delete
             ))
         })
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?

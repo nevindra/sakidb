@@ -27,7 +27,10 @@ fn cell_value_serialization_roundtrip() {
 #[test]
 fn query_result_serialization() {
     let result = QueryResult {
-        columns: vec![ColumnDef { name: "id".into(), data_type: "int4".into() }],
+        columns: vec![ColumnDef {
+            name: "id".into(),
+            data_type: "int4".into(),
+        }],
         cells: vec![CellValue::Int(1)],
         row_count: 1,
         execution_time_ms: 5,
@@ -49,15 +52,14 @@ fn ssl_mode_default() {
 #[test]
 fn columnar_result_encode_roundtrip_numbers() {
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "id".into(), data_type: "int4".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Number {
-                nulls: vec![0, 0, 1],
-                values: vec![1.0, 2.0, 0.0],
-            },
-        ],
+        columns: vec![ColumnDef {
+            name: "id".into(),
+            data_type: "int4".into(),
+        }],
+        column_data: vec![ColumnStorage::Number {
+            nulls: vec![0, 0, 1],
+            values: vec![1.0, 2.0, 0.0],
+        }],
         row_count: 3,
         execution_time_ms: 42,
         truncated: false,
@@ -74,16 +76,15 @@ fn columnar_result_encode_roundtrip_numbers() {
 #[test]
 fn columnar_result_encode_text_column() {
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "name".into(), data_type: "text".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Text {
-                nulls: vec![0, 1, 0],
-                offsets: vec![0, 5, 5, 10],
-                data: b"helloworld".to_vec(),
-            },
-        ],
+        columns: vec![ColumnDef {
+            name: "name".into(),
+            data_type: "text".into(),
+        }],
+        column_data: vec![ColumnStorage::Text {
+            nulls: vec![0, 1, 0],
+            offsets: vec![0, 5, 5, 10],
+            data: b"helloworld".to_vec(),
+        }],
         row_count: 3,
         execution_time_ms: 10,
         truncated: false,
@@ -193,9 +194,18 @@ fn cell_value_timestamp_formats() {
 fn columnar_mixed_columns() {
     let result = ColumnarResult {
         columns: vec![
-            ColumnDef { name: "id".into(), data_type: "int4".into() },
-            ColumnDef { name: "name".into(), data_type: "text".into() },
-            ColumnDef { name: "active".into(), data_type: "bool".into() },
+            ColumnDef {
+                name: "id".into(),
+                data_type: "int4".into(),
+            },
+            ColumnDef {
+                name: "name".into(),
+                data_type: "text".into(),
+            },
+            ColumnDef {
+                name: "active".into(),
+                data_type: "bool".into(),
+            },
         ],
         column_data: vec![
             ColumnStorage::Number {
@@ -228,15 +238,14 @@ fn columnar_mixed_columns() {
 fn columnar_all_nulls() {
     let row_count = 5;
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "val".into(), data_type: "int4".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Number {
-                nulls: vec![1; row_count],
-                values: vec![0.0; row_count],
-            },
-        ],
+        columns: vec![ColumnDef {
+            name: "val".into(),
+            data_type: "int4".into(),
+        }],
+        column_data: vec![ColumnStorage::Number {
+            nulls: vec![1; row_count],
+            values: vec![0.0; row_count],
+        }],
         row_count: row_count as u64,
         execution_time_ms: 1,
         truncated: false,
@@ -250,7 +259,12 @@ fn columnar_all_nulls() {
     assert_eq!(bytes[col_data_start], 0);
     // Nulls: all 1s
     for i in 0..row_count {
-        assert_eq!(bytes[col_data_start + 1 + i], 1, "null bitmap at row {} should be 1", i);
+        assert_eq!(
+            bytes[col_data_start + 1 + i],
+            1,
+            "null bitmap at row {} should be 1",
+            i
+        );
     }
 }
 
@@ -258,14 +272,33 @@ fn columnar_all_nulls() {
 fn columnar_empty_result() {
     let result = ColumnarResult {
         columns: vec![
-            ColumnDef { name: "a".into(), data_type: "int4".into() },
-            ColumnDef { name: "b".into(), data_type: "text".into() },
-            ColumnDef { name: "c".into(), data_type: "bool".into() },
+            ColumnDef {
+                name: "a".into(),
+                data_type: "int4".into(),
+            },
+            ColumnDef {
+                name: "b".into(),
+                data_type: "text".into(),
+            },
+            ColumnDef {
+                name: "c".into(),
+                data_type: "bool".into(),
+            },
         ],
         column_data: vec![
-            ColumnStorage::Number { nulls: vec![], values: vec![] },
-            ColumnStorage::Text { nulls: vec![], offsets: vec![0], data: vec![] },
-            ColumnStorage::Bool { nulls: vec![], values: vec![] },
+            ColumnStorage::Number {
+                nulls: vec![],
+                values: vec![],
+            },
+            ColumnStorage::Text {
+                nulls: vec![],
+                offsets: vec![0],
+                data: vec![],
+            },
+            ColumnStorage::Bool {
+                nulls: vec![],
+                values: vec![],
+            },
         ],
         row_count: 0,
         execution_time_ms: 0,
@@ -283,18 +316,20 @@ fn columnar_large_column() {
     let values: Vec<f64> = (0..n).map(|i| i as f64).collect();
     let nulls = vec![0u8; n];
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "big".into(), data_type: "float8".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Number { nulls, values },
-        ],
+        columns: vec![ColumnDef {
+            name: "big".into(),
+            data_type: "float8".into(),
+        }],
+        column_data: vec![ColumnStorage::Number { nulls, values }],
         row_count: n as u64,
         execution_time_ms: 100,
         truncated: false,
     };
     let bytes = result.encode();
-    assert_eq!(u64::from_le_bytes(bytes[4..12].try_into().unwrap()), n as u64);
+    assert_eq!(
+        u64::from_le_bytes(bytes[4..12].try_into().unwrap()),
+        n as u64
+    );
     // The encoded data should contain at least the header + nulls + values
     // values alone = 10001 * 8 = 80008 bytes
     assert!(bytes.len() > 80_000);
@@ -308,16 +343,15 @@ fn columnar_bytes_column() {
     data.extend_from_slice(&bin1);
     data.extend_from_slice(&bin2);
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "blob".into(), data_type: "bytea".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Bytes {
-                nulls: vec![0, 0],
-                offsets: vec![0, 2, 5],
-                data,
-            },
-        ],
+        columns: vec![ColumnDef {
+            name: "blob".into(),
+            data_type: "bytea".into(),
+        }],
+        column_data: vec![ColumnStorage::Bytes {
+            nulls: vec![0, 0],
+            offsets: vec![0, 2, 5],
+            data,
+        }],
         row_count: 2,
         execution_time_ms: 3,
         truncated: false,
@@ -325,8 +359,8 @@ fn columnar_bytes_column() {
     let bytes = result.encode();
     assert_eq!(u32::from_le_bytes(bytes[0..4].try_into().unwrap()), 1); // 1 column
     assert_eq!(u64::from_le_bytes(bytes[4..12].try_into().unwrap()), 2); // 2 rows
-    // Find the column data type tag (after header + column def)
-    // Header=25, col def for "blob"/"bytea": 2+4+2+5=13
+                                                                         // Find the column data type tag (after header + column def)
+                                                                         // Header=25, col def for "blob"/"bytea": 2+4+2+5=13
     let col_data_start = 25 + 13;
     assert_eq!(bytes[col_data_start], 3); // Bytes type tag
 }
@@ -337,14 +371,27 @@ fn rows_to_columnar_consistency() {
 
     let qr = QueryResult {
         columns: vec![
-            ColumnDef { name: "id".into(), data_type: "int4".into() },
-            ColumnDef { name: "name".into(), data_type: "text".into() },
-            ColumnDef { name: "active".into(), data_type: "bool".into() },
+            ColumnDef {
+                name: "id".into(),
+                data_type: "int4".into(),
+            },
+            ColumnDef {
+                name: "name".into(),
+                data_type: "text".into(),
+            },
+            ColumnDef {
+                name: "active".into(),
+                data_type: "bool".into(),
+            },
         ],
         // 2 rows x 3 cols = 6 cells, flat layout
         cells: vec![
-            CellValue::Int(1), CellValue::Text(Box::from("Alice")), CellValue::Bool(true),
-            CellValue::Int(2), CellValue::Text(Box::from("Bob")), CellValue::Bool(false),
+            CellValue::Int(1),
+            CellValue::Text(Box::from("Alice")),
+            CellValue::Bool(true),
+            CellValue::Int(2),
+            CellValue::Text(Box::from("Bob")),
+            CellValue::Bool(false),
         ],
         row_count: 2,
         execution_time_ms: 10,
@@ -377,12 +424,18 @@ fn rows_to_columnar_consistency() {
 
     // Column 1: Text (name)
     match &cr.column_data[1] {
-        ColumnStorage::Text { nulls, offsets, data } => {
+        ColumnStorage::Text {
+            nulls,
+            offsets,
+            data,
+        } => {
             assert_eq!(nulls, &vec![0, 0]);
             // Row 0: "Alice" (5 bytes), Row 1: "Bob" (3 bytes)
             assert_eq!(offsets.len(), 3); // row_count + 1
-            let row0 = std::str::from_utf8(&data[offsets[0] as usize..offsets[1] as usize]).unwrap();
-            let row1 = std::str::from_utf8(&data[offsets[1] as usize..offsets[2] as usize]).unwrap();
+            let row0 =
+                std::str::from_utf8(&data[offsets[0] as usize..offsets[1] as usize]).unwrap();
+            let row1 =
+                std::str::from_utf8(&data[offsets[1] as usize..offsets[2] as usize]).unwrap();
             assert_eq!(row0, "Alice");
             assert_eq!(row1, "Bob");
         }
@@ -566,14 +619,33 @@ fn columnar_100k_rows_mixed_types() {
 
     let result = ColumnarResult {
         columns: vec![
-            ColumnDef { name: "num".into(), data_type: "float8".into() },
-            ColumnDef { name: "txt".into(), data_type: "text".into() },
-            ColumnDef { name: "flag".into(), data_type: "bool".into() },
+            ColumnDef {
+                name: "num".into(),
+                data_type: "float8".into(),
+            },
+            ColumnDef {
+                name: "txt".into(),
+                data_type: "text".into(),
+            },
+            ColumnDef {
+                name: "flag".into(),
+                data_type: "bool".into(),
+            },
         ],
         column_data: vec![
-            ColumnStorage::Number { nulls: num_nulls, values: num_values },
-            ColumnStorage::Text { nulls: text_nulls, offsets: text_offsets, data: text_data },
-            ColumnStorage::Bool { nulls: bool_nulls, values: bool_values },
+            ColumnStorage::Number {
+                nulls: num_nulls,
+                values: num_values,
+            },
+            ColumnStorage::Text {
+                nulls: text_nulls,
+                offsets: text_offsets,
+                data: text_data,
+            },
+            ColumnStorage::Bool {
+                nulls: bool_nulls,
+                values: bool_values,
+            },
         ],
         row_count: n as u64,
         execution_time_ms: 500,
@@ -582,7 +654,10 @@ fn columnar_100k_rows_mixed_types() {
 
     let bytes = result.encode();
     assert_eq!(u32::from_le_bytes(bytes[0..4].try_into().unwrap()), 3);
-    assert_eq!(u64::from_le_bytes(bytes[4..12].try_into().unwrap()), n as u64);
+    assert_eq!(
+        u64::from_le_bytes(bytes[4..12].try_into().unwrap()),
+        n as u64
+    );
     // Number data alone: 100_000 * 8 = 800_000 bytes
     assert!(bytes.len() > 800_000);
 }
@@ -593,12 +668,17 @@ fn columnar_wide_result() {
     let num_rows = 100;
 
     let columns: Vec<ColumnDef> = (0..num_cols)
-        .map(|i| ColumnDef { name: format!("col_{}", i), data_type: "int4".into() })
+        .map(|i| ColumnDef {
+            name: format!("col_{}", i),
+            data_type: "int4".into(),
+        })
         .collect();
     let column_data: Vec<ColumnStorage> = (0..num_cols)
         .map(|col_idx| ColumnStorage::Number {
             nulls: vec![0u8; num_rows],
-            values: (0..num_rows).map(|row| (row * num_cols + col_idx) as f64).collect(),
+            values: (0..num_rows)
+                .map(|row| (row * num_cols + col_idx) as f64)
+                .collect(),
         })
         .collect();
 
@@ -611,8 +691,14 @@ fn columnar_wide_result() {
     };
 
     let bytes = result.encode();
-    assert_eq!(u32::from_le_bytes(bytes[0..4].try_into().unwrap()), num_cols as u32);
-    assert_eq!(u64::from_le_bytes(bytes[4..12].try_into().unwrap()), num_rows as u64);
+    assert_eq!(
+        u32::from_le_bytes(bytes[0..4].try_into().unwrap()),
+        num_cols as u32
+    );
+    assert_eq!(
+        u64::from_le_bytes(bytes[4..12].try_into().unwrap()),
+        num_rows as u64
+    );
     // Each column: type tag (1) + nulls (100) + padding + values (100*8=800)
     // Minimum per column ~ 901 bytes, total ~ 200 * 901 = 180,200
     assert!(bytes.len() > 150_000);
@@ -628,16 +714,19 @@ fn columnar_large_text_cells() {
     data.extend_from_slice(small_text.as_bytes());
 
     let result = ColumnarResult {
-        columns: vec![
-            ColumnDef { name: "content".into(), data_type: "text".into() },
-        ],
-        column_data: vec![
-            ColumnStorage::Text {
-                nulls: vec![0, 0],
-                offsets: vec![0, large_text.len() as u32, (large_text.len() + small_text.len()) as u32],
-                data,
-            },
-        ],
+        columns: vec![ColumnDef {
+            name: "content".into(),
+            data_type: "text".into(),
+        }],
+        column_data: vec![ColumnStorage::Text {
+            nulls: vec![0, 0],
+            offsets: vec![
+                0,
+                large_text.len() as u32,
+                (large_text.len() + small_text.len()) as u32,
+            ],
+            data,
+        }],
         row_count: 2,
         execution_time_ms: 200,
         truncated: false,
@@ -645,7 +734,11 @@ fn columnar_large_text_cells() {
 
     let bytes = result.encode();
     // The encoded bytes should contain the full 1.1MB+ text without truncation
-    assert!(bytes.len() > 1_100_000, "encoded size {} should exceed 1.1MB", bytes.len());
+    assert!(
+        bytes.len() > 1_100_000,
+        "encoded size {} should exceed 1.1MB",
+        bytes.len()
+    );
     assert_eq!(u64::from_le_bytes(bytes[4..12].try_into().unwrap()), 2);
 }
 
@@ -666,10 +759,22 @@ fn rows_to_columnar_stress() {
 
     let qr = QueryResult {
         columns: vec![
-            ColumnDef { name: "id".into(), data_type: "int4".into() },
-            ColumnDef { name: "name".into(), data_type: "text".into() },
-            ColumnDef { name: "flag".into(), data_type: "bool".into() },
-            ColumnDef { name: "score".into(), data_type: "float8".into() },
+            ColumnDef {
+                name: "id".into(),
+                data_type: "int4".into(),
+            },
+            ColumnDef {
+                name: "name".into(),
+                data_type: "text".into(),
+            },
+            ColumnDef {
+                name: "flag".into(),
+                data_type: "bool".into(),
+            },
+            ColumnDef {
+                name: "score".into(),
+                data_type: "float8".into(),
+            },
         ],
         cells,
         row_count: n as u64,
@@ -704,13 +809,19 @@ fn rows_to_columnar_stress() {
 
     // Verify column 1 (Text)
     match &cr.column_data[1] {
-        ColumnStorage::Text { nulls, offsets, data } => {
+        ColumnStorage::Text {
+            nulls,
+            offsets,
+            data,
+        } => {
             assert_eq!(nulls.len(), n);
             assert_eq!(offsets.len(), n + 1);
             // Spot-check first and last values
-            let first = std::str::from_utf8(&data[offsets[0] as usize..offsets[1] as usize]).unwrap();
+            let first =
+                std::str::from_utf8(&data[offsets[0] as usize..offsets[1] as usize]).unwrap();
             assert_eq!(first, "name_0");
-            let last = std::str::from_utf8(&data[offsets[n - 1] as usize..offsets[n] as usize]).unwrap();
+            let last =
+                std::str::from_utf8(&data[offsets[n - 1] as usize..offsets[n] as usize]).unwrap();
             assert_eq!(last, format!("name_{}", n - 1));
         }
         other => panic!("expected Text column for name, got {:?}", other),

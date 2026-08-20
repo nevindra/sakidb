@@ -60,17 +60,18 @@ fn test_split_double_quoted_identifier() {
 
 #[test]
 fn test_split_dollar_quoting() {
-    let opts = SqlSplitOptions { dollar_quoting: true };
-    let stmts = split_sql_statements_with(
-        "SELECT $$hello;world$$; SELECT 2",
-        &opts,
-    );
+    let opts = SqlSplitOptions {
+        dollar_quoting: true,
+    };
+    let stmts = split_sql_statements_with("SELECT $$hello;world$$; SELECT 2", &opts);
     assert_eq!(stmts, vec!["SELECT $$hello;world$$", "SELECT 2"]);
 }
 
 #[test]
 fn test_split_dollar_tagged() {
-    let opts = SqlSplitOptions { dollar_quoting: true };
+    let opts = SqlSplitOptions {
+        dollar_quoting: true,
+    };
     let stmts = split_sql_statements_with(
         "CREATE FUNCTION f() RETURNS void AS $body$BEGIN; END;$body$; SELECT 1",
         &opts,
@@ -119,7 +120,9 @@ fn test_streaming_string_across_chunks() {
 
 #[test]
 fn test_streaming_dollar_quoting() {
-    let mut sp = StreamingSqlSplitter::new(SqlSplitOptions { dollar_quoting: true });
+    let mut sp = StreamingSqlSplitter::new(SqlSplitOptions {
+        dollar_quoting: true,
+    });
     let s1 = sp.feed("SELECT $$he");
     assert!(s1.is_empty());
     let s2 = sp.feed("llo;world$$; SELECT 2;");

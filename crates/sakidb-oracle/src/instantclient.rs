@@ -1,12 +1,12 @@
-use std::env;
-use std::path::{Path, PathBuf};
-use tokio::fs;
-use tracing::{info, error};
 use dirs::data_dir;
 #[cfg(target_os = "macos")]
 use dirs::home_dir;
 use sakidb_core::error::{Result, SakiError};
 use serde::Serialize;
+use std::env;
+use std::path::{Path, PathBuf};
+use tokio::fs;
+use tracing::{error, info};
 
 // We use Oracle's permanent links ("latest") where available.
 // For ARM64 macOS, Oracle only provides DMG packages.
@@ -28,11 +28,11 @@ use std::sync::Once;
 static ORACLE_INIT: Once = Once::new();
 
 /// Checks the status of the Oracle driver in all conventional and requested locations.
-/// If found, it automatically sets the environment to ensure subsequent connection 
+/// If found, it automatically sets the environment to ensure subsequent connection
 /// attempts (even the first one) succeed.
 pub fn get_driver_status() -> OracleDriverStatus {
     info!("Checking Oracle driver status...");
-    
+
     let mut status = OracleDriverStatus {
         found: false,
         path: None,
@@ -59,7 +59,10 @@ pub fn get_driver_status() -> OracleDriverStatus {
             if path.exists() {
                 let lib_path = path.join("lib");
                 if lib_path.exists() && is_lib_present(&lib_path) {
-                    info!("Found Oracle driver via ORACLE_HOME/lib: {}", lib_path.display());
+                    info!(
+                        "Found Oracle driver via ORACLE_HOME/lib: {}",
+                        lib_path.display()
+                    );
                     status = OracleDriverStatus {
                         found: true,
                         path: Some(lib_path.to_string_lossy().to_string()),
@@ -88,7 +91,7 @@ pub fn get_driver_status() -> OracleDriverStatus {
                 } else {
                     path.to_path_buf()
                 };
-                
+
                 if is_lib_present(&dir) {
                     info!("Found Oracle driver in system path: {}", dir.display());
                     status = OracleDriverStatus {
@@ -107,7 +110,10 @@ pub fn get_driver_status() -> OracleDriverStatus {
         if let Ok(platform) = determine_platform() {
             if let Ok(instantclient_dir) = get_local_instantclient_dir(&platform) {
                 if instantclient_dir.exists() && is_lib_present(&instantclient_dir) {
-                    info!("Found Oracle driver in internal data dir: {}", instantclient_dir.display());
+                    info!(
+                        "Found Oracle driver in internal data dir: {}",
+                        instantclient_dir.display()
+                    );
                     status = OracleDriverStatus {
                         found: true,
                         path: Some(instantclient_dir.to_string_lossy().to_string()),
@@ -136,9 +142,12 @@ pub fn get_driver_status() -> OracleDriverStatus {
 pub fn init_oracle_client_once(path: &str) {
     let path_str = path.to_string();
     ORACLE_INIT.call_once(|| {
-        info!("Initializing Oracle Client with library directory: {}", path_str);
-        
-        // [Fix: M2] Use programmatic initialization via InitParams. 
+        info!(
+            "Initializing Oracle Client with library directory: {}",
+            path_str
+        );
+
+        // [Fix: M2] Use programmatic initialization via InitParams.
         // Removed unsafe env::set_var calls which are unsound in multithreaded programs.
         // In rust-oracle 0.6, we use InitParams.
         let mut params = oracle::InitParams::new();
@@ -146,7 +155,7 @@ pub fn init_oracle_client_once(path: &str) {
             error!("Failed to set oracle_client_lib_dir: {}", e);
             return;
         }
-        
+
         match params.init() {
             Ok(true) => info!("Oracle Client successfully initialized programmatically."),
             Ok(false) => info!("Oracle Client was already initialized."),
@@ -156,12 +165,12 @@ pub fn init_oracle_client_once(path: &str) {
 }
 
 fn is_lib_present(dir: &Path) -> bool {
-    let lib_name = if cfg!(windows) { 
-        "oci.dll" 
-    } else if cfg!(target_os = "linux") { 
-        "libclntsh.so" 
-    } else { 
-        "libclntsh.dylib" 
+    let lib_name = if cfg!(windows) {
+        "oci.dll"
+    } else if cfg!(target_os = "linux") {
+        "libclntsh.so"
+    } else {
+        "libclntsh.dylib"
     };
     dir.join(lib_name).exists()
 }
@@ -210,20 +219,24 @@ pub async fn ensure_instantclient() -> Result<PathBuf> {
 
         return Ok(path_buf);
     }
-    Err(SakiError::ConnectionFailed("Oracle Instant Client not found. Please download it via the connection dialog.".to_string()))
+    Err(SakiError::ConnectionFailed(
+        "Oracle Instant Client not found. Please download it via the connection dialog."
+            .to_string(),
+    ))
 }
 
 fn determine_platform() -> Result<String> {
     let os = env::consts::OS;
     let arch = env::consts::ARCH;
-    
+
     match (os, arch) {
         ("macos", "aarch64") => Ok("macos-arm64".to_string()),
         ("macos", "x86_64") => Ok("macos-x64".to_string()),
         ("linux", "x86_64") => Ok("linux-x64".to_string()),
         ("windows", "x86_64") => Ok("windows-x64".to_string()),
         _ => Err(SakiError::ConnectionFailed(format!(
-            "Unsupported platform for automatic Oracle setup: {}-{}", os, arch
+            "Unsupported platform for automatic Oracle setup: {}-{}",
+            os, arch
         ))),
     }
 }
@@ -231,56 +244,75 @@ fn determine_platform() -> Result<String> {
 fn get_local_instantclient_dir(platform: &str) -> Result<PathBuf> {
     let data_dir = data_dir()
         .ok_or_else(|| SakiError::ConnectionFailed("Failed to get data directory".to_string()))?;
-    
+
     let instantclient_dir = data_dir
         .join("sakidb")
         .join("instantclient")
         .join(platform)
         .join(format!("instantclient_{}", VERSION_LABEL));
-    
+
     Ok(instantclient_dir)
 }
 
-pub async fn download_instantclient_with_progress<F>(on_progress: F) -> Result<()> 
-where F: Fn(f64, &str) + Send + Sync + 'static
+pub async fn download_instantclient_with_progress<F>(on_progress: F) -> Result<()>
+where
+    F: Fn(f64, &str) + Send + Sync + 'static,
 {
     let platform = determine_platform()?;
     let target_dir = get_local_instantclient_dir(&platform)?;
 
-    fs::create_dir_all(&target_dir).await
+    fs::create_dir_all(&target_dir)
+        .await
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to create directory: {}", e)))?;
 
     let (download_url, filename) = match platform.as_str() {
         "macos-arm64" => (
             format!("{}/instantclient-basic-macos-arm64.dmg", BASE_URL_MACOS),
-            "instantclient-basic-macos-arm64.dmg"
+            "instantclient-basic-macos-arm64.dmg",
         ),
         "macos-x64" => (
-            format!("{}/instantclient-basic-macos.x64-latest.zip", BASE_URL_MACOS),
-            "instantclient-basic-macos.x64.zip"
+            format!(
+                "{}/instantclient-basic-macos.x64-latest.zip",
+                BASE_URL_MACOS
+            ),
+            "instantclient-basic-macos.x64.zip",
         ),
         "linux-x64" => (
-            format!("{}/instantclient-basic-linux.x64-latest.zip", BASE_URL_LINUX),
-            "instantclient-basic-linux.x64-latest.zip"
+            format!(
+                "{}/instantclient-basic-linux.x64-latest.zip",
+                BASE_URL_LINUX
+            ),
+            "instantclient-basic-linux.x64-latest.zip",
         ),
         "windows-x64" => (
-            format!("{}/instantclient-basic-windows.x64-latest.zip", BASE_URL_WINDOWS),
-            "instantclient-basic-windows.x64-latest.zip"
+            format!(
+                "{}/instantclient-basic-windows.x64-latest.zip",
+                BASE_URL_WINDOWS
+            ),
+            "instantclient-basic-windows.x64-latest.zip",
         ),
-        _ => return Err(SakiError::ConnectionFailed(format!("Unsupported platform: {}", platform))),
+        _ => {
+            return Err(SakiError::ConnectionFailed(format!(
+                "Unsupported platform: {}",
+                platform
+            )))
+        }
     };
 
     on_progress(0.0, "Downloading...");
     info!("Downloading InstantClient from: {}", download_url);
 
     let client = reqwest::Client::new();
-    let response = client.get(&download_url).send().await
-        .map_err(|e| SakiError::ConnectionFailed(format!("Failed to download InstantClient: {}", e)))?;
-    
+    let response = client.get(&download_url).send().await.map_err(|e| {
+        SakiError::ConnectionFailed(format!("Failed to download InstantClient: {}", e))
+    })?;
+
     if !response.status().is_success() {
-        return Err(SakiError::ConnectionFailed(
-            format!("Failed to download InstantClient: HTTP {} from {}", response.status(), download_url)
-        ));
+        return Err(SakiError::ConnectionFailed(format!(
+            "Failed to download InstantClient: HTTP {} from {}",
+            response.status(),
+            download_url
+        )));
     }
 
     let total_size = response.content_length().unwrap_or(0);
@@ -290,18 +322,20 @@ where F: Fn(f64, &str) + Send + Sync + 'static
 
     use futures_util::StreamExt;
     while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result.map_err(|e| SakiError::ConnectionFailed(format!("Download error: {}", e)))?;
+        let chunk = chunk_result
+            .map_err(|e| SakiError::ConnectionFailed(format!("Download error: {}", e)))?;
         bytes.extend_from_slice(&chunk);
         downloaded += chunk.len() as u64;
-        
+
         if total_size > 0 {
             let p = (downloaded as f64 / total_size as f64) * 100.0;
-            on_progress(p * 0.8, &format!("Downloading... {:.1}%", p)); 
+            on_progress(p * 0.8, &format!("Downloading... {:.1}%", p));
         }
     }
 
     let temp_file = target_dir.join(filename);
-    fs::write(&temp_file, &bytes).await
+    fs::write(&temp_file, &bytes)
+        .await
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to write download: {}", e)))?;
 
     on_progress(85.0, "Extracting...");
@@ -312,43 +346,54 @@ where F: Fn(f64, &str) + Send + Sync + 'static
     }
 
     let _ = fs::remove_file(temp_file).await;
-    
+
     init_oracle_client_once(&target_dir.to_string_lossy());
 
     on_progress(100.0, "Setup complete");
-    info!("InstantClient setup successfully in: {}", target_dir.display());
+    info!(
+        "InstantClient setup successfully in: {}",
+        target_dir.display()
+    );
     Ok(())
 }
 
 async fn extract_zip(zip_file: &Path, target_dir: &Path) -> Result<()> {
     let zip_path = zip_file.to_path_buf();
     let target = target_dir.to_path_buf();
-    
+
     tokio::task::spawn_blocking(move || {
         let file = std::fs::File::open(&zip_path)
             .map_err(|e| SakiError::ConnectionFailed(format!("Failed to open zip file: {}", e)))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| SakiError::ConnectionFailed(format!("Failed to read zip archive: {}", e)))?;
-        
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+            SakiError::ConnectionFailed(format!("Failed to read zip archive: {}", e))
+        })?;
+
         let temp_extract_dir = target.join("temp_extract");
         if temp_extract_dir.exists() {
             let _ = std::fs::remove_dir_all(&temp_extract_dir);
         }
-        std::fs::create_dir_all(&temp_extract_dir)
-            .map_err(|e| SakiError::ConnectionFailed(format!("Failed to create temp extract dir: {}", e)))?;
+        std::fs::create_dir_all(&temp_extract_dir).map_err(|e| {
+            SakiError::ConnectionFailed(format!("Failed to create temp extract dir: {}", e))
+        })?;
 
         for i in 0..archive.len() {
-            let mut entry = archive.by_index(i)
-                .map_err(|e| SakiError::ConnectionFailed(format!("Failed to get file from zip: {}", e)))?;
+            let mut entry = archive.by_index(i).map_err(|e| {
+                SakiError::ConnectionFailed(format!("Failed to get file from zip: {}", e))
+            })?;
             let ename = entry.name();
             let outpath = temp_extract_dir.join(ename);
             if !outpath.starts_with(&temp_extract_dir) {
-                return Err(SakiError::ConnectionFailed(format!("Invalid zip entry path: {}", ename)));
+                return Err(SakiError::ConnectionFailed(format!(
+                    "Invalid zip entry path: {}",
+                    ename
+                )));
             }
             if entry.name().ends_with('/') {
                 std::fs::create_dir_all(&outpath).ok();
             } else {
-                if let Some(p) = outpath.parent() { std::fs::create_dir_all(p).ok(); }
+                if let Some(p) = outpath.parent() {
+                    std::fs::create_dir_all(p).ok();
+                }
                 let outfile = std::fs::File::create(&outpath).ok();
                 if let Some(mut f) = outfile {
                     let _ = std::io::copy(&mut entry, &mut f);
@@ -359,7 +404,9 @@ async fn extract_zip(zip_file: &Path, target_dir: &Path) -> Result<()> {
         flatten_directory(&temp_extract_dir, &target);
         let _ = std::fs::remove_dir_all(&temp_extract_dir);
         Ok::<(), SakiError>(())
-    }).await.map_err(|e| SakiError::ConnectionFailed(format!("Zip extraction task failed: {}", e)))??;
+    })
+    .await
+    .map_err(|e| SakiError::ConnectionFailed(format!("Zip extraction task failed: {}", e)))??;
     Ok(())
 }
 
@@ -384,13 +431,22 @@ fn flatten_directory(src: &Path, dst: &Path) {
 async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Result<()> {
     info!("Mounting DMG: {}", dmg_file.display());
     let mount_output = std::process::Command::new("hdiutil")
-        .args(["attach", "-plist", "-nobrowse", "-readonly", dmg_file.to_str().unwrap()])
+        .args([
+            "attach",
+            "-plist",
+            "-nobrowse",
+            "-readonly",
+            dmg_file.to_str().unwrap(),
+        ])
         .output()
         .map_err(|e| SakiError::ConnectionFailed(format!("Failed to mount DMG: {}", e)))?;
 
     if !mount_output.status.success() {
         let stderr = String::from_utf8_lossy(&mount_output.stderr);
-        return Err(SakiError::ConnectionFailed(format!("Failed to mount DMG: {}", stderr)));
+        return Err(SakiError::ConnectionFailed(format!(
+            "Failed to mount DMG: {}",
+            stderr
+        )));
     }
 
     let output_str = String::from_utf8_lossy(&mount_output.stdout);
@@ -398,15 +454,24 @@ async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Res
         let remaining = &output_str[start..];
         remaining.find("<string>").and_then(|s_start| {
             let s_rem = &remaining[s_start + 8..];
-            s_rem.find("</string>").map(|s_end| s_rem[..s_end].trim().to_string())
+            s_rem
+                .find("</string>")
+                .map(|s_end| s_rem[..s_end].trim().to_string())
         })
     } else {
-        output_str.lines().find(|line| line.contains("/Volumes/")).and_then(|line| {
-            line.split("/Volumes/").last().map(|s| format!("/Volumes/{}", s.trim()))
-        })
+        output_str
+            .lines()
+            .find(|line| line.contains("/Volumes/"))
+            .and_then(|line| {
+                line.split("/Volumes/")
+                    .last()
+                    .map(|s| format!("/Volumes/{}", s.trim()))
+            })
     };
 
-    let mount_point = mount_point.ok_or_else(|| SakiError::ConnectionFailed("Failed to find mount point for DMG".to_string()))?;
+    let mount_point = mount_point.ok_or_else(|| {
+        SakiError::ConnectionFailed("Failed to find mount point for DMG".to_string())
+    })?;
     info!("DMG mounted at: {}", mount_point);
 
     let mut source_dir = None;
@@ -428,21 +493,36 @@ async fn extract_dmg(dmg_file: &Path, target_dir: &Path, _platform: &str) -> Res
     }
 
     let source_dir = source_dir.ok_or_else(|| {
-        let _ = std::process::Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
-        SakiError::ConnectionFailed(format!("Failed to find instantclient folder or libclntsh.dylib in DMG mount: {}", mount_point))
+        let _ = std::process::Command::new("hdiutil")
+            .args(["detach", "-quiet", &mount_point])
+            .status();
+        SakiError::ConnectionFailed(format!(
+            "Failed to find instantclient folder or libclntsh.dylib in DMG mount: {}",
+            mount_point
+        ))
     })?;
 
-    info!("Copying from DMG mount {} to {}", source_dir.display(), target_dir.display());
+    info!(
+        "Copying from DMG mount {} to {}",
+        source_dir.display(),
+        target_dir.display()
+    );
     copy_dir_all(source_dir, target_dir.to_path_buf()).await?;
-    let _ = std::process::Command::new("hdiutil").args(["detach", "-quiet", &mount_point]).status();
+    let _ = std::process::Command::new("hdiutil")
+        .args(["detach", "-quiet", &mount_point])
+        .status();
     Ok(())
 }
 
-fn copy_dir_all(source: PathBuf, target: PathBuf) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> {
+fn copy_dir_all(
+    source: PathBuf,
+    target: PathBuf,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> {
     Box::pin(async move {
         let _ = fs::create_dir_all(&target).await;
-        let mut entries = fs::read_dir(&source).await
-            .map_err(|e| SakiError::ConnectionFailed(format!("Failed to read source directory: {}", e)))?;
+        let mut entries = fs::read_dir(&source).await.map_err(|e| {
+            SakiError::ConnectionFailed(format!("Failed to read source directory: {}", e))
+        })?;
         while let Some(entry) = entries.next_entry().await.ok().flatten() {
             let path = entry.path();
             let target_path = target.join(path.file_name().unwrap());

@@ -181,11 +181,7 @@ impl Introspector for SqliteDriver {
         Ok(vec![])
     }
 
-    async fn list_tables(
-        &self,
-        conn_id: &ConnectionId,
-        _schema: &str,
-    ) -> Result<Vec<TableInfo>> {
+    async fn list_tables(&self, conn_id: &ConnectionId, _schema: &str) -> Result<Vec<TableInfo>> {
         self.manager
             .with_conn(conn_id, introspect::list_tables)
             .await
@@ -203,11 +199,7 @@ impl Introspector for SqliteDriver {
             .await
     }
 
-    async fn list_views(
-        &self,
-        conn_id: &ConnectionId,
-        _schema: &str,
-    ) -> Result<Vec<ViewInfo>> {
+    async fn list_views(&self, conn_id: &ConnectionId, _schema: &str) -> Result<Vec<ViewInfo>> {
         self.manager
             .with_conn(conn_id, introspect::list_views)
             .await
@@ -237,11 +229,7 @@ impl Introspector for SqliteDriver {
         Ok(vec![])
     }
 
-    async fn list_indexes(
-        &self,
-        conn_id: &ConnectionId,
-        _schema: &str,
-    ) -> Result<Vec<IndexInfo>> {
+    async fn list_indexes(&self, conn_id: &ConnectionId, _schema: &str) -> Result<Vec<IndexInfo>> {
         self.manager
             .with_conn(conn_id, introspect::list_all_indexes)
             .await
@@ -263,9 +251,7 @@ impl Introspector for SqliteDriver {
     ) -> Result<Vec<TriggerInfo>> {
         let table = table.to_string();
         self.manager
-            .with_conn(conn_id, move |conn| {
-                introspect::list_triggers(conn, &table)
-            })
+            .with_conn(conn_id, move |conn| introspect::list_triggers(conn, &table))
             .await
     }
 
@@ -387,9 +373,9 @@ impl Exporter for SqliteDriver {
     ) -> Result<u64> {
         let conn = self.manager.get_conn(conn_id)?;
         tokio::task::block_in_place(|| {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
+            let conn = conn
+                .lock()
+                .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}")))?;
             let mut callback =
                 |cols: &[ColumnDef], cells: &[CellValue], total: u64| on_batch(cols, cells, total);
             executor::execute_export(&conn, sql, batch_size, &mut callback, cancelled)
@@ -411,10 +397,16 @@ impl Restorer for SqliteDriver {
         let continue_on_error = options.continue_on_error;
         let file_path = file_path.to_string();
         tokio::task::block_in_place(|| {
-            let conn = conn.lock().map_err(|e| {
-                sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}"))
-            })?;
-            restore::restore_from_sql(&conn, &file_path, continue_on_error, cancelled, &*on_progress)
+            let conn = conn
+                .lock()
+                .map_err(|e| sakidb_core::SakiError::QueryFailed(format!("lock poisoned: {e}")))?;
+            restore::restore_from_sql(
+                &conn,
+                &file_path,
+                continue_on_error,
+                cancelled,
+                &*on_progress,
+            )
         })
     }
 }

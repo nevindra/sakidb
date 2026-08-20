@@ -10,14 +10,14 @@ use sakidb_oracle::OracleDriver;
 /// TEST_ORACLE_URL format: username/password@host:port/service_name
 fn get_test_config() -> Option<ConnectionConfig> {
     let raw = std::env::var("TEST_ORACLE_URL").ok()?;
-    
+
     // Simple parsing for benchmark purposes
     let (userpass, hostinfo) = raw.split_once('@')?;
     let (username, password) = userpass.split_once('/')?;
     let (hostport, service) = hostinfo.split_once('/')?;
     let (host, port_str) = hostport.split_once(':').unwrap_or((hostport, "1521"));
     let port = port_str.parse::<u16>().unwrap_or(1521);
-    
+
     Some(ConnectionConfig {
         engine: EngineType::Oracle,
         host: host.to_string(),
@@ -61,7 +61,7 @@ fn bench_execute_select_1k_rows(c: &mut Criterion) {
     // Setup: create table and insert 1K rows
     // Note: Oracle doesn't have DROP TABLE IF EXISTS
     let _ = rt.block_on(driver.execute(&conn_id, "DROP TABLE ora_bench_data PURGE"));
-    
+
     rt.block_on(driver.execute(
         &conn_id,
         "CREATE TABLE ora_bench_data (

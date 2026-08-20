@@ -89,7 +89,14 @@ fn push_columnar_value(value: ValueRef<'_>, col_type: u8, storage: &mut ColumnSt
                 values.push(0);
             }
         },
-        (2, ColumnStorage::Text { nulls, offsets, data }) => match value {
+        (
+            2,
+            ColumnStorage::Text {
+                nulls,
+                offsets,
+                data,
+            },
+        ) => match value {
             ValueRef::Null => {
                 nulls.push(1);
                 offsets.push(data.len() as u32);
@@ -106,7 +113,14 @@ fn push_columnar_value(value: ValueRef<'_>, col_type: u8, storage: &mut ColumnSt
                 offsets.push(data.len() as u32);
             }
         },
-        (3, ColumnStorage::Bytes { nulls, offsets, data }) => match value {
+        (
+            3,
+            ColumnStorage::Bytes {
+                nulls,
+                offsets,
+                data,
+            },
+        ) => match value {
             ValueRef::Null => {
                 nulls.push(1);
                 offsets.push(data.len() as u32);
@@ -186,7 +200,13 @@ pub fn execute_query(conn: &Connection, sql: &str) -> Result<QueryResult, SakiEr
     }
 
     let execution_time_ms = start.elapsed().as_millis() as u64;
-    debug!(rows = row_count, cols = col_count, elapsed_ms = execution_time_ms, truncated, "query complete");
+    debug!(
+        rows = row_count,
+        cols = col_count,
+        elapsed_ms = execution_time_ms,
+        truncated,
+        "query complete"
+    );
 
     Ok(QueryResult {
         columns,
@@ -232,7 +252,10 @@ pub fn execute_query_columnar(conn: &Connection, sql: &str) -> Result<ColumnarRe
                 }
             }
             let cap = 1024usize;
-            col_storages = col_types.iter().map(|&t| make_columnar_storage(t, cap)).collect();
+            col_storages = col_types
+                .iter()
+                .map(|&t| make_columnar_storage(t, cap))
+                .collect();
             types_determined = true;
         }
 
@@ -252,11 +275,20 @@ pub fn execute_query_columnar(conn: &Connection, sql: &str) -> Result<ColumnarRe
 
     // Handle empty result set
     if !types_determined {
-        col_storages = col_types.iter().map(|&t| make_columnar_storage(t, 0)).collect();
+        col_storages = col_types
+            .iter()
+            .map(|&t| make_columnar_storage(t, 0))
+            .collect();
     }
 
     let execution_time_ms = start.elapsed().as_millis() as u64;
-    debug!(rows = row_count, cols = col_count, elapsed_ms = execution_time_ms, truncated, "columnar query complete");
+    debug!(
+        rows = row_count,
+        cols = col_count,
+        elapsed_ms = execution_time_ms,
+        truncated,
+        "columnar query complete"
+    );
 
     Ok(ColumnarResult {
         columns,
@@ -286,7 +318,11 @@ pub fn execute_multi(conn: &Connection, sql: &str) -> Result<MultiQueryResult, S
     }
 
     let total_execution_time_ms = total_start.elapsed().as_millis() as u64;
-    info!(statements = results.len(), elapsed_ms = total_execution_time_ms, "multi query complete");
+    info!(
+        statements = results.len(),
+        elapsed_ms = total_execution_time_ms,
+        "multi query complete"
+    );
 
     Ok(MultiQueryResult {
         results,
@@ -312,7 +348,11 @@ pub fn execute_multi_columnar(
     }
 
     let elapsed = start.elapsed().as_millis() as u64;
-    info!(statements = results.len(), elapsed_ms = elapsed, "multi columnar complete");
+    info!(
+        statements = results.len(),
+        elapsed_ms = elapsed,
+        "multi columnar complete"
+    );
 
     Ok(MultiColumnarResult {
         results,
@@ -387,7 +427,10 @@ pub fn execute_batch(conn: &Connection, sql: &str) -> Result<(), SakiError> {
     debug!("executing batch");
     conn.execute_batch(sql)
         .map_err(|e| SakiError::QueryFailed(e.to_string()))?;
-    debug!(elapsed_ms = t0.elapsed().as_millis() as u64, "batch complete");
+    debug!(
+        elapsed_ms = t0.elapsed().as_millis() as u64,
+        "batch complete"
+    );
     Ok(())
 }
 
@@ -451,4 +494,3 @@ pub fn execute_export(
     info!(rows = total_rows, "export complete");
     Ok(total_rows)
 }
-

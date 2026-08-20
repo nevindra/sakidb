@@ -18,10 +18,19 @@ fn col_def(name: &str) -> ColumnDef {
 fn format_ddl_returns_none() {
     let d = driver();
     let result = d.format_ddl(&DdlContext {
-        columns: &[], indexes: &[], constraints: &[], foreign_keys: &[],
-        check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+        columns: &[],
+        indexes: &[],
+        constraints: &[],
+        foreign_keys: &[],
+        check_constraints: &[],
+        triggers: &[],
+        qualified_table: "\"users\"",
+        table_name: "users",
     });
-    assert!(result.is_none(), "SQLite DDL should return None (use sqlite_master)");
+    assert!(
+        result.is_none(),
+        "SQLite DDL should return None (use sqlite_master)"
+    );
 }
 
 #[test]
@@ -44,7 +53,10 @@ fn format_data_row_insert_basic() {
     let cells = vec![CellValue::Int(1), CellValue::Text("alice".into())];
     let mut buf = String::new();
     d.format_data_row(&cols, &cells, "\"users\"", &mut buf);
-    assert_eq!(buf, "INSERT INTO \"users\" (\"id\", \"name\") VALUES (1, 'alice');\n");
+    assert_eq!(
+        buf,
+        "INSERT INTO \"users\" (\"id\", \"name\") VALUES (1, 'alice');\n"
+    );
 }
 
 #[test]
@@ -78,7 +90,10 @@ fn format_data_row_text_escaping() {
     let cells = vec![CellValue::Text("it's a test".into())];
     let mut buf = String::new();
     d.format_data_row(&cols, &cells, "\"t\"", &mut buf);
-    assert!(buf.contains("'it''s a test'"), "Single quotes should be doubled");
+    assert!(
+        buf.contains("'it''s a test'"),
+        "Single quotes should be doubled"
+    );
 }
 
 #[test]

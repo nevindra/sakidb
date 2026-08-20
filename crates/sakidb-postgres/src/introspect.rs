@@ -878,10 +878,7 @@ pub async fn get_create_table_sql(
         constraint_defs.push(s);
     }
 
-    let all_defs: Vec<String> = col_defs
-        .into_iter()
-        .chain(constraint_defs)
-        .collect();
+    let all_defs: Vec<String> = col_defs.into_iter().chain(constraint_defs).collect();
     ddl.push_str(&all_defs.join(",\n"));
     ddl.push('\n');
     ddl.push(')');

@@ -13,7 +13,9 @@ async fn set_keybinding_creates_override() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+N"))
+        .unwrap();
 
     let overrides = store.get_keybinding_overrides().unwrap();
     assert_eq!(overrides.len(), 1);
@@ -26,7 +28,9 @@ async fn set_keybinding_unbind_sets_none() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+N"))
+        .unwrap();
     store.set_keybinding("nav.new-query", None).unwrap();
 
     let overrides = store.get_keybinding_overrides().unwrap();
@@ -39,8 +43,12 @@ async fn set_keybinding_updates_existing() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
-    store.set_keybinding("nav.new-query", Some("Ctrl+Shift+N")).unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+N"))
+        .unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+Shift+N"))
+        .unwrap();
 
     let overrides = store.get_keybinding_overrides().unwrap();
     assert_eq!(overrides.len(), 1);
@@ -52,7 +60,9 @@ async fn reset_keybinding_removes_override() {
     let (state, _tmp) = create_test_state();
     let store = state.store.lock().await;
 
-    store.set_keybinding("nav.new-query", Some("Ctrl+N")).unwrap();
+    store
+        .set_keybinding("nav.new-query", Some("Ctrl+N"))
+        .unwrap();
     store.reset_keybinding("nav.new-query").unwrap();
 
     let overrides = store.get_keybinding_overrides().unwrap();

@@ -13,7 +13,9 @@ use sakidb_postgres::PostgresDriver;
 fn get_test_config() -> Option<ConnectionConfig> {
     let raw = std::env::var("TEST_DATABASE_URL").ok()?;
     // Strip scheme
-    let rest = raw.strip_prefix("postgres://").or_else(|| raw.strip_prefix("postgresql://"))?;
+    let rest = raw
+        .strip_prefix("postgres://")
+        .or_else(|| raw.strip_prefix("postgresql://"))?;
     // Split userinfo @ hostinfo / dbname
     let (userinfo, rest) = rest.split_once('@')?;
     let (host_port, database) = rest.split_once('/')?;
@@ -61,11 +63,8 @@ fn bench_execute_select_1k_rows(c: &mut Criterion) {
     let conn_id = rt.block_on(driver.connect(&config)).unwrap();
 
     // Setup: create table and insert 1K rows
-    rt.block_on(driver.execute(
-        &conn_id,
-        "DROP TABLE IF EXISTS pg_bench_data",
-    ))
-    .unwrap();
+    rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_data"))
+        .unwrap();
     rt.block_on(driver.execute(
         &conn_id,
         "CREATE TABLE pg_bench_data (
@@ -113,11 +112,8 @@ fn bench_execute_columnar_10k_rows(c: &mut Criterion) {
 
     let conn_id = rt.block_on(driver.connect(&config)).unwrap();
 
-    rt.block_on(driver.execute(
-        &conn_id,
-        "DROP TABLE IF EXISTS pg_bench_columnar",
-    ))
-    .unwrap();
+    rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_columnar"))
+        .unwrap();
     rt.block_on(driver.execute(
         &conn_id,
         "CREATE TABLE pg_bench_columnar (
@@ -157,11 +153,8 @@ fn bench_execute_columnar_10k_rows(c: &mut Criterion) {
         });
     });
 
-    rt.block_on(driver.execute(
-        &conn_id,
-        "DROP TABLE IF EXISTS pg_bench_columnar",
-    ))
-    .unwrap();
+    rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_columnar"))
+        .unwrap();
     rt.block_on(driver.disconnect(&conn_id)).unwrap();
 }
 
@@ -204,11 +197,8 @@ fn bench_bulk_insert_1k_rows(c: &mut Criterion) {
         );
     });
 
-    rt.block_on(driver.execute(
-        &conn_id,
-        "DROP TABLE IF EXISTS pg_bench_insert",
-    ))
-    .unwrap();
+    rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_insert"))
+        .unwrap();
     rt.block_on(driver.disconnect(&conn_id)).unwrap();
 }
 
@@ -241,11 +231,8 @@ fn bench_restore_500_statements(c: &mut Criterion) {
                 let sql_path = tmp.path().join("restore.sql");
                 std::fs::write(&sql_path, &sql_content).unwrap();
                 // Drop table before each iteration
-                rt.block_on(driver.execute(
-                    &conn_id,
-                    "DROP TABLE IF EXISTS pg_bench_restore",
-                ))
-                .unwrap();
+                rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_restore"))
+                    .unwrap();
                 (tmp, sql_path)
             },
             |(_tmp, sql_path)| {
@@ -268,11 +255,8 @@ fn bench_restore_500_statements(c: &mut Criterion) {
         );
     });
 
-    rt.block_on(driver.execute(
-        &conn_id,
-        "DROP TABLE IF EXISTS pg_bench_restore",
-    ))
-    .unwrap();
+    rt.block_on(driver.execute(&conn_id, "DROP TABLE IF EXISTS pg_bench_restore"))
+        .unwrap();
     rt.block_on(driver.disconnect(&conn_id)).unwrap();
 }
 

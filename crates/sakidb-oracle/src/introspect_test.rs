@@ -1,29 +1,34 @@
 #[cfg(test)]
 mod tests {
     use crate::introspect::OracleIntrospector;
+    use dashmap::DashMap;
     use oracle::Connection as OracleConnection;
     use sakidb_core::error::SakiError;
     use sakidb_core::types::ConnectionId;
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    use dashmap::DashMap;
 
     #[tokio::test]
     async fn test_introspector_creation() {
-        let connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>> = Arc::new(DashMap::new());
+        let connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>> =
+            Arc::new(DashMap::new());
         let introspector = OracleIntrospector::new(connections);
         assert!(introspector.connections.is_empty());
     }
 
     #[test]
     fn test_get_connection_not_found() {
-        let connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>> = Arc::new(DashMap::new());
+        let connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>> =
+            Arc::new(DashMap::new());
         let introspector = OracleIntrospector::new(connections);
         let conn_id = ConnectionId::new();
 
         let result = introspector.get_connection(&conn_id);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), SakiError::ConnectionNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            SakiError::ConnectionNotFound(_)
+        ));
     }
 
     #[test]

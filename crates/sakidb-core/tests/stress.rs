@@ -102,8 +102,7 @@ fn stress_cellvalue_10mb_text() {
 
     // Roundtrip through serde_json to verify serialization doesn't truncate
     let serialized = serde_json::to_vec(&cell).expect("serialize failed");
-    let deserialized: CellValue =
-        serde_json::from_slice(&serialized).expect("deserialize failed");
+    let deserialized: CellValue = serde_json::from_slice(&serialized).expect("deserialize failed");
 
     match deserialized {
         CellValue::Text(s) => {

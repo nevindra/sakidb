@@ -14,14 +14,17 @@ pub async fn save_query(
 ) -> Result<SavedQuery, String> {
     let store = state.store.lock().await;
     store
-        .save_query(&name, &sql, connection_id.as_deref(), database_name.as_deref())
+        .save_query(
+            &name,
+            &sql,
+            connection_id.as_deref(),
+            database_name.as_deref(),
+        )
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn list_saved_queries(
-    state: State<'_, AppState>,
-) -> Result<Vec<SavedQuery>, String> {
+pub async fn list_saved_queries(state: State<'_, AppState>) -> Result<Vec<SavedQuery>, String> {
     let store = state.store.lock().await;
     store.list_saved_queries().map_err(|e| e.to_string())
 }
@@ -40,10 +43,7 @@ pub async fn update_saved_query(
 }
 
 #[tauri::command]
-pub async fn delete_saved_query(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn delete_saved_query(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let store = state.store.lock().await;
     store.delete_saved_query(&id).map_err(|e| e.to_string())
 }
@@ -79,9 +79,7 @@ pub async fn list_query_history(
 }
 
 #[tauri::command]
-pub async fn clear_query_history(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn clear_query_history(state: State<'_, AppState>) -> Result<(), String> {
     let store = state.store.lock().await;
     store.clear_query_history().map_err(|e| e.to_string())
 }

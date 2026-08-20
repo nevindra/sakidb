@@ -18,7 +18,13 @@ pub async fn list_databases(
     active_connection_id: String,
 ) -> Result<Vec<DatabaseInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_databases(&conn_id).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_databases(&conn_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -27,7 +33,13 @@ pub async fn list_schemas(
     active_connection_id: String,
 ) -> Result<Vec<SchemaInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_schemas(&conn_id).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_schemas(&conn_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -37,7 +49,13 @@ pub async fn list_tables(
     schema: String,
 ) -> Result<Vec<TableInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_tables(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_tables(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -48,7 +66,13 @@ pub async fn list_columns(
     table: String,
 ) -> Result<Vec<ColumnInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_columns(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_columns(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -58,7 +82,13 @@ pub async fn list_views(
     schema: String,
 ) -> Result<Vec<ViewInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_views(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_views(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -68,7 +98,13 @@ pub async fn list_materialized_views(
     schema: String,
 ) -> Result<Vec<MaterializedViewInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_materialized_views(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_materialized_views(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -78,7 +114,13 @@ pub async fn list_functions(
     schema: String,
 ) -> Result<Vec<FunctionInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_functions(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_functions(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -88,7 +130,13 @@ pub async fn list_sequences(
     schema: String,
 ) -> Result<Vec<SequenceInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_sequences(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_sequences(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -98,7 +146,13 @@ pub async fn list_indexes(
     schema: String,
 ) -> Result<Vec<IndexInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_indexes(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_indexes(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -108,7 +162,13 @@ pub async fn list_foreign_tables(
     schema: String,
 ) -> Result<Vec<ForeignTableInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_foreign_tables(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_foreign_tables(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -119,7 +179,13 @@ pub async fn list_triggers(
     table: String,
 ) -> Result<Vec<TriggerInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_triggers(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_triggers(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -130,7 +196,13 @@ pub async fn list_foreign_keys(
     table: String,
 ) -> Result<Vec<ForeignKeyInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_foreign_keys(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_foreign_keys(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -141,7 +213,13 @@ pub async fn list_check_constraints(
     table: String,
 ) -> Result<Vec<CheckConstraintInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_check_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_check_constraints(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -152,7 +230,13 @@ pub async fn list_unique_constraints(
     table: String,
 ) -> Result<Vec<UniqueConstraintInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.list_unique_constraints(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .list_unique_constraints(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -163,7 +247,13 @@ pub async fn get_partition_info(
     table: String,
 ) -> Result<Option<PartitionInfo>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_partition_info(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_partition_info(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -173,7 +263,13 @@ pub async fn get_erd_data(
     schema: String,
 ) -> Result<ErdData, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_erd_data(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_erd_data(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -184,7 +280,13 @@ pub async fn get_create_table_sql(
     table: String,
 ) -> Result<String, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_create_table_sql(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_create_table_sql(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -194,7 +296,13 @@ pub async fn get_schema_completion_data(
     schema: String,
 ) -> Result<HashMap<String, Vec<String>>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_schema_completion_data(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_schema_completion_data(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -204,7 +312,13 @@ pub async fn get_completion_bundle(
     schema: String,
 ) -> Result<CompletionBundle, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_completion_bundle(&conn_id, &schema).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_completion_bundle(&conn_id, &schema)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -215,5 +329,11 @@ pub async fn get_table_columns_for_completion(
     table: String,
 ) -> Result<Vec<CompletionColumn>, String> {
     let conn_id = parse_conn_id(&active_connection_id)?;
-    state.registry.introspector_for(&conn_id).map_err(|e| e.to_string())?.get_table_columns_for_completion(&conn_id, &schema, &table).await.map_err(|e| e.to_string())
+    state
+        .registry
+        .introspector_for(&conn_id)
+        .map_err(|e| e.to_string())?
+        .get_table_columns_for_completion(&conn_id, &schema, &table)
+        .await
+        .map_err(|e| e.to_string())
 }

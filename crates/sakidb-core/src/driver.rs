@@ -66,22 +66,14 @@ pub trait SqlDriver: Send + Sync {
 pub trait Introspector: Send + Sync {
     async fn list_databases(&self, conn_id: &ConnectionId) -> Result<Vec<DatabaseInfo>>;
     async fn list_schemas(&self, conn_id: &ConnectionId) -> Result<Vec<SchemaInfo>>;
-    async fn list_tables(
-        &self,
-        conn_id: &ConnectionId,
-        schema: &str,
-    ) -> Result<Vec<TableInfo>>;
+    async fn list_tables(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<TableInfo>>;
     async fn list_columns(
         &self,
         conn_id: &ConnectionId,
         schema: &str,
         table: &str,
     ) -> Result<Vec<ColumnInfo>>;
-    async fn list_views(
-        &self,
-        conn_id: &ConnectionId,
-        schema: &str,
-    ) -> Result<Vec<ViewInfo>>;
+    async fn list_views(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<ViewInfo>>;
     async fn list_materialized_views(
         &self,
         conn_id: &ConnectionId,
@@ -97,11 +89,7 @@ pub trait Introspector: Send + Sync {
         conn_id: &ConnectionId,
         schema: &str,
     ) -> Result<Vec<SequenceInfo>>;
-    async fn list_indexes(
-        &self,
-        conn_id: &ConnectionId,
-        schema: &str,
-    ) -> Result<Vec<IndexInfo>>;
+    async fn list_indexes(&self, conn_id: &ConnectionId, schema: &str) -> Result<Vec<IndexInfo>>;
     async fn list_foreign_tables(
         &self,
         conn_id: &ConnectionId,
@@ -200,11 +188,7 @@ pub trait SqlFormatter: Send + Sync {
     fn format_ddl(&self, ctx: &DdlContext<'_>) -> Option<String>;
 
     /// Data section header. PG: "COPY ... FROM stdin;", SQLite: None.
-    fn format_data_header(
-        &self,
-        columns: &[ColumnDef],
-        qualified_table: &str,
-    ) -> Option<String>;
+    fn format_data_header(&self, columns: &[ColumnDef], qualified_table: &str) -> Option<String>;
 
     /// Format a single data row into buf.
     fn format_data_row(
@@ -323,9 +307,7 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                             col_type = Some(0u8);
                             break;
                         }
-                        CellValue::Text(_)
-                        | CellValue::Json(_)
-                        | CellValue::Timestamp(_) => {
+                        CellValue::Text(_) | CellValue::Json(_) | CellValue::Timestamp(_) => {
                             col_type = Some(2u8);
                             break;
                         }
@@ -389,8 +371,11 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                                 }
                             }
                         }
-                        column_data
-                            .push(ColumnStorage::Text { nulls, offsets, data });
+                        column_data.push(ColumnStorage::Text {
+                            nulls,
+                            offsets,
+                            data,
+                        });
                     }
                     3 => {
                         // Bytes column
@@ -414,8 +399,11 @@ pub fn rows_to_columnar(multi: MultiQueryResult) -> MultiColumnarResult {
                                 }
                             }
                         }
-                        column_data
-                            .push(ColumnStorage::Bytes { nulls, offsets, data });
+                        column_data.push(ColumnStorage::Bytes {
+                            nulls,
+                            offsets,
+                            data,
+                        });
                     }
                     _ => unreachable!(),
                 }

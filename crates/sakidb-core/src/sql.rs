@@ -155,11 +155,15 @@ pub fn split_sql_statements_with<'a>(sql: &'a str, opts: &SqlSplitOptions) -> Ve
 enum ParserState {
     Normal,
     LineComment,
-    BlockComment { depth: u32 },
+    BlockComment {
+        depth: u32,
+    },
     SingleQuote,
     DoubleQuote,
     /// Dollar-quoting (PG). `tag_len` is the length of `$tag$` including both `$`.
-    DollarBody { tag_len: u16 },
+    DollarBody {
+        tag_len: u16,
+    },
     /// Accumulating the tag portion between `$` chars before the body starts.
     DollarTag,
 }
@@ -430,4 +434,3 @@ impl StreamingSqlSplitter {
         }
     }
 }
-

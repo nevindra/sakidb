@@ -1,19 +1,19 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::RwLock;
-use oracle::Connection as OracleConnection;
-use oracle::sql_type::OracleType;
+use crate::sql_split::split_sql_statements;
 use dashmap::DashMap;
+use oracle::sql_type::OracleType;
+use oracle::Connection as OracleConnection;
 use sakidb_core::{
-    driver::{rows_to_columnar, paged_to_columnar},
+    driver::{paged_to_columnar, rows_to_columnar},
     error::{Result, SakiError},
     types::{
-        ConnectionId, QueryResult, MultiQueryResult, MultiColumnarResult,
-        PagedResult, PagedColumnarResult, ColumnDef, CellValue, ExportBatchFn,
+        CellValue, ColumnDef, ConnectionId, ExportBatchFn, MultiColumnarResult, MultiQueryResult,
+        PagedColumnarResult, PagedResult, QueryResult,
     },
 };
-use tracing::{info, debug};
-use crate::sql_split::split_sql_statements;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, info};
 
 pub struct OracleExecutor {
     pub(crate) connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -24,7 +24,10 @@ impl OracleExecutor {
         Self { connections }
     }
 
-    pub(crate) fn get_connection(&self, conn_id: &ConnectionId) -> Result<Arc<RwLock<OracleConnection>>> {
+    pub(crate) fn get_connection(
+        &self,
+        conn_id: &ConnectionId,
+    ) -> Result<Arc<RwLock<OracleConnection>>> {
         self.connections
             .get(conn_id)
             .map(|entry| entry.clone())
@@ -53,7 +56,7 @@ impl OracleExecutor {
         if let Ok(Some(v)) = row.get::<_, Option<i64>>(idx) {
             return CellValue::Int(v);
         }
-        
+
         // Try f64 for decimals
         if let Ok(Some(v)) = row.get::<_, Option<f64>>(idx) {
             return CellValue::Float(v);
@@ -77,19 +80,22 @@ impl OracleExecutor {
 
     pub(crate) fn is_query(sql: &str) -> bool {
         let upper = sql.trim_start().to_uppercase();
-        upper.starts_with("SELECT")
-            || upper.starts_with("WITH")
-            || upper.starts_with("EXPLAIN")
+        upper.starts_with("SELECT") || upper.starts_with("WITH") || upper.starts_with("EXPLAIN")
     }
 
-    async fn execute_single(&self, conn: Arc<RwLock<OracleConnection>>, sql: String) -> Result<QueryResult> {
+    async fn execute_single(
+        &self,
+        conn: Arc<RwLock<OracleConnection>>,
+        sql: String,
+    ) -> Result<QueryResult> {
         let start = std::time::Instant::now();
         let is_query = Self::is_query(&sql);
 
         if is_query {
             let result = tokio::task::spawn_blocking(move || {
                 let conn = conn.blocking_read();
-                let result_set = conn.query(&sql, &[])
+                let result_set = conn
+                    .query(&sql, &[])
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle query failed: {}", e)))?;
 
                 let mut columns: Vec<ColumnDef> = Vec::new();
@@ -105,7 +111,8 @@ impl OracleExecutor {
                 }
 
                 for row_result in result_set {
-                    let row = row_result.map_err(|e| SakiError::QueryFailed(format!("Row fetch error: {}", e)))?;
+                    let row = row_result
+                        .map_err(|e| SakiError::QueryFailed(format!("Row fetch error: {}", e)))?;
                     for i in 0..columns.len() {
                         cells.push(Self::row_value_to_cell(&row, i));
                     }
@@ -126,21 +133,26 @@ impl OracleExecutor {
             .map_err(|e| SakiError::QueryFailed(format!("Query task failed: {}", e)))??;
 
             let elapsed = start.elapsed().as_millis() as u64;
-            Ok(QueryResult { execution_time_ms: elapsed, ..result })
+            Ok(QueryResult {
+                execution_time_ms: elapsed,
+                ..result
+            })
         } else {
             // DML / DDL
             let rows_affected = tokio::task::spawn_blocking(move || {
                 let conn = conn.blocking_read();
-                let stmt = conn.execute(&sql, &[])
+                let stmt = conn
+                    .execute(&sql, &[])
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle execute failed: {}", e)))?;
-                
-                let affected = stmt.row_count()
-                    .map_err(|e| SakiError::QueryFailed(format!("Failed to get row count: {}", e)))?;
-                
+
+                let affected = stmt.row_count().map_err(|e| {
+                    SakiError::QueryFailed(format!("Failed to get row count: {}", e))
+                })?;
+
                 // Oracle requires explicit commit for DML
                 conn.commit()
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle commit failed: {}", e)))?;
-                
+
                 Ok::<u64, SakiError>(affected)
             })
             .await
@@ -163,10 +175,14 @@ impl OracleExecutor {
         self.execute_single(conn, sql.to_string()).await
     }
 
-    pub async fn execute_multi(&self, conn_id: &ConnectionId, sql: &str) -> Result<MultiQueryResult> {
+    pub async fn execute_multi(
+        &self,
+        conn_id: &ConnectionId,
+        sql: &str,
+    ) -> Result<MultiQueryResult> {
         let conn = self.get_connection(conn_id)?;
         let start = std::time::Instant::now();
-        
+
         let statements = split_sql_statements(sql);
 
         let mut results = Vec::new();
@@ -210,8 +226,9 @@ impl OracleExecutor {
         if let Some(pos) = result.columns.iter().position(|c| c.name == "SAKI_RNUM__") {
             result.columns.remove(pos);
             let num_cols_after = result.columns.len();
-            let mut new_cells = Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
-            
+            let mut new_cells =
+                Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
+
             // We need to remove the cell at 'pos' for every row
             for (i, cell) in result.cells.into_iter().enumerate() {
                 if i % (num_cols_after + 1) != pos {
@@ -262,7 +279,7 @@ impl OracleExecutor {
             let conn = conn.clone();
             move || {
                 let conn = conn.blocking_read();
-                // Disable autocommit for the batch (though oracle-rust is manual by default, 
+                // Disable autocommit for the batch (though oracle-rust is manual by default,
                 // we want to ensure we control the boundary)
                 for stmt in statements {
                     if stmt.trim().is_empty() {
@@ -271,14 +288,17 @@ impl OracleExecutor {
                     if let Err(e) = conn.execute(&stmt, &[]) {
                         // Attempt rollback on error before returning
                         let _ = conn.rollback();
-                        return Err(SakiError::QueryFailed(format!("Batch execute failed: {}", e)));
+                        return Err(SakiError::QueryFailed(format!(
+                            "Batch execute failed: {}",
+                            e
+                        )));
                     }
                 }
-                
+
                 // Commit the entire batch
                 conn.commit()
                     .map_err(|e| SakiError::QueryFailed(format!("Batch commit failed: {}", e)))?;
-                
+
                 Ok::<(), SakiError>(())
             }
         })
@@ -291,18 +311,19 @@ impl OracleExecutor {
     pub async fn cancel_query(&self, conn_id: &ConnectionId) -> Result<()> {
         info!("Cancelling Oracle query for connection: {}", conn_id.0);
         let conn = self.get_connection(conn_id)?;
-        
+
         // Oracle's break_execution() can be called from another thread to interrupt the current operation.
-        // We use spawn_blocking because we don't want to block the async executor, 
+        // We use spawn_blocking because we don't want to block the async executor,
         // though break_execution is generally fast.
         tokio::task::spawn_blocking(move || {
             let conn = conn.blocking_read();
-            conn.break_execution()
-                .map_err(|e| SakiError::QueryFailed(format!("Failed to cancel Oracle query: {}", e)))
+            conn.break_execution().map_err(|e| {
+                SakiError::QueryFailed(format!("Failed to cancel Oracle query: {}", e))
+            })
         })
         .await
         .map_err(|e| SakiError::QueryFailed(format!("Cancel task failed: {}", e)))??;
-        
+
         Ok(())
     }
 
@@ -339,8 +360,9 @@ impl OracleExecutor {
             if let Some(pos) = result.columns.iter().position(|c| c.name == "SAKI_RNUM__") {
                 result.columns.remove(pos);
                 let num_cols_after = result.columns.len();
-                let mut new_cells = Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
-                
+                let mut new_cells =
+                    Vec::with_capacity(result.cells.len() * num_cols_after / (num_cols_after + 1));
+
                 for (i, cell) in result.cells.into_iter().enumerate() {
                     if i % (num_cols_after + 1) != pos {
                         new_cells.push(cell);
@@ -353,7 +375,11 @@ impl OracleExecutor {
             if num_cols > 0 {
                 for row_start in (0..result.cells.len()).step_by(num_cols) {
                     let row_end = (row_start + num_cols).min(result.cells.len());
-                    on_batch(&result.columns, &result.cells[row_start..row_end], total_rows + (row_start / num_cols) as u64)?;
+                    on_batch(
+                        &result.columns,
+                        &result.cells[row_start..row_end],
+                        total_rows + (row_start / num_cols) as u64,
+                    )?;
                 }
             }
 

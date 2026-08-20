@@ -1,14 +1,14 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::RwLock;
-use oracle::Connection as OracleConnection;
+use crate::sql_split::split_sql_statements;
 use dashmap::DashMap;
+use oracle::Connection as OracleConnection;
 use sakidb_core::{
     error::{Result, SakiError},
     types::{ConnectionId, RestoreOptions, RestoreProgress},
 };
-use tracing::{info, debug, error};
-use crate::sql_split::split_sql_statements;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, error, info};
 
 pub struct OracleRestorer {
     connections: Arc<DashMap<ConnectionId, Arc<RwLock<OracleConnection>>>>,
@@ -26,7 +26,10 @@ impl OracleRestorer {
             .ok_or_else(|| SakiError::ConnectionNotFound(conn_id.0.to_string()))
     }
 
-    async fn execute_statement(conn: Arc<RwLock<OracleConnection>>, statement: String) -> Result<()> {
+    async fn execute_statement(
+        conn: Arc<RwLock<OracleConnection>>,
+        statement: String,
+    ) -> Result<()> {
         let statement = statement.trim().to_string();
         if statement.is_empty()
             || statement.starts_with("--")
@@ -42,11 +45,13 @@ impl OracleRestorer {
         tokio::task::spawn_blocking(move || {
             let conn = conn.blocking_read();
             if statement.trim_start().to_uppercase().starts_with("SELECT") {
-                conn.query(&statement, &[])
-                    .map_err(|e| SakiError::QueryFailed(format!("Oracle statement failed: {}", e)))?;
+                conn.query(&statement, &[]).map_err(|e| {
+                    SakiError::QueryFailed(format!("Oracle statement failed: {}", e))
+                })?;
             } else {
-                conn.execute(&statement, &[])
-                    .map_err(|e| SakiError::QueryFailed(format!("Oracle statement failed: {}", e)))?;
+                conn.execute(&statement, &[]).map_err(|e| {
+                    SakiError::QueryFailed(format!("Oracle statement failed: {}", e))
+                })?;
                 // Ensure commit for DML in restore
                 conn.commit()
                     .map_err(|e| SakiError::QueryFailed(format!("Oracle commit failed: {}", e)))?;
@@ -76,12 +81,18 @@ impl OracleRestorer {
         let total_statements = statements.len();
         let total_bytes = sql_content.len() as u64;
 
-        info!("Starting Oracle restore with {} statements from {}", total_statements, file_path);
+        info!(
+            "Starting Oracle restore with {} statements from {}",
+            total_statements, file_path
+        );
 
         // Set schema if specified
         if let Some(schema) = &options.schema {
             // Quote the identifier to prevent SQL injection
-            let use_schema = format!("ALTER SESSION SET CURRENT_SCHEMA = \"{}\"", schema.replace('"', "\"\""));
+            let use_schema = format!(
+                "ALTER SESSION SET CURRENT_SCHEMA = \"{}\"",
+                schema.replace('"', "\"\"")
+            );
             Self::execute_statement(conn.clone(), use_schema).await?;
         }
 
@@ -102,7 +113,11 @@ impl OracleRestorer {
             match Self::execute_statement(conn.clone(), statement.clone()).await {
                 Ok(_) => {
                     statements_executed += 1;
-                    debug!("Executed statement {}: {}", index + 1, statement.lines().next().unwrap_or(""));
+                    debug!(
+                        "Executed statement {}: {}",
+                        index + 1,
+                        statement.lines().next().unwrap_or("")
+                    );
                 }
                 Err(e) => {
                     error!("Error at statement {}: {}", index + 1, e);
@@ -119,7 +134,9 @@ impl OracleRestorer {
                             error: Some(e.to_string()),
                             error_messages,
                         };
-                        return Err(SakiError::QueryFailed(progress.error.clone().unwrap_or_default()));
+                        return Err(SakiError::QueryFailed(
+                            progress.error.clone().unwrap_or_default(),
+                        ));
                     }
                 }
             }
@@ -151,7 +168,10 @@ impl OracleRestorer {
         };
         on_progress(&final_progress);
 
-        info!("Oracle restore complete: {} statements, {} errors", statements_executed, errors_skipped);
+        info!(
+            "Oracle restore complete: {} statements, {} errors",
+            statements_executed, errors_skipped
+        );
 
         Ok(final_progress)
     }

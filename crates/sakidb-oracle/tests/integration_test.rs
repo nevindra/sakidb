@@ -20,7 +20,8 @@ mod integration_tests {
                 .unwrap_or(1521),
             database: std::env::var("ORACLE_DATABASE").unwrap_or_else(|_| "ORCL".to_string()),
             username: std::env::var("ORACLE_USER").unwrap_or_else(|_| "test_user".to_string()),
-            password: std::env::var("ORACLE_PASSWORD").unwrap_or_else(|_| "test_password".to_string()),
+            password: std::env::var("ORACLE_PASSWORD")
+                .unwrap_or_else(|_| "test_password".to_string()),
             ssl_mode: SslMode::Prefer,
             options: HashMap::new(),
         }
@@ -40,8 +41,11 @@ mod integration_tests {
         // Test connection
         match driver.connect(&config).await {
             Ok(conn_id) => {
-                println!("Successfully connected to Oracle with connection ID: {:?}", conn_id);
-                
+                println!(
+                    "Successfully connected to Oracle with connection ID: {:?}",
+                    conn_id
+                );
+
                 // Test disconnect
                 let result = driver.disconnect(&conn_id).await;
                 assert!(result.is_ok(), "Failed to disconnect: {:?}", result);
@@ -176,10 +180,10 @@ mod integration_tests {
             Ok(_) => {
                 println!("Test table created successfully");
 
-                // Insert some data - note: Oracle driver currently uses execute_batch for multi-statement 
+                // Insert some data - note: Oracle driver currently uses execute_batch for multi-statement
                 // but execute() for single DML.
                 let insert_sql = "INSERT INTO test_table (name) VALUES ('Test Record')";
-                
+
                 match driver.execute(&conn_id, insert_sql).await {
                     Ok(result) => {
                         println!("Insert successful, rows affected: {:?}", result.row_count);
@@ -250,7 +254,7 @@ mod integration_tests {
         }
 
         // Test transaction with rollback
-        // Oracle starts transactions implicitly. 
+        // Oracle starts transactions implicitly.
         let insert_sql = "INSERT INTO test_transaction (id, value) VALUES (1, 'Test Value')";
         let rollback_sql = "ROLLBACK";
 
@@ -320,7 +324,7 @@ mod integration_tests {
         // Test each connection with a simple query
         for (i, conn_id) in conn_ids.iter().enumerate() {
             let query = "SELECT 1 as conn_id FROM dual";
-            
+
             match driver.execute(conn_id, query).await {
                 Ok(_) => {
                     println!("Connection {} query successful", i);
@@ -375,7 +379,9 @@ mod integration_tests {
         let injection_sql = "SELECT * FROM all_users WHERE '1'='1' --";
         match driver.execute(&conn_id, injection_sql).await {
             Ok(_) => {
-                println!("SQL injection query executed (table might not exist or query returned empty)");
+                println!(
+                    "SQL injection query executed (table might not exist or query returned empty)"
+                );
             }
             Err(e) => {
                 println!("SQL injection query failed (expected): {}", e);

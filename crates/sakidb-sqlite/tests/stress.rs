@@ -98,12 +98,12 @@ async fn stress_sqlite_concurrent_reads() {
     );
 
     // All reads should succeed since SQLite WAL mode supports concurrent reads
-    assert!(
-        total_successes > 0,
-        "all concurrent reads failed"
-    );
+    assert!(total_successes > 0, "all concurrent reads failed");
 
-    driver.disconnect(&conn_id).await.expect("disconnect failed");
+    driver
+        .disconnect(&conn_id)
+        .await
+        .expect("disconnect failed");
 }
 
 #[tokio::test]
@@ -210,10 +210,7 @@ async fn stress_sqlite_read_during_write() {
     eprintln!("read-during-write: {total_reads} reads, {total_errors} errors");
 
     // Writes should complete
-    assert!(
-        total_written > 0,
-        "no rows were written"
-    );
+    assert!(total_written > 0, "no rows were written");
 
     // Reads should mostly succeed in WAL mode
     assert!(
@@ -228,7 +225,10 @@ async fn stress_sqlite_read_during_write() {
         .expect("final count query failed");
     assert_eq!(result.row_count, 1, "expected 1 row from COUNT(*)");
 
-    driver.disconnect(&conn_id).await.expect("disconnect failed");
+    driver
+        .disconnect(&conn_id)
+        .await
+        .expect("disconnect failed");
 }
 
 #[tokio::test]
@@ -241,7 +241,9 @@ async fn stress_restore_50k_statements() {
 
     // Generate a SQL file with 50K INSERT statements
     let mut sql_content = String::with_capacity(100 * 50_000);
-    sql_content.push_str("CREATE TABLE IF NOT EXISTS stress_restore (id INTEGER PRIMARY KEY, val TEXT);\n");
+    sql_content.push_str(
+        "CREATE TABLE IF NOT EXISTS stress_restore (id INTEGER PRIMARY KEY, val TEXT);\n",
+    );
     for i in 0..50_000 {
         sql_content.push_str(&format!(
             "INSERT INTO stress_restore (id, val) VALUES ({i}, 'value_{i}');\n"
@@ -301,10 +303,7 @@ async fn stress_restore_50k_statements() {
 
     match &result.cells[0] {
         CellValue::Int(count) => {
-            assert_eq!(
-                *count, 50_000,
-                "expected 50,000 rows, got {count}"
-            );
+            assert_eq!(*count, 50_000, "expected 50,000 rows, got {count}");
         }
         other => {
             panic!("unexpected cell type for COUNT(*): {other:?}");
@@ -318,5 +317,8 @@ async fn stress_restore_50k_statements() {
         "no progress updates were emitted during restore"
     );
 
-    driver.disconnect(&conn_id).await.expect("disconnect failed");
+    driver
+        .disconnect(&conn_id)
+        .await
+        .expect("disconnect failed");
 }

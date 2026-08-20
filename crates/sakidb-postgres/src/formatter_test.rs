@@ -94,8 +94,14 @@ fn format_ddl_simple_table() {
     ];
     let ddl = d
         .format_ddl(&DdlContext {
-            columns: &cols, indexes: &[], constraints: &[], foreign_keys: &[],
-            check_constraints: &[], triggers: &[], qualified_table: "\"public\".\"users\"", table_name: "users",
+            columns: &cols,
+            indexes: &[],
+            constraints: &[],
+            foreign_keys: &[],
+            check_constraints: &[],
+            triggers: &[],
+            qualified_table: "\"public\".\"users\"",
+            table_name: "users",
         })
         .unwrap();
     assert!(ddl.contains("CREATE TABLE \"public\".\"users\""));
@@ -114,8 +120,14 @@ fn format_ddl_with_primary_key() {
     }];
     let ddl = d
         .format_ddl(&DdlContext {
-            columns: &cols, indexes: &[], constraints: &constraints, foreign_keys: &[],
-            check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+            columns: &cols,
+            indexes: &[],
+            constraints: &constraints,
+            foreign_keys: &[],
+            check_constraints: &[],
+            triggers: &[],
+            qualified_table: "\"users\"",
+            table_name: "users",
         })
         .unwrap();
     assert!(ddl.contains("CONSTRAINT \"users_pkey\" PRIMARY KEY (\"id\")"));
@@ -135,8 +147,14 @@ fn format_ddl_with_index_using() {
     }];
     let ddl = d
         .format_ddl(&DdlContext {
-            columns: &cols, indexes: &indexes, constraints: &[], foreign_keys: &[],
-            check_constraints: &[], triggers: &[], qualified_table: "\"users\"", table_name: "users",
+            columns: &cols,
+            indexes: &indexes,
+            constraints: &[],
+            foreign_keys: &[],
+            check_constraints: &[],
+            triggers: &[],
+            qualified_table: "\"users\"",
+            table_name: "users",
         })
         .unwrap();
     assert!(ddl.contains("CREATE INDEX \"idx_name\" ON \"users\" USING btree (name)"));

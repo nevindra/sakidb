@@ -53,10 +53,7 @@ async fn stress_postgres_connection_pool_exhaustion() {
     let driver = PostgresDriver::new();
     let config = make_config(&url);
 
-    let conn_id = driver
-        .connect(&config)
-        .await
-        .expect("connect failed");
+    let conn_id = driver.connect(&config).await.expect("connect failed");
 
     // Execute many concurrent simple queries to stress the connection pool.
     // The pool should handle this gracefully — either queuing or returning errors,
@@ -106,10 +103,7 @@ async fn stress_export_csv_1m_rows() {
     let driver = PostgresDriver::new();
     let config = make_config(&url);
 
-    let conn_id = driver
-        .connect(&config)
-        .await
-        .expect("connect failed");
+    let conn_id = driver.connect(&config).await.expect("connect failed");
 
     // Create a temp table with 1M rows using generate_series
     driver
@@ -133,14 +127,21 @@ async fn stress_export_csv_1m_rows() {
     let row_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let row_count_clone = row_count.clone();
 
-    let on_batch: Box<dyn Fn(&[ColumnDef], &[CellValue], u64) -> sakidb_core::error::Result<()> + Send + Sync> =
-        Box::new(move |_cols, _cells, total| {
-            row_count_clone.store(total, Ordering::Relaxed);
-            Ok(())
-        });
+    let on_batch: Box<
+        dyn Fn(&[ColumnDef], &[CellValue], u64) -> sakidb_core::error::Result<()> + Send + Sync,
+    > = Box::new(move |_cols, _cells, total| {
+        row_count_clone.store(total, Ordering::Relaxed);
+        Ok(())
+    });
 
     let total = driver
-        .export_stream(&conn_id, "SELECT * FROM stress_export", 10_000, &cancelled, &*on_batch)
+        .export_stream(
+            &conn_id,
+            "SELECT * FROM stress_export",
+            10_000,
+            &cancelled,
+            &*on_batch,
+        )
         .await
         .expect("export failed");
 
@@ -174,10 +175,7 @@ async fn stress_cancel_during_large_operation() {
     let driver = PostgresDriver::new();
     let config = make_config(&url);
 
-    let conn_id = driver
-        .connect(&config)
-        .await
-        .expect("connect failed");
+    let conn_id = driver.connect(&config).await.expect("connect failed");
 
     // Create a temp table with 100K rows
     driver
@@ -202,15 +200,16 @@ async fn stress_cancel_during_large_operation() {
     let rows_before_cancel = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let rows_clone = rows_before_cancel.clone();
 
-    let on_batch: Box<dyn Fn(&[ColumnDef], &[CellValue], u64) -> sakidb_core::error::Result<()> + Send + Sync> =
-        Box::new(move |_cols, _cells, total| {
-            rows_clone.store(total, Ordering::Relaxed);
-            // Cancel after receiving at least 1000 rows
-            if total >= 1000 {
-                cancelled_for_callback.store(true, Ordering::Relaxed);
-            }
-            Ok(())
-        });
+    let on_batch: Box<
+        dyn Fn(&[ColumnDef], &[CellValue], u64) -> sakidb_core::error::Result<()> + Send + Sync,
+    > = Box::new(move |_cols, _cells, total| {
+        rows_clone.store(total, Ordering::Relaxed);
+        // Cancel after receiving at least 1000 rows
+        if total >= 1000 {
+            cancelled_for_callback.store(true, Ordering::Relaxed);
+        }
+        Ok(())
+    });
 
     let result = driver
         .export_stream(

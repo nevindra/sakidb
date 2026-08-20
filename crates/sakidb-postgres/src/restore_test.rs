@@ -140,10 +140,7 @@ fn test_copy_detection() {
 fn test_dollar_tag_extraction() {
     assert_eq!(extract_dollar_tag("$$"), Some(("".to_string(), 2)));
     assert_eq!(extract_dollar_tag("$fn$"), Some(("fn".to_string(), 4)));
-    assert_eq!(
-        extract_dollar_tag("$body$"),
-        Some(("body".to_string(), 6))
-    );
+    assert_eq!(extract_dollar_tag("$body$"), Some(("body".to_string(), 6)));
     assert_eq!(extract_dollar_tag("$123"), None); // tag can't start with digit
     assert_eq!(extract_dollar_tag("abc"), None);
 }
@@ -192,14 +189,8 @@ fn test_copy_not_copy() {
 
 #[test]
 fn test_dollar_tag_underscore() {
-    assert_eq!(
-        extract_dollar_tag("$_tag$"),
-        Some(("_tag".to_string(), 6))
-    );
-    assert_eq!(
-        extract_dollar_tag("$_$"),
-        Some(("_".to_string(), 3))
-    );
+    assert_eq!(extract_dollar_tag("$_tag$"), Some(("_tag".to_string(), 6)));
+    assert_eq!(extract_dollar_tag("$_$"), Some(("_".to_string(), 3)));
 }
 
 #[test]

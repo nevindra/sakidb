@@ -1,18 +1,16 @@
-use tauri::{State, Emitter};
+use tauri::{Emitter, State};
 use tracing::{error, info, warn};
 
 use sakidb_core::types::{ConnectResult, ConnectionConfig, ConnectionId, EngineType, SslMode};
 use sakidb_store::models::ConnectionInput;
 
 #[cfg(feature = "oracle")]
-use sakidb_oracle::{get_driver_status, download_instantclient_with_progress, OracleDriverStatus};
+use sakidb_oracle::{download_instantclient_with_progress, get_driver_status, OracleDriverStatus};
 
 use crate::state::AppState;
 
 #[tauri::command]
-pub async fn available_engines(
-    state: State<'_, AppState>,
-) -> Result<Vec<EngineType>, String> {
+pub async fn available_engines(state: State<'_, AppState>) -> Result<Vec<EngineType>, String> {
     Ok(state.registry.available_engines())
 }
 
@@ -30,14 +28,15 @@ pub async fn get_oracle_driver_status() -> Result<serde_json::Value, String> {
 
 #[cfg(feature = "oracle")]
 #[tauri::command]
-pub async fn download_oracle_driver(
-    window: tauri::Window,
-) -> Result<(), String> {
+pub async fn download_oracle_driver(window: tauri::Window) -> Result<(), String> {
     download_instantclient_with_progress(move |progress, message| {
-        let _ = window.emit("oracle-download-progress", serde_json::json!({
-            "progress": progress,
-            "message": message,
-        }));
+        let _ = window.emit(
+            "oracle-download-progress",
+            serde_json::json!({
+                "progress": progress,
+                "message": message,
+            }),
+        );
     })
     .await
     .map_err(|e: sakidb_core::SakiError| e.to_string())
@@ -67,10 +66,7 @@ pub async fn list_connections(
 }
 
 #[tauri::command]
-pub async fn delete_connection(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let store = state.store.lock().await;
     store.delete_connection(&id).map_err(|e| e.to_string())
 }
@@ -82,7 +78,9 @@ pub async fn update_connection(
     input: ConnectionInput,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    store.update_connection(&id, &input).map_err(|e| e.to_string())
+    store
+        .update_connection(&id, &input)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -97,7 +95,11 @@ pub async fn test_connection(
     let stored_password = if input.password.is_empty() {
         if let Some(ref conn_id) = id {
             let store = state.store.lock().await;
-            store.get_connection(conn_id).ok().map(|c| c.password).unwrap_or_default()
+            store
+                .get_connection(conn_id)
+                .ok()
+                .map(|c| c.password)
+                .unwrap_or_default()
         } else {
             String::new()
         }
@@ -121,7 +123,9 @@ pub async fn connect_to_database(
     connection_id: String,
 ) -> Result<ConnectResult, String> {
     let store = state.store.lock().await;
-    let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let saved = store
+        .get_connection(&connection_id)
+        .map_err(|e| e.to_string())?;
     let config = saved_to_config(&saved, None);
     drop(store);
 
@@ -129,9 +133,15 @@ pub async fn connect_to_database(
         error!(connection_id = %connection_id, error = %e, "connect failed");
         e.to_string()
     })?;
-    let capabilities = state.registry.capabilities_for(&conn_id).map_err(|e| e.to_string())?;
+    let capabilities = state
+        .registry
+        .capabilities_for(&conn_id)
+        .map_err(|e| e.to_string())?;
     info!(connection_id = %connection_id, runtime_id = %conn_id.0, "connected");
-    Ok(ConnectResult { runtime_id: conn_id.0.to_string(), capabilities })
+    Ok(ConnectResult {
+        runtime_id: conn_id.0.to_string(),
+        capabilities,
+    })
 }
 
 #[tauri::command]
@@ -141,7 +151,9 @@ pub async fn connect_to_database_as(
     database: String,
 ) -> Result<ConnectResult, String> {
     let store = state.store.lock().await;
-    let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let saved = store
+        .get_connection(&connection_id)
+        .map_err(|e| e.to_string())?;
     let config = saved_to_config(&saved, Some(database));
     drop(store);
 
@@ -149,9 +161,15 @@ pub async fn connect_to_database_as(
         error!(connection_id = %connection_id, database = %config.database, error = %e, "connect_as failed");
         e.to_string()
     })?;
-    let capabilities = state.registry.capabilities_for(&conn_id).map_err(|e| e.to_string())?;
+    let capabilities = state
+        .registry
+        .capabilities_for(&conn_id)
+        .map_err(|e| e.to_string())?;
     info!(connection_id = %connection_id, database = %config.database, runtime_id = %conn_id.0, "connected as");
-    Ok(ConnectResult { runtime_id: conn_id.0.to_string(), capabilities })
+    Ok(ConnectResult {
+        runtime_id: conn_id.0.to_string(),
+        capabilities,
+    })
 }
 
 #[tauri::command]
@@ -159,9 +177,8 @@ pub async fn disconnect_from_database(
     state: State<'_, AppState>,
     active_connection_id: String,
 ) -> Result<(), String> {
-    let conn_id = ConnectionId(
-        uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?,
-    );
+    let conn_id =
+        ConnectionId(uuid::Uuid::parse_str(&active_connection_id).map_err(|e| e.to_string())?);
 
     state.registry.disconnect(&conn_id).await.map_err(|e| {
         warn!(conn_id = %active_connection_id, error = %e, "disconnect failed");
@@ -176,16 +193,25 @@ pub async fn drop_database(
     database: String,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let saved = store
+        .get_connection(&connection_id)
+        .map_err(|e| e.to_string())?;
     // Connect to 'postgres' maintenance database to issue DROP
     let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
-    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state
+        .registry
+        .connect(&config)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // DROP DATABASE WITH (FORCE) terminates active sessions (PG 13+)
     info!(database = %database, "dropping database");
-    let sql = format!("DROP DATABASE \"{}\" WITH (FORCE)", database.replace('"', "\"\""));
+    let sql = format!(
+        "DROP DATABASE \"{}\" WITH (FORCE)",
+        database.replace('"', "\"\"")
+    );
     let result = state
         .registry
         .sql_for(&conn_id)
@@ -200,10 +226,7 @@ pub async fn drop_database(
 }
 
 #[tauri::command]
-pub async fn update_last_connected(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<(), String> {
+pub async fn update_last_connected(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let store = state.store.lock().await;
     store.update_last_connected(&id).map_err(|e| e.to_string())
 }
@@ -217,13 +240,20 @@ fn input_to_config(input: &ConnectionInput, password: &str) -> ConnectionConfig 
         port: input.port,
         database: input.database.clone(),
         username: input.username.clone(),
-        password: if password.is_empty() { input.password.clone() } else { password.to_string() },
+        password: if password.is_empty() {
+            input.password.clone()
+        } else {
+            password.to_string()
+        },
         ssl_mode: parse_ssl_mode(&input.ssl_mode),
         options: input.options.clone(),
     }
 }
 
-fn saved_to_config(saved: &sakidb_store::models::SavedConnection, database: Option<String>) -> ConnectionConfig {
+fn saved_to_config(
+    saved: &sakidb_store::models::SavedConnection,
+    database: Option<String>,
+) -> ConnectionConfig {
     let engine: EngineType = saved.engine.parse().unwrap_or(EngineType::Postgres);
     // [Fix: M7] Pass through the options field
     ConnectionConfig {
@@ -245,12 +275,18 @@ pub async fn create_database(
     database: String,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let saved = store
+        .get_connection(&connection_id)
+        .map_err(|e| e.to_string())?;
     // Connect to 'postgres' maintenance database to issue CREATE
     let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
-    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state
+        .registry
+        .connect(&config)
+        .await
+        .map_err(|e| e.to_string())?;
 
     info!(database = %database, "creating database");
     let sql = format!("CREATE DATABASE \"{}\"", database.replace('"', "\"\""));
@@ -274,12 +310,18 @@ pub async fn rename_database(
     new_name: String,
 ) -> Result<(), String> {
     let store = state.store.lock().await;
-    let saved = store.get_connection(&connection_id).map_err(|e| e.to_string())?;
+    let saved = store
+        .get_connection(&connection_id)
+        .map_err(|e| e.to_string())?;
     // Connect to 'postgres' maintenance database to issue ALTER
     let config = saved_to_config(&saved, Some("postgres".to_string()));
     drop(store);
 
-    let conn_id = state.registry.connect(&config).await.map_err(|e| e.to_string())?;
+    let conn_id = state
+        .registry
+        .connect(&config)
+        .await
+        .map_err(|e| e.to_string())?;
 
     info!(old_name = %old_name, new_name = %new_name, "renaming database");
     let sql = format!(

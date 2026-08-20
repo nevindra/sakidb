@@ -324,10 +324,7 @@ async fn introspect_full_schema() {
         .list_foreign_keys(&conn_id, "main", "posts")
         .await
         .unwrap();
-    assert!(
-        !fks.is_empty(),
-        "expected foreign key on posts"
-    );
+    assert!(!fks.is_empty(), "expected foreign key on posts");
 
     // Triggers
     let triggers = driver
@@ -511,7 +508,10 @@ async fn error_paths() {
     let driver2 = SqliteDriver::new();
     let config = make_config("/nonexistent/path/that/does/not/exist/db.sqlite");
     let result = driver2.connect(&config).await;
-    assert!(result.is_err(), "connecting to nonexistent path should fail");
+    assert!(
+        result.is_err(),
+        "connecting to nonexistent path should fail"
+    );
     match result.unwrap_err() {
         SakiError::ConnectionFailed(_) => {}
         other => panic!("expected ConnectionFailed, got {:?}", other),
@@ -607,13 +607,7 @@ async fn restore_roundtrip() {
     };
 
     let progress = driver
-        .restore(
-            &conn_id,
-            &sql_path,
-            &options,
-            &cancelled,
-            Box::new(|_p| {}),
-        )
+        .restore(&conn_id, &sql_path, &options, &cancelled, Box::new(|_p| {}))
         .await
         .expect("restore failed");
 
@@ -725,10 +719,7 @@ async fn concurrent_read_wal_mode() {
 
     // Write while readers are running
     driver
-        .execute_batch(
-            &conn_id,
-            "INSERT INTO wal_test VALUES (2, 'concurrent')",
-        )
+        .execute_batch(&conn_id, "INSERT INTO wal_test VALUES (2, 'concurrent')")
         .await
         .expect("concurrent write failed");
 
@@ -758,15 +749,14 @@ async fn large_file_restore() {
 
     // Generate a SQL file with 10K insert statements
     let mut sql_file = NamedTempFile::new().expect("create sql temp file");
-    writeln!(sql_file, "CREATE TABLE big_table (id INTEGER PRIMARY KEY, val TEXT);")
-        .expect("write create");
+    writeln!(
+        sql_file,
+        "CREATE TABLE big_table (id INTEGER PRIMARY KEY, val TEXT);"
+    )
+    .expect("write create");
 
     for i in 1..=10_000 {
-        writeln!(
-            sql_file,
-            "INSERT INTO big_table VALUES ({i}, 'row_{i}');"
-        )
-        .expect("write insert");
+        writeln!(sql_file, "INSERT INTO big_table VALUES ({i}, 'row_{i}');").expect("write insert");
     }
 
     let sql_path = sql_file.path().to_str().unwrap().to_string();
@@ -801,10 +791,7 @@ async fn large_file_restore() {
 
     // Verify progress was reported
     let reports = progress_reports.lock().unwrap();
-    assert!(
-        !reports.is_empty(),
-        "should have received progress reports"
-    );
+    assert!(!reports.is_empty(), "should have received progress reports");
 
     // Verify data
     let result = driver
